@@ -1,0 +1,197 @@
+	Storing Build Time Information In ELF Binary Files
+	    In a Format Suitable for Static Analysis
+
+  A specification by Nick Clifton.  Version 2.0.  June 28, 2017.
+
+ChangeLog:
+  For v2.0:
+    Added an "owner" string at the start of the name field so that
+    naive processors of Elf Notes are less likely to complain.
+
+----------------------------------------------------------------------
+
+* The information is stored in a new section in the file using the ELF
+  NOTE format.  This format is already well defined, and supported by
+  binary tools.
+
+  Creator tools (compilers, assemblers) place the notes into the
+  binary files.  Consumer tools (readelf, built-by) read the notes and
+  answer questions  about the binaries concerned.  Processing tools
+  (linker, objcopy) combine and merge the notes as needed.
+
+  Note - this specification could have used the gnu_attributes format
+  instead, but this has a few drawbacks:
+
+  - Support for section and symbol tagged gnu_attributes is not
+    currently implemented anywhere, and these features are needed.
+    Adding support for them to the binutils would mean that the
+    specification is not backwards compatible with older tools.
+
+  * The gnu attributes specification requires that when merging
+    attributes from multiple input files the tool performing the merge
+    must create new, section-relative attributes where conflicts
+    occur.  Similarly conflicts between section-relative attributes
+    must be resolved by the creation of new symbol-relative
+    attributes.  Adding support for this requirement would have again
+    introduced a barrier to backwards compatiblity, and would also
+    result in the attribute section being larger than an equivalent
+    section using this proposal.
+
+
+* The information is stored in a new section called .gnu.static.attributes.
+  (The name can be changed - it is basically irrelevant anyway, it is
+  the new section flag (defined below) that matters). 
+
+  The section has the type SHT_NOTE.
+
+  The section has a new flag set: SHF_GNU_BUILD_ATTRIBUTES
+  (suggested value: 0x00100000).
+
+  The sh_link and sh_info fields of this section should be set to 0.
+
+
+* The type field of a note is used to distinguish the range of memory
+  over which an attribute applies.  The name field identifies the
+  attribute and gives it a value.  The description field specifies the
+  starting address for where the attribute is applied.
+
+  Two new note types are defined:  NT_GNU_BUILD_ATTRIBUTE_OPEN (0x100)
+  and NT_GNU_BUILD_ATTRIBUTE_FUNC (0x101).  These are used by the
+  description field (see below).
+  
+  The description field of the note is a 4-byte or 8-byte wide address
+  which indicates the starting location for an attribute.  If the
+  bottom bit of the type field is set then the address is for a
+  function and the attribute terminates at the end of the function.
+  (Reverting back to the previous value for that attribute).  If the
+  bottom bit of the type is clear then the address is for the start of
+  an open ended range.  The range ends only when another open-ended
+  attribute of the same name is defined, although it may be
+  temporarily overridden by a function based address.
+
+  Notes:
+  
+    + In unrelocated files the numbers should instead be zero, with a
+      relocation present to set the actual value once the file is
+      linked.
+
+    + The numbers are stored in the same endian format as that
+      specified in the EI_DATA field of the ELF header of the file
+      containing the note.  The size of the numbers is dictated by the
+      EI_CLASS field of the ELF header.
+
+    + An empty description field is a special case.  It should be
+      treated as if it applies to the same region as the nearest
+      preceeding NT_GNU_BUILD_ATTRIBUTE_OPEN note with a non-empty
+      description field.  This will probably be a version note.
+
+  The name field identifies the type and value of the attribute.
+  The name starts with the string "GA", which is an abbreviation for
+  GNU Attribute.  The abbreviation is used in order to save space.
+  The string is there so that tools that do not know about these notes
+  will still be able to parse the note structure.
+
+  The character following the identifier string indicates the kind of
+  attribute, based upon the following table:
+
+    * - The attribute takes a numeric value.  Numbers are stored in
+        little endian binary format.
+    $ - The attribute takes a string value.
+    ! - The attribute takes a boolean value, and the value is false.
+    + - The attribute takes a boolean value, and the value is true.
+  
+  The next character indicates the specific attribute:
+
+     Character      Allowed    Meaning
+    --------------- Types      -------
+    ASCII printable $*         An annotation type not explicitly defined by this specification.  This string must be NUL terminated.
+    0               <none>     Reserved for future use.
+    1               $          Version of the specification supported and producer(s) of the notes (see below).
+    2               *          Stack protector
+    3               !+         Relro
+    4               *          Stack size
+    5               $          Build tool & version
+    6               $*         ABI
+    7               *          Position Independence Status: 0 => static, 1 => pic, 2 => PIC, 3 => pie
+    8               !+         Short enums
+
+  For * and $ type attributes the value is then appended.
+
+  Per the ELF note spec the name must end with a NUL byte.
+
+Some examples:
+
+    GA*foo\0\001\0\002\0      Attribute 'foo' with numeric value 0x20001
+    GA*bar\00\0               Attribute 'bar' with numeric value 0
+    GA$fred\0hello\0          Attribute 'fred' with string value "hello"
+    GA*4\377\377\0            Attribute stack size with numeric value 0xffff
+    GA*21\0                   Atrribute -fstack-protector.
+    GA*24\0                   Atrribute -fstack-protector-explicit.
+    GA$12p1\0                 Supports spec version 2, created by plugin version 1.
+    GA$5gcc v7.0\0            Attribute build tool "gcc v7.0"
+
+  Multiple notes for the same attribute can exist, providing that they
+  have different values and that their description address ranges do
+  not overlap.  The exception to this rule is that
+  NT_GNU_BUILD_ATTRIBUTE_FUNC attributes are allowed to overlap
+  NT_GNU_BUILD_ATTRIBUTE_OPEN attributes.
+
+  The first note should be a version note.  The version note string
+  should consist of an odd number of characters.  The first character
+  is the ascii code for the number of the version of this protocol
+  supported by the notes.  The next pair of characters indicate who
+  produced the notes and which version of this producer has been
+  used.  A 'p' character indicates a compiler plugin.  An 'l'
+  character indicates the linker.  Other characters may be defined in
+  the future.  Multiple producers can contribute to the notes.  Their
+  identifying pair of characters should be appended to the version
+  note.
+
+
+* When the linker merges two or more files containing these notes it
+  should ensure that the above rules are maintained.  Simply
+  concatenating the incoming note sections should ensure this.
+
+  The linker can, if it wishes, create its own notes and append, or
+  insert them into the note section.  Eg to indicate that -z relro is
+  enabled.
+
+  The order of the notes from an incoming section must be preserved in
+  the outgoing section.  Notes do not have to be sorted by address
+  range although this often happens automatically when sections are
+  concatenated.
+
+  If this is a final link, then relocations on the notes should of
+  course be resolved.
+
+  The linker, or another tool, may wish to eliminate redundant notes
+  in the note section.  When doing this the following rules must be
+  observed:
+	   1. Preserve the ordering of the notes.
+	   2. Preserve any NT_GNU_BUILD_ATTRIBUTE_FUNC notes.
+	   3. Eliminate any NT_GNU_BUILD_ATTRIBUTE_OPEN notes that have
+	      the same full name field as the immediately preceeding
+	      note with the same type of name.
+           4. Combine the numeric value of any NT_GNU_BUILD_ATTRIBUTE_OPEN
+              notes of type GNU_BUILD_ATTRIBUTE_STACK_SIZE.
+	   5. If an NT_GNU_BUILD_ATTRIBUTE_OPEN note is going to be
+              preserved and its description field is empty then the
+	      nearest preceeding OPEN note with a non-empty
+	      description field must also be preserved *OR* the
+	      description field of the note must be changed to
+	      contain the starting address to which it refers.
+
+
+
+* Note - this specification is intended for storing information for
+  use by static tools.  There is another, similar specification for
+  storing information for use by run-time tools, specifically the
+  dynamic loader.  This specifcation also uses the ELF Note format,
+  but it is intended to be a lot smaller, only storing information
+  essential to the loader, and a lot faster to process.
+
+
+ToDo:
+  Check if -grecord-gcc-switches preserved per-translation-unit info
+  after linking.
+  

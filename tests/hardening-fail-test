@@ -1,0 +1,67 @@
+#!/bin/bash
+
+# Copyright (c) 2017 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+rm -f hello.o hello2.o hello3.o libhello.so hardening-fail-test.exe
+
+GCC=gcc
+READELF=readelf
+OBJCOPY=objcopy
+
+PLUGIN=../plugin/.libs/annobin.so
+
+$GCC -fplugin=$PLUGIN \
+     -c \
+     -fPIC \
+     -Wall \
+     -g \
+     -fno-stack-protector \
+     -fplugin-arg-annobin-stack-threshold=0x10 \
+ $srcdir/hello.c 
+
+$GCC -fplugin=$PLUGIN \
+     -O3 \
+     -c \
+     -fPIC \
+     -fno-stack-protector \
+     -fplugin-arg-annobin-global-file-syms \
+ $srcdir/hello2.c 
+
+$GCC -fplugin=$PLUGIN \
+     -O2 \
+     -c \
+     -fPIE \
+     -g3 \
+     -fstack-protector-strong \
+     -D_FORTIFY_SOURCE=2 \
+     -fplugin-arg-annobin-no-stack-size-notes \
+     -grecord-gcc-switches \
+ $srcdir/hello3.c \
+
+$GCC -fplugin=$PLUGIN \
+    -O2 \
+    -fpic \
+    -fstack-protector \
+    -fplugin-arg-annobin-version \
+    -shared \
+ $srcdir/hello_lib.c \
+     -o libhello.so
+
+$GCC -fplugin=$PLUGIN \
+     -L . -pie \
+     -Wl,-z,now,-z,relro \
+ hello.o hello2.o hello3.o -lhello -o hardening-fail-test.exe
+
+# $OBJCOPY --merge-notes hardening-fail-test.exe hardening-fail-test-merged.exe
+$srcdir/../scripts/hardened.sh  --readelf=$READELF --all hardening-fail-test.exe
+

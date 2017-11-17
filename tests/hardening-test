@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Copyright (c) 2017 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+rm -f hello.o hello2.o hello3.o libhello.so hardening-test.exe
+
+GCC=gcc
+READELF=readelf
+OBJCOPY=objcopy
+
+PLUGIN=../plugin/.libs/annobin.so
+
+OPTS="-O2 -D_FORTIFY_SOURCE=2 -fPIC -Wall -fstack-protector-strong"
+
+$GCC -fplugin=$PLUGIN -c -g $OPTS  $srcdir/hello.c 
+
+$GCC -fplugin=$PLUGIN -O3 -c $OPTS $srcdir/hello2.c 
+
+$GCC -fplugin=$PLUGIN -c -g3 $OPTS $srcdir/hello3.c
+
+$GCC -fplugin=$PLUGIN $OPTS -shared $srcdir/hello_lib.c -o libhello.so
+
+$GCC -fplugin=$PLUGIN \
+     -L . -pie \
+     -Wl,-z,now,-z,relro \
+ hello.o hello2.o hello3.o -lhello -o hardening-test.exe
+
+# $OBJCOPY --merge-notes hardening-test.exe hardening-test-merged.exe
+
+# The --skip=fort option is here to skip the check of _FORTIFY_SOURCE as this
+# requires a version of readelf that knows how to fully parse the annobin notes
+# and such a version is not in common release (yet).  The other hardening
+# properties can be deduced by the hardened.sh script without needing the notes
+# so that is why the test is allowed to proceed.
+# FIXME: Remove --skip=fort once readelf has been updated.
+$srcdir/../scripts/hardened.sh  --readelf=$READELF --all --skip=fort hardening-test.exe
