@@ -35,6 +35,7 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 #include <toplev.h>
 #include <function.h>
 #include <defaults.h>
+#include <tree.h>
 
 #include <elf.h>
 
@@ -97,3 +98,15 @@ extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;
 extern unsigned long  annobin_total_static_stack_usage;
 extern unsigned long  annobin_max_stack_size;
+
+inline const char *
+function_asm_name (void)
+{
+  if (current_function_decl)
+    {
+      tree name = DECL_ASSEMBLER_NAME (current_function_decl);
+      if (name)
+	return IDENTIFIER_POINTER (name);
+    }
+  return NULL;
+}

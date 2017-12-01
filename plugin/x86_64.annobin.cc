@@ -63,13 +63,16 @@ annobin_record_global_target_notes (void)
 void
 annobin_target_specific_function_notes (void)
 {
+  const char *name = function_asm_name ();
+  if (name == NULL)
+    return;
   if ((unsigned long) ix86_isa_flags != global_x86_isa)
     {
       annobin_inform (1, "ISA value has changed from %lx to %lx for %s",
-		   global_x86_isa, ix86_isa_flags, current_function_name ());
+		   global_x86_isa, ix86_isa_flags, name);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, ix86_isa_flags,
-				   "numeric: ABI", current_function_name (),
+				   "numeric: ABI", name,
 				   NT_GNU_BUILD_ATTRIBUTE_FUNC);
 
       if ((unsigned long) ix86_isa_flags < min_x86_isa)

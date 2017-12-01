@@ -41,11 +41,15 @@ annobin_target_specific_function_notes (void)
   if (saved_tls_size == rs6000_tls_size)
     return;
 
+  const char *name = function_asm_name ();
+  if (name == NULL)
+    return;
+
   annobin_inform (1, "TLS size has changed from %d to %d for %s",
-		  saved_tls_size, rs6000_tls_size, current_function_name ());
+		  saved_tls_size, rs6000_tls_size, name);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, rs6000_tls_size,
-			       "numeric: ABI: TLS size", current_function_name (),
+			       "numeric: ABI: TLS size", name,
 			       NT_GNU_BUILD_ATTRIBUTE_FUNC);
 }
 

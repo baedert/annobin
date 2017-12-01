@@ -484,9 +484,11 @@ record_GOW_settings (unsigned int gow, bool local)
   if (local)
     {
       annobin_inform (1, "Record a change in -g/-O/-Wall status for %s", current_function_name ());
-      annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			   current_function_name (), annobin_is_64bit ? 8 : 4, true,
-			   NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      const char *name = function_asm_name ();
+      if (name != NULL)
+	annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
+			     name, annobin_is_64bit ? 8 : 4, true,
+			     NT_GNU_BUILD_ATTRIBUTE_FUNC);
     }
   else
     {
@@ -509,17 +511,21 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       annobin_inform (1, "Recording change in stack protection status for %s (from %d to %d)",
 		      current_function_name (), global_stack_prot_option, flag_stack_protect);
 
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, flag_stack_protect,
-				   "numeric: -fstack-protector status",
-				   current_function_name (), NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      const char *name = function_asm_name ();
+      if (name != NULL)
+	annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, flag_stack_protect,
+				     "numeric: -fstack-protector status",
+				     name, NT_GNU_BUILD_ATTRIBUTE_FUNC);
     }
 
   if (global_pic_option != compute_pic_option ())
     {
       annobin_inform (1, "Recording change in PIC status for %s", current_function_name ());
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, compute_pic_option (),
-				   "numeric: pic type", current_function_name (), 
-				   NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      const char *name = function_asm_name ();
+      if (name != NULL)
+	annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, compute_pic_option (),
+				     "numeric: pic type", name,
+				     NT_GNU_BUILD_ATTRIBUTE_FUNC);
     }
 
   if (global_GOWall_options != compute_GOWall_options ())
@@ -528,9 +534,11 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   if (global_short_enums != flag_short_enums)
     {
       annobin_inform (1, "Recording change in enum size for %s", current_function_name ());
-      annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, flag_short_enums,
-				flag_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
-				current_function_name (), NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      const char *name = function_asm_name ();
+      if (name != NULL)
+	annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, flag_short_enums,
+				  flag_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
+				  name, NT_GNU_BUILD_ATTRIBUTE_FUNC);
     }
 
   
@@ -541,9 +549,11 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	  annobin_inform (1, "Recording stack usage of %lu for %s",
 			  current_function_static_stack_size, current_function_name ());
 
-	  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE, current_function_static_stack_size,
-				       "numeric: stack-size", current_function_name (),
-				       NT_GNU_BUILD_ATTRIBUTE_FUNC);
+	  const char *name = function_asm_name ();
+	  if (name != NULL)
+	    annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE, current_function_static_stack_size,
+					 "numeric: stack-size", name,
+					 NT_GNU_BUILD_ATTRIBUTE_FUNC);
 	}
 
       annobin_total_static_stack_usage += current_function_static_stack_size;
