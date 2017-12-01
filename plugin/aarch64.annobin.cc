@@ -45,9 +45,11 @@ annobin_target_specific_function_notes (void)
   annobin_inform (1, "TLS dialect has changed from %d to %d for %s",
 		  saved_tls_dialect, aarch64_tls_dialect, current_function_name ());
 
-  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
-			       "numeric: ABI: TLS dialect", current_function_name (),
-			       NT_GNU_BUILD_ATTRIBUTE_FUNC);
+  const char *name = function_asm_name ();
+  if (name != NULL)
+    annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
+				 "numeric: ABI: TLS dialect", name,
+				 NT_GNU_BUILD_ATTRIBUTE_FUNC);
 }
 
 typedef struct
