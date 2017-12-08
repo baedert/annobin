@@ -108,7 +108,7 @@ init_annobin_current_filename (void)
     {
       /* The name can be empty if we are receiving the source code
 	 from a pipe.  In this case, we invent our own name.  */
-      name = "piped_input";
+      name = (char *) "piped_input";
     }
 
   if (global_file_name_symbols)
