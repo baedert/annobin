@@ -103,6 +103,14 @@ init_annobin_current_filename (void)
     return;
 
   name = (char *) lbasename (main_input_filename);
+
+  if (strlen (name) == 0)
+    {
+      /* The name can be empty if we are receiving the source code
+	 from a pipe.  In this case, we invent our own name.  */
+      name = "piped_input";
+    }
+
   if (global_file_name_symbols)
     name = strcpy ((char *) xmalloc (strlen (name) + 20), name);
   else
