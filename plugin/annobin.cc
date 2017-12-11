@@ -179,6 +179,9 @@ annobin_output_note (const void * name, unsigned namesz, bool name_is_string,
 {
   unsigned i;
 
+  if (asm_out_file == NULL)
+    return;
+
   if (type == NT_GNU_BUILD_ATTRIBUTE_FUNC
       || type == NT_GNU_BUILD_ATTRIBUTE_OPEN)
     {
@@ -512,6 +515,9 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   if (! annobin_enable_static_notes)
     return;
   
+  if (asm_out_file == NULL)
+    return;
+
   annobin_target_specific_function_notes ();
 
   if (global_stack_prot_option != flag_stack_protect)
@@ -592,7 +598,18 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   if (! annobin_enable_static_notes)
     return;
-  
+
+  if (asm_out_file == NULL)
+    {
+      /* This happens during LTO compilation.  Compilation is triggered
+	 before any output file has been opened.  Since we do not have
+	 the file handle we cannot emit any notes.  On the other hand,
+	 the recompilation process will repeat later on with a real
+	 output file and so the notes can be generated then.  */
+      annobin_inform (1, "Output file not available - unable to generate notes");
+      return;
+    }
+
   /* Record global information.
      Note - we do this here, rather than in plugin_init() as some
      information, PIC status or POINTER_SIZE, may not be initialised
@@ -629,6 +646,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
       /* We need a filename, so invent one.  */
       annobin_current_filename = (char *) "unknown_source";
     }
+
   if (global_file_name_symbols)
     fprintf (asm_out_file, ".global %s\n", annobin_current_filename);
   fprintf (asm_out_file, ".type %s STT_OBJECT\n", annobin_current_filename);
@@ -716,6 +734,9 @@ static void
 annobin_create_loader_notes (void * gcc_data, void * user_data)
 {
   if (! annobin_enable_dynamic_notes)
+    return;
+
+  if (asm_out_file == NULL)
     return;
 
   if (annobin_enable_stack_size_notes && annobin_total_static_stack_usage)
