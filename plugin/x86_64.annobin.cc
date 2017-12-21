@@ -56,23 +56,21 @@ annobin_record_global_target_notes (void)
   min_x86_isa = max_x86_isa = global_x86_isa = ix86_isa_flags;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
-			       "numeric: ABI", NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			       "numeric: ABI", NULL, NULL,
+			       NT_GNU_BUILD_ATTRIBUTE_OPEN);
   annobin_inform (1, "Record global isa of %lx", global_x86_isa);
 }
 
 void
-annobin_target_specific_function_notes (void)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end)
 {
-  const char *name = function_asm_name ();
-  if (name == NULL)
-    return;
   if ((unsigned long) ix86_isa_flags != global_x86_isa)
     {
       annobin_inform (1, "ISA value has changed from %lx to %lx for %s",
-		   global_x86_isa, ix86_isa_flags, name);
+		   global_x86_isa, ix86_isa_flags, aname);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, ix86_isa_flags,
-				   "numeric: ABI", name,
+				   "numeric: ABI", aname, aname_end,
 				   NT_GNU_BUILD_ATTRIBUTE_FUNC);
 
       if ((unsigned long) ix86_isa_flags < min_x86_isa)
@@ -208,7 +206,7 @@ annobin_target_specific_loader_notes (void)
       ptr += sizeof (note32);
     }
 
-  annobin_output_note ("GNU", 4, true, "Loader notes", buffer, ptr - buffer,
+  annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
 		       false, NT_GNU_PROPERTY_TYPE_0);
   fflush (asm_out_file);
 }

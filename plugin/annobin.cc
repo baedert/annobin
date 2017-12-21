@@ -19,7 +19,7 @@
 #include <intl.h>
 
 /* The version of the annotation specification supported by this plugin.  */
-#define SPEC_VERSION  2
+#define SPEC_VERSION  3
 
 /* Required by the GCC plugin API.  */
 int            plugin_is_GPL_compatible;
@@ -59,6 +59,7 @@ static bool           annobin_enable_dynamic_notes = true;
 /* True if notes in the .gnu.build.attributes section should be produced.  */
 static bool           annobin_enable_static_notes = true;
 
+static unsigned int   annobin_note_count = 0;
 static unsigned int   global_GOWall_options = 0;
 static int            global_stack_prot_option = -1;
 static int            global_pic_option = -1;
@@ -66,8 +67,9 @@ static int            global_short_enums = -1;
 static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
 static char *         annobin_current_filename = NULL;
-static unsigned char  annobin_version = 2; /* NB. Keep in sync with version_string.  */
-static const char *   version_string = N_("Version 2");
+static char *         annobin_current_endname  = NULL;
+static unsigned char  annobin_version = 3; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 3");
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\
@@ -149,6 +151,7 @@ init_annobin_current_filename (void)
     }
 
   annobin_current_filename = name;
+  annobin_current_endname = concat (annobin_current_filename, "_end", NULL);
 }
 
 void
@@ -172,10 +175,15 @@ annobin_inform (unsigned level, const char * format, ...)
 }
 
 void
-annobin_output_note (const void * name, unsigned namesz, bool name_is_string,
+annobin_output_note (const char * name,
+		     unsigned     namesz,
+		     bool         name_is_string,
 		     const char * name_description,
-		     const void * desc, unsigned descsz, bool desc_is_string,
-		     unsigned type)
+		     const char * desc1,
+		     const char * desc2,
+		     unsigned     descsz,
+		     bool         desc_is_string,
+		     unsigned     type)
 {
   unsigned i;
 
@@ -203,20 +211,59 @@ annobin_output_note (const void * name, unsigned namesz, bool name_is_string,
   else
     fprintf (asm_out_file, "\t.dc.l %u\t\t%s size of name\n", namesz, ASM_COMMENT_START);
 
-  if (desc == NULL)
+  if (desc1 == NULL)
     {
       if (descsz)
-	annobin_inform (0, "ICE: null desc with non-zero size");
+	annobin_inform (0, "ICE: null desc1 with non-zero size");
+      if (desc2 != NULL)
+	annobin_inform (0, "ICE: non-null desc2 with null desc1");
+
       fprintf (asm_out_file, "\t.dc.l 0\t\t%s no description\n", ASM_COMMENT_START);
     }
   else if (desc_is_string)
     {
-      if (descsz != (annobin_is_64bit ? 8 : 4))
-	annobin_inform (0, "ICE: description string size (%d) not sizeof address 8/4", descsz);
-      fprintf (asm_out_file, "\t.dc.l %u\t\t%s descsz = sizeof (address)\n", descsz, ASM_COMMENT_START);
+      switch (descsz)
+	{
+	case 0:
+	  annobin_inform (0, "ICE: zero descsz with string description");
+	  break;
+	case 4:
+	  if (annobin_is_64bit || desc2 != NULL)
+	    annobin_inform (0, "ICE: descz too small");
+	  if (desc1 == NULL)
+	    annobin_inform (0, "ICE: descz too big");
+	  break;
+	case 8:
+	  if (annobin_is_64bit)
+	    {
+	      if (desc2 != NULL)
+		annobin_inform (0, "ICE: descz too small");
+	    }
+	  else
+	    {
+	      if (desc1 == NULL || desc2 == NULL)
+		annobin_inform (0, "ICE: descz too big");
+	    }
+	  break;
+	case 16:
+	  if (! annobin_is_64bit || desc1 == NULL || desc2 == NULL)
+	    annobin_inform (0, "ICE: descz too big");
+	  break;
+	default:
+	  annobin_inform (0, "ICE: description string size (%d) does not match address size", descsz);
+	  break;
+	}
+
+      fprintf (asm_out_file, "\t.dc.l %u%s%s descsz = sizeof (address%s)\n",
+	       descsz, descsz < 10 ? "\t\t" : "\t", ASM_COMMENT_START, desc2 == NULL ? "" : "es");
     }
   else
-    fprintf (asm_out_file, "\t.dc.l %u\t\t%s size of description\n", descsz, ASM_COMMENT_START);
+    {
+      if (desc2 != NULL)
+	annobin_inform (0, "ICE: second description not empty for non-string description");
+
+      fprintf (asm_out_file, "\t.dc.l %u\t\t%s size of description\n", descsz, ASM_COMMENT_START);
+    }
 
   fprintf (asm_out_file, "\t.dc.l %#x\t%s type = %s\n", type, ASM_COMMENT_START,
 	   type == NT_GNU_BUILD_ATTRIBUTE_OPEN ? "OPEN" :
@@ -253,7 +300,7 @@ annobin_output_note (const void * name, unsigned namesz, bool name_is_string,
 	}
     }
 
-  if (desc)
+  if (desc1)
     {
       if (desc_is_string)
 	{
@@ -261,9 +308,19 @@ annobin_output_note (const void * name, unsigned namesz, bool name_is_string,
 	     a reference to this symbol of the appropriate size for the target
 	     architecture.  */
 	  if (annobin_is_64bit)
-	    fprintf (asm_out_file, "\t.quad %s", (char *) desc);
+	    fprintf (asm_out_file, "\t.quad %s", (char *) desc1);
 	  else
-	    fprintf (asm_out_file, "\t.dc.l %s", (char *) desc);
+	    fprintf (asm_out_file, "\t.dc.l %s", (char *) desc1);
+
+	  if (desc2)
+	    {
+	      fprintf (asm_out_file, "\n");
+	      if (annobin_is_64bit)
+		fprintf (asm_out_file, "\t.quad %s", (char *) desc2);
+	      else
+		fprintf (asm_out_file, "\t.dc.l %s", (char *) desc2);
+	    }
+
 	  fprintf (asm_out_file, "\t%s description (symbol name)\n", ASM_COMMENT_START);
 	}
       else
@@ -272,7 +329,7 @@ annobin_output_note (const void * name, unsigned namesz, bool name_is_string,
 
 	  for (i = 0; i < descsz; i++)
 	    {
-	      fprintf (asm_out_file, " %#x", ((unsigned char *) desc)[i]);
+	      fprintf (asm_out_file, " %#x", ((unsigned char *) desc1)[i]);
 	      if (i == (descsz - 1))
 		fprintf (asm_out_file, "\t%s description\n", ASM_COMMENT_START);
 	      else if ((i % 8) == 7)
@@ -302,13 +359,16 @@ annobin_output_note (const void * name, unsigned namesz, bool name_is_string,
     }
 
   fprintf (asm_out_file, "\n");
+
+  ++ annobin_note_count;
 }
 
 void
 annobin_output_bool_note (const char    bool_type,
 			  const bool    bool_value,
 			  const char *  name_description,
-			  const char *  description,
+			  const char *  start,
+			  const char *  end,
 			  unsigned      note_type)
 {
   char buffer [6];
@@ -320,15 +380,17 @@ annobin_output_bool_note (const char    bool_type,
   /* Include the NUL byte at the end of the name "string".
      This is required by the ELF spec.  */
   annobin_output_note (buffer, strlen (buffer) + 1, false, name_description,
-		       description, description == NULL ? 0 : (annobin_is_64bit ? 8 : 4),
-		       description != NULL, note_type);
+		       start, end,
+		       start == NULL ? 0 : (annobin_is_64bit ? (end == NULL ? 8 : 16) : (end == NULL ? 4: 8)),
+		       true, note_type);
 }
 
 void
 annobin_output_string_note (const char    string_type,
 			    const char *  string,
 			    const char *  name_description,
-			    const char *  description,
+			    const char *  start,
+			    const char *  end,
 			    unsigned      note_type)
 {
   unsigned int len = strlen (string);
@@ -339,15 +401,17 @@ annobin_output_string_note (const char    string_type,
   sprintf (buffer, "GA%c%c%s", GNU_BUILD_ATTRIBUTE_TYPE_STRING, string_type, string);
 
   annobin_output_note (buffer, len + 5, true, name_description,
-		       description, description == NULL ? 0 : (annobin_is_64bit ? 8 : 4),
-		       description != NULL, note_type);
+		       start, end,
+		       start == NULL ? 0 : (annobin_is_64bit ? (end == NULL ? 8 : 16) : (end == NULL ? 4 : 8)),
+		       true, note_type);
 }
 
 void
 annobin_output_numeric_note (const char     numeric_type,
 			     unsigned long  value,
 			     const char *   name_description,
-			     const char *   description,
+			     const char *   start,
+			     const char *   end,
 			     unsigned       note_type)
 {
   unsigned i;
@@ -385,8 +449,9 @@ annobin_output_numeric_note (const char     numeric_type,
     annobin_inform (0, "ICE: Unable to record numeric value in note %s\n", name_description);
 
   annobin_output_note (buffer, i + 1, false, name_description,
-		       description, description == NULL ? 0 : (annobin_is_64bit ? 8 : 4), true,
-		       note_type);
+		       start, end,
+		       start == NULL ? 0 : (annobin_is_64bit ? (end == NULL ? 8 : 16) : (end == NULL ? 4 : 8)),
+		       true, note_type);
 }
 
 static int
@@ -474,7 +539,7 @@ compute_GOWall_options (void)
 }
 
 static void
-record_GOW_settings (unsigned int gow, bool local)
+record_GOW_settings (unsigned int gow, bool local, const char * cname, const char * aname, const char * aname_end)
 {
   char buffer [128];
   unsigned i;
@@ -494,80 +559,113 @@ record_GOW_settings (unsigned int gow, bool local)
 
   if (local)
     {
-      annobin_inform (1, "Record a change in -g/-O/-Wall status for %s", current_function_name ());
-      const char *name = function_asm_name ();
-      if (name != NULL)
-	annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			     name, annobin_is_64bit ? 8 : 4, true,
-			     NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      annobin_inform (1, "Record a change in -g/-O/-Wall status for %s", cname);
+      annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
+			   aname, aname_end, annobin_is_64bit ? 16 : 8, true,
+			   NT_GNU_BUILD_ATTRIBUTE_FUNC);
     }
   else
     {
       annobin_inform (1, "Record status of -g/-O/-Wall");
       annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			   NULL, 0, false, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			   NULL, NULL, 0, false, NT_GNU_BUILD_ATTRIBUTE_OPEN);
     }
 }
 
 static void
 annobin_create_function_notes (void * gcc_data, void * user_data)
 {
+  const char * cname = current_function_name ();
+  const char * aname = function_asm_name ();
+  const char * aname_end;
+  const char * saved_aname_end;
+  unsigned int count;
+
   if (! annobin_enable_static_notes)
     return;
   
   if (asm_out_file == NULL)
     return;
 
-  annobin_target_specific_function_notes ();
+  if (cname == NULL)
+    {
+      if (aname == NULL)
+	{
+	  /* Can this happen ?  */
+	  annobin_inform (0, "ICE: function name not available");
+	  return;
+	}
+      cname = aname;
+    }
+  else if (aname == NULL)
+    aname = cname;
+
+  saved_aname_end = aname_end = concat (aname, "_end", NULL);
+  count = annobin_note_count;
+
+  annobin_target_specific_function_notes (aname, aname_end);
+
+  if (count > annobin_note_count)
+    {
+      free ((void *) aname_end);
+      aname = aname_end = NULL;
+    }
 
   if (global_stack_prot_option != flag_stack_protect)
     {
       annobin_inform (1, "Recording change in stack protection status for %s (from %d to %d)",
-		      current_function_name (), global_stack_prot_option, flag_stack_protect);
+		      cname, global_stack_prot_option, flag_stack_protect);
 
-      const char *name = function_asm_name ();
-      if (name != NULL)
-	annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, flag_stack_protect,
-				     "numeric: -fstack-protector status",
-				     name, NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, flag_stack_protect,
+				   "numeric: -fstack-protector status",
+				   aname, aname_end, NT_GNU_BUILD_ATTRIBUTE_FUNC);
+
+      if (aname != NULL)
+	aname = aname_end = NULL;
     }
 
   if (global_pic_option != compute_pic_option ())
     {
-      annobin_inform (1, "Recording change in PIC status for %s", current_function_name ());
-      const char *name = function_asm_name ();
-      if (name != NULL)
-	annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, compute_pic_option (),
-				     "numeric: pic type", name,
-				     NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      annobin_inform (1, "Recording change in PIC status for %s", cname);
+      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, compute_pic_option (),
+				   "numeric: pic type", aname, aname_end,
+				   NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      if (aname != NULL)
+	aname = aname_end = NULL;
     }
 
   if (global_GOWall_options != compute_GOWall_options ())
-    record_GOW_settings (compute_GOWall_options (), true);
+    {
+      record_GOW_settings (compute_GOWall_options (), true, cname, aname, aname_end);
+
+      if (aname != NULL)
+	aname = aname_end = NULL;
+    }
 
   if (global_short_enums != flag_short_enums)
     {
-      annobin_inform (1, "Recording change in enum size for %s", current_function_name ());
-      const char *name = function_asm_name ();
-      if (name != NULL)
-	annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, flag_short_enums,
-				  flag_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
-				  name, NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      annobin_inform (1, "Recording change in enum size for %s", cname);
+      annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, flag_short_enums,
+				flag_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
+				aname, aname_end, NT_GNU_BUILD_ATTRIBUTE_FUNC);
+      if (aname != NULL)
+	aname = aname_end = NULL;
     }
 
-  
   if (annobin_enable_stack_size_notes && flag_stack_usage_info)
     {
       if ((unsigned long) current_function_static_stack_size > stack_threshold)
 	{
 	  annobin_inform (1, "Recording stack usage of %lu for %s",
-			  current_function_static_stack_size, current_function_name ());
+			  current_function_static_stack_size, cname);
 
-	  const char *name = function_asm_name ();
-	  if (name != NULL)
-	    annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE, current_function_static_stack_size,
-					 "numeric: stack-size", name,
-					 NT_GNU_BUILD_ATTRIBUTE_FUNC);
+	  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE,
+				       current_function_static_stack_size,
+				       "numeric: stack-size",
+				       aname, aname_end,
+				       NT_GNU_BUILD_ATTRIBUTE_FUNC);
+	  if (aname != NULL)
+	    aname = aname_end = NULL;
 	}
 
       annobin_total_static_stack_usage += current_function_static_stack_size;
@@ -575,6 +673,16 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       if ((unsigned long) current_function_static_stack_size > annobin_max_stack_size)
 	annobin_max_stack_size = current_function_static_stack_size;
     }
+
+  if (annobin_note_count > count)
+    {
+      // /* FIXME: This assumes that the function is in the .text section...  */
+      // fprintf (asm_out_file, "\t.pushsection .text\n");
+      fprintf (asm_out_file, "%s:\n", saved_aname_end);
+      // fprintf (asm_out_file, "\t.popsection\n");
+    }
+
+  free ((void *) saved_aname_end);
 }
 
 static void
@@ -586,7 +694,7 @@ record_fortify_level (int level)
   buffer[++len] = level;
   buffer[++len] = 0;
   annobin_output_note (buffer, len + 1, false, "FORTIFY SOURCE level",
-		       NULL, 0, false, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+		       NULL, NULL, 0, false, NT_GNU_BUILD_ATTRIBUTE_OPEN);
   annobin_inform (1, "Record a FORTIFY SOURCE level of %d", level);
 }
 
@@ -647,9 +755,11 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
       annobin_current_filename = (char *) "unknown_source";
     }
 
+  /* Create a symbol for this compilation unit.  */
   if (global_file_name_symbols)
     fprintf (asm_out_file, ".global %s\n", annobin_current_filename);
   fprintf (asm_out_file, ".type %s STT_OBJECT\n", annobin_current_filename);
+  fprintf (asm_out_file, ".size %s, %s - %s\n",annobin_current_filename, annobin_current_endname, annobin_current_filename);
   fprintf (asm_out_file, "%s:\n", annobin_current_filename);
 
   /* Create the static notes section.  */
@@ -666,19 +776,22 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   /* Output the version of the specification supported.  */
   sprintf (buffer, "%dp%d", SPEC_VERSION, annobin_version);
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_VERSION, buffer,
-			      "string: version", annobin_current_filename, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			      "string: version",
+			      annobin_current_filename,
+			      annobin_current_endname,
+			      NT_GNU_BUILD_ATTRIBUTE_OPEN);
 
   /* Record the version of the compiler.  */
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
-			      "string: build-tool", NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			      "string: build-tool", NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
 
   /* Record optimization level, -W setting and -g setting  */
-  record_GOW_settings (global_GOWall_options, false);
+  record_GOW_settings (global_GOWall_options, false, NULL, NULL, NULL);
      
   /* Record -fstack-protector option.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, global_stack_prot_option,
 			       "numeric: -fstack-protector status",
-			       NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			       NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
 
   /* Look for -D _FORTIFY_SOURCE=<n> on the original gcc command line.
      Scan backwards so that we record the last version of the option,
@@ -716,12 +829,12 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   
   /* Record the PIC status.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
-			       "numeric: PIC", NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			       "numeric: PIC", NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
 
   /* Record enum size.  */
   annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums,
 			    global_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
-			    NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			    NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
 
   /* Record target specific notes.  */
   annobin_record_global_target_notes ();
@@ -733,10 +846,15 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 static void
 annobin_create_loader_notes (void * gcc_data, void * user_data)
 {
-  if (! annobin_enable_dynamic_notes)
+  if (asm_out_file == NULL)
     return;
 
-  if (asm_out_file == NULL)
+  /* FIXME: This assumes that functions are being placed into the .text section.  */
+  fprintf (asm_out_file, "\t.pushsection .text\n");
+  fprintf (asm_out_file, "%s:\n", annobin_current_endname);
+  fprintf (asm_out_file, "\t.popsection\n");
+
+  if (! annobin_enable_dynamic_notes)
     return;
 
   if (annobin_enable_stack_size_notes && annobin_total_static_stack_usage)
@@ -745,7 +863,7 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
 
       fprintf (asm_out_file, "\t.pushsection %s\n", GNU_BUILD_ATTRS_SECTION_NAME);    
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE, annobin_total_static_stack_usage,
-				   "numeric: stack-size", NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+				   "numeric: stack-size", NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
       fprintf (asm_out_file, "\t.popsection\n");
     }
 

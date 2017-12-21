@@ -79,9 +79,11 @@ extern void annobin_save_target_specific_information (void);
 extern void annobin_record_global_target_notes (void);
 
 /* Called during PLUGIN_ALL_PASSES_END.
+   Should produce notes specific to the function just compiled.
    Should only produce notes for the static tools, ie
-   notes in the .gnu.build.attributes section.  */
-extern void annobin_target_specific_function_notes (void);
+   notes in the .gnu.build.attributes section.
+   Arguments are the start and end symbols for the function.  */
+extern void annobin_target_specific_function_notes (const char *, const char *);
 
 /* Called during PLUGIN_FINISH_UNIT.
    Should only produce notes for the dynamic loader, ie
@@ -89,10 +91,10 @@ extern void annobin_target_specific_function_notes (void);
 extern void annobin_target_specific_loader_notes (void);
 
 extern void annobin_inform (unsigned, const char *, ...);
-extern void annobin_output_note (const void *, unsigned, bool, const char *, const void *, unsigned, bool, unsigned);
-extern void annobin_output_bool_note (const char , const bool, const char *, const char *, unsigned);
-extern void annobin_output_string_note (const char, const char *, const char *, const char *, unsigned);
-extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, unsigned);
+extern void annobin_output_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned, bool, unsigned);
+extern void annobin_output_bool_note (const char, const bool, const char *, const char *, const char *, unsigned);
+extern void annobin_output_string_note (const char, const char *, const char *, const char *, const char *, unsigned);
+extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, const char *, unsigned);
 
 extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;

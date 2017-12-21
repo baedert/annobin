@@ -32,12 +32,12 @@ annobin_record_global_target_notes (void)
   saved_tls_dialect = aarch64_tls_dialect;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
-			       "numeric: ABI: TLS dialect", NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			       "numeric: ABI: TLS dialect", NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
   annobin_inform (1, "Recording global TLS dialect of %d", saved_tls_dialect);
 }
 
 void
-annobin_target_specific_function_notes (void)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end)
 {
   if (saved_tls_dialect == aarch64_tls_dialect)
     return;
@@ -45,11 +45,9 @@ annobin_target_specific_function_notes (void)
   annobin_inform (1, "TLS dialect has changed from %d to %d for %s",
 		  saved_tls_dialect, aarch64_tls_dialect, current_function_name ());
 
-  const char *name = function_asm_name ();
-  if (name != NULL)
-    annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
-				 "numeric: ABI: TLS dialect", name,
-				 NT_GNU_BUILD_ATTRIBUTE_FUNC);
+  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
+			       "numeric: ABI: TLS dialect", aname, aname_end,
+			       NT_GNU_BUILD_ATTRIBUTE_FUNC);
 }
 
 typedef struct

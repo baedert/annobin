@@ -1,12 +1,16 @@
 	Storing Build Time Information In ELF Binary Files
 	    In a Format Suitable for Static Analysis
 
-  A specification by Nick Clifton.  Version 2.0.  June 28, 2017.
+  A specification by Nick Clifton.  Version 3.0.  Dec 20, 2017.
 
 ChangeLog:
+  For v3.0:
+    Add end-of-range addresses to description field, to allow
+    for gaps in the coverage.
+
   For v2.0:
     Added an "owner" string at the start of the name field so that
-    naive processors of Elf Notes are less likely to complain.
+    naive processors of Elf Notes are less likely to complain. 
 
 ----------------------------------------------------------------------
 
@@ -58,32 +62,25 @@ ChangeLog:
   Two new note types are defined:  NT_GNU_BUILD_ATTRIBUTE_OPEN (0x100)
   and NT_GNU_BUILD_ATTRIBUTE_FUNC (0x101).  These are used by the
   description field (see below).
-  
-  The description field of the note is a 4-byte or 8-byte wide address
-  which indicates the starting location for an attribute.  If the
-  bottom bit of the type field is set then the address is for a
-  function and the attribute terminates at the end of the function.
-  (Reverting back to the previous value for that attribute).  If the
-  bottom bit of the type is clear then the address is for the start of
-  an open ended range.  The range ends only when another open-ended
-  attribute of the same name is defined, although it may be
-  temporarily overridden by a function based address.
 
-  Notes:
-  
-    + In unrelocated files the numbers should instead be zero, with a
-      relocation present to set the actual value once the file is
-      linked.
 
-    + The numbers are stored in the same endian format as that
-      specified in the EI_DATA field of the ELF header of the file
-      containing the note.  The size of the numbers is dictated by the
-      EI_CLASS field of the ELF header.
+  The description field of the note is either 0-bytes long, or else a
+  pair of 4-byte wide (for 32-bit targets) or 8-byte wide (for 64-bit
+  targets) addresses which indicate the starting and ending location
+  for the attribute.  
 
-    + An empty description field is a special case.  It should be
-      treated as if it applies to the same region as the nearest
-      preceeding NT_GNU_BUILD_ATTRIBUTE_OPEN note with a non-empty
-      description field.  This will probably be a version note.
+  If the description field is empty, the note should be treated as if
+  it applies to the same region as the nearest preceeding note of the
+  same type (ie either OPEN or FUNC).
+
+  In unrelocated files the addresses should instead be zero, with a
+  relocation present to set the actual value once the file is linked.
+
+  The numbers are stored in the same endian format as that specified
+  in the EI_DATA field of the ELF header of the file containing the
+  note.  The size of the numbers is dictated by the EI_CLASS field of
+  the ELF header.
+
 
   The name field identifies the type and value of the attribute.
   The name starts with the string "GA", which is an abbreviation for
@@ -104,8 +101,7 @@ ChangeLog:
 
      Character      Allowed    Meaning
     --------------- Types      -------
-    ASCII printable $*         An annotation type not explicitly defined by this specification.  This string must be NUL terminated.
-    0               <none>     Reserved for future use.
+    -              <none>      Reserved for future use.
     1               $          Version of the specification supported and producer(s) of the notes (see below).
     2               *          Stack protector
     3               !+         Relro
@@ -114,6 +110,9 @@ ChangeLog:
     6               $*         ABI
     7               *          Position Independence Status: 0 => static, 1 => pic, 2 => PIC, 3 => pie
     8               !+         Short enums
+    9..30          <none>      Reserved for future use.
+    31..126         $*         An annotation type not explicitly defined by this specification.
+    127+           <none>      Reserved for future use.
 
   For * and $ type attributes the value is then appended.
 
@@ -147,6 +146,18 @@ Some examples:
   identifying pair of characters should be appended to the version
   note.
 
+  The description field for the version note should not be empty.
+  This note serves as the base address for other open notes that
+  follow, allowing them to use an empty description field.
+
+  The last note should be an end-note (ascii value 0) which specifies
+  the end address of the range covered by the previous open notes.  If
+  no end note is present then the address range is presumed to be open
+  at the higher end.
+
+  End-notes can also be used to indicate the end of a function
+  specific note's address range.  These notes must have the
+  NT_GNU_BUILD_ATTRIBUTE_FUNC type.
 
 * When the linker merges two or more files containing these notes it
   should ensure that the above rules are maintained.  Simply
@@ -167,11 +178,14 @@ Some examples:
   The linker, or another tool, may wish to eliminate redundant notes
   in the note section.  When doing this the following rules must be
   observed:
+           0. [Optional] If relocations exist against the notes then
+	      they should not be merged.
 	   1. Preserve the ordering of the notes.
 	   2. Preserve any NT_GNU_BUILD_ATTRIBUTE_FUNC notes.
 	   3. Eliminate any NT_GNU_BUILD_ATTRIBUTE_OPEN notes that have
 	      the same full name field as the immediately preceeding
-	      note with the same type of name.
+	      note with the same type of name and whoes address ranges
+  	      coincide.
            4. Combine the numeric value of any NT_GNU_BUILD_ATTRIBUTE_OPEN
               notes of type GNU_BUILD_ATTRIBUTE_STACK_SIZE.
 	   5. If an NT_GNU_BUILD_ATTRIBUTE_OPEN note is going to be
@@ -195,3 +209,4 @@ ToDo:
   Check if -grecord-gcc-switches preserved per-translation-unit info
   after linking.
   
+  Handle -ffunction-sections.

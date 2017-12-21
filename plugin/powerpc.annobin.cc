@@ -31,25 +31,22 @@ annobin_record_global_target_notes (void)
   saved_tls_size = rs6000_tls_size;
   
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
-			       "numeric: ABI: TLS size", NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			       "numeric: ABI: TLS size", NULL, NULL,
+			       NT_GNU_BUILD_ATTRIBUTE_OPEN);
   annobin_inform (1, "Recording global TLS size of %d", saved_tls_size);
 }
 
 void
-annobin_target_specific_function_notes (void)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end)
 {
   if (saved_tls_size == rs6000_tls_size)
     return;
 
-  const char *name = function_asm_name ();
-  if (name == NULL)
-    return;
-
   annobin_inform (1, "TLS size has changed from %d to %d for %s",
-		  saved_tls_size, rs6000_tls_size, name);
+		  saved_tls_size, rs6000_tls_size, aname);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, rs6000_tls_size,
-			       "numeric: ABI: TLS size", name,
+			       "numeric: ABI: TLS size", aname, aname_end,
 			       NT_GNU_BUILD_ATTRIBUTE_FUNC);
 }
 

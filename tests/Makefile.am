@@ -6,6 +6,6 @@
 
 ## Process this file with automake to produce Makefile.in.
 
-TESTS=compile-test hardening-test hardening-fail-test abi-test
+TESTS=compile-test hardening-test hardening-fail-test abi-test missing-notes-test
 XFAIL_TESTS=hardening-fail-test
 

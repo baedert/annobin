@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# Copyright (c) 2017 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+rm -f hello.o hello2.o hello3.o libhello.so compile-test.exe
+
+GCC=gcc
+READELF=readelf
+OBJCOPY=objcopy
+
+PLUGIN=../plugin/.libs/annobin.so
+
+$GCC -fplugin=$PLUGIN \
+     -c \
+     -fPIC \
+     -fno-stack-protector \
+ $srcdir/hello.c 
+
+$GCC -O3 \
+     -c \
+     -fPIC \
+ $srcdir/hello2.c 
+
+$GCC -fplugin=$PLUGIN \
+     -c \
+     -fPIC \
+ $srcdir/hello3.c \
+
+$GCC -fplugin=$PLUGIN \
+    -fPIC \
+    -shared \
+ $srcdir/hello_lib.c \
+     -o libhello.so
+
+$GCC -fplugin=$PLUGIN \
+     -L . \
+ hello.o hello2.o hello3.o -lhello -o missing-notes-test.exe
+
+# FIXME - we should check that the notes were parsed correctly...
+$READELF --notes --wide missing-notes-test.exe > /dev/null
