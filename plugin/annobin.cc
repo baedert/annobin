@@ -62,6 +62,7 @@ static bool           annobin_enable_static_notes = true;
 static unsigned int   annobin_note_count = 0;
 static unsigned int   global_GOWall_options = 0;
 static int            global_stack_prot_option = -1;
+static int            global_stack_clash_option = -1;
 static int            global_pic_option = -1;
 static int            global_short_enums = -1;
 static char *         compiler_version = NULL;
@@ -572,6 +573,23 @@ record_GOW_settings (unsigned int gow, bool local, const char * cname, const cha
     }
 }
 
+#ifdef flag_stack_clash_protection
+static void
+record_stack_clash_note (const char * start, const char * end, int type)
+{
+  char buffer [128];
+  unsigned len = sprintf (buffer, "GA%cstack_clash",
+			  flag_stack_clash_protection
+			  ? GNU_BUILD_ATTRIBUTE_TYPE_BOOL_TRUE
+			  : GNU_BUILD_ATTRIBUTE_TYPE_BOOL_FALSE);
+
+  annobin_output_note (buffer, len + 1, true, "bool: -fstack-clash-protection status",
+		       start, end,
+		       start == NULL ? 0 : (annobin_is_64bit ? (end == NULL ? 8 : 16) : (end == NULL ? 4: 8)),
+		       true, type);
+}
+#endif
+
 static void
 annobin_create_function_notes (void * gcc_data, void * user_data)
 {
@@ -624,6 +642,19 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	aname = aname_end = NULL;
     }
 
+#ifdef flag_stack_clash_protection
+  if (global_stack_clash_option != flag_stack_clash_protection)
+    {
+      annobin_inform (1, "Recording change in stack clash protection status for %s (from %d to %d)",
+		      cname, global_stack_clash_option, flag_stack_clash_protection);
+
+      record_stack_clash_note (aname, aname_end, NT_GNU_BUILD_ATTRIBUTE_FUNC);
+
+      if (aname != NULL)
+	aname = aname_end = NULL;
+    }
+#endif
+  
   if (global_pic_option != compute_pic_option ())
     {
       annobin_inform (1, "Recording change in PIC status for %s", cname);
@@ -699,6 +730,18 @@ record_fortify_level (int level)
 }
 
 static void
+record_glibcxx_assertions (bool on)
+{
+  char buffer [128];
+  unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS",
+			  on ? GNU_BUILD_ATTRIBUTE_TYPE_BOOL_TRUE : GNU_BUILD_ATTRIBUTE_TYPE_BOOL_FALSE);
+
+  annobin_output_note (buffer, len + 1, false, "_GLIBCXX_ASSERTIONS defined",
+		       NULL, NULL, 0, false, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+  annobin_inform (1, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
+}
+
+static void
 annobin_create_global_notes (void * gcc_data, void * user_data)
 {
   int i;
@@ -741,6 +784,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     flag_stack_usage_info = 1;
 
   global_stack_prot_option = flag_stack_protect;
+#ifdef flag_stack_clash_protection
+  global_stack_clash_option = flag_stack_clash_protection;
+#endif
   global_pic_option = compute_pic_option ();
   global_short_enums = flag_short_enums;
   global_GOWall_options = compute_GOWall_options ();
@@ -793,25 +839,54 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 			       "numeric: -fstack-protector status",
 			       NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
 
+#ifdef flag_stack_clash_protection
+  /* Record -fstack-clash-protection option.  */
+  record_stack_clash_note (NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+#endif
+
   /* Look for -D _FORTIFY_SOURCE=<n> on the original gcc command line.
      Scan backwards so that we record the last version of the option,
      should multiple versions be set.  */
+  bool fortify_level_recorded = false;
+  bool glibcxx_assertions_recorded = false;
+
   for (i = save_decoded_options_count; i--;)
     {
-      if (save_decoded_options[i].opt_index == OPT_D
-	  && save_decoded_options[i].arg != NULL
-	  && strncmp (save_decoded_options[i].arg, "_FORTIFY_SOURCE=", strlen ("_FORTIFY_SOURCE=")) == 0)
+      if (save_decoded_options[i].opt_index == OPT_D)
 	{
-	  int level = atoi (save_decoded_options[i].arg + strlen ("_FORTIFY_SOURCE="));
-
-	  if (level < 0 || level > 3)
+	  if (save_decoded_options[i].arg == NULL)
+	    continue;
+	    
+	  if (strncmp (save_decoded_options[i].arg, "_FORTIFY_SOURCE=", strlen ("_FORTIFY_SOURCE=")) == 0)
 	    {
-	      annobin_inform (0, "Unexpected value for FORIFY SOURCE: %s",
-			      save_decoded_options[i].arg);
-	      level = 0;
+	      int level = atoi (save_decoded_options[i].arg + strlen ("_FORTIFY_SOURCE="));
+
+	      if (level < 0 || level > 3)
+		{
+		  annobin_inform (0, "Unexpected value for FORIFY SOURCE: %s",
+				  save_decoded_options[i].arg);
+		  level = 0;
+		}
+
+	      if (! fortify_level_recorded)
+		{
+		  record_fortify_level (level);
+		  fortify_level_recorded = true;
+		}
+
+	      continue;
 	    }
-	  record_fortify_level (level);
-	  break;
+
+	  if (strncmp (save_decoded_options[i].arg, "_GLIBCXX_ASSERTIONS", strlen ("_GLIBCXX_ASSERTIONS")) == 0)
+	    {
+	      if (! glibcxx_assertions_recorded)
+		{
+		  record_glibcxx_assertions (true);
+		  glibcxx_assertions_recorded = true;
+		}
+
+	      continue;
+	    }
 	}
       else if (save_decoded_options[i].opt_index == OPT_fpreprocessed)
 	{
@@ -821,11 +896,18 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	     record a level of -1 to let the user known that we do not know.
 	     Note: preprocessed sources includes the use of --save-temps.  */
 	  record_fortify_level (-1);
+	  fortify_level_recorded = true;
+	  record_glibcxx_assertions (false); /* FIXME: need a tri-state value...  */
+	  glibcxx_assertions_recorded = true;
 	  break;
 	}
     }
-  if (i < 0)
+
+  if (! fortify_level_recorded)
     record_fortify_level (0);
+
+  if (! glibcxx_assertions_recorded)
+    record_glibcxx_assertions (false);
   
   /* Record the PIC status.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,

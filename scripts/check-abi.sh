@@ -319,10 +319,14 @@ scan_file ()
     grep -q -e "Unknown note" $tmpfile
     if [ $? == 0 ];
     then
-	report "$file: scanner '$scanner' failed - see $tmpfile"
-	failed=1
-	# Leave the tmpfile intact so that it can be examined by the user.
-	return
+	# The fortify and stack protection checks need parsed notes.
+	if [[ $ignore_fortify -eq 0 || $ignore_stack_prot -eq 0 ]];
+	then
+	    report "$file: scanner '$scanner' could not parse the notes - see $tmpfile"
+	    failed=1
+	    # Leave the tmpfile intact so that it can be examined by the user.
+	    return
+	fi
     fi
        
     grep -q -e "Gap in build notes" $tmpfile

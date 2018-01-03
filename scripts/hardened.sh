@@ -402,10 +402,15 @@ scan_file ()
     grep -q -e "Unknown note" $tmpfile
     if [ $? == 0 ];
     then
-	report "scanner '$scanner' did not recognise the build attribute notes - see $tmpfile"
-	failed=1
-	# Leave the tmpfile intact so that it can be examined by the user.
-	return
+	# The FORTIFY checks need fully parsed notes.
+	# The other checks can use other sources of information.
+	if [ $skip_fortify -eq 0 ];
+	then
+	    report "scanner '$scanner' did not recognise the build attribute notes - see $tmpfile"
+	    failed=1
+	    # Leave the tmpfile intact so that it can be examined by the user.
+	    return
+	fi
     fi       
 
     grep -q -e "Gap in build notes" $tmpfile
