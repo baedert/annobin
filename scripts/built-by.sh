@@ -3,7 +3,7 @@
 # Script to check which tools built the specified binaries.
 #
 # Created by Nick Clifton.
-# Copyright (c) 2016-2017 Red Hat.
+# Copyright (c) 2016-2018 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -29,7 +29,7 @@
 #    * Allow arguments to command line options to be separated from the
 #      the option name by a space.  Eg: --before 20161212
 
-version=2.0
+version=3.0
 
 help ()
 {
@@ -48,6 +48,7 @@ Usage: $prog {files|options}
   {options} are:
   -h        --help            Display this information.
   -v        --version         Report the version number of this script.
+  -V        --verbose         Report on progress.
   -s        --silent          Produce no output, just an exit status.
   -i        --ignore          Silently ignore files where the builder cannot be found.
   -r=<PATH> --readelf=<PATH>  Path to version of readelf to use to read notes.
@@ -83,7 +84,8 @@ main ()
 
     scan_files
 
-    if [ $failed -ne 0 ] ; then
+    if [ $failed -ne 0 ];
+    then
 	exit 1
     else
 	exit 0
@@ -92,17 +94,24 @@ main ()
 
 report ()
 {
-    if [ $silent -ne 0 ]
+    if [ $silent -eq 0 ]
     then
-	return
+	echo $prog":" ${1+"$@"}
     fi
-    echo $prog":" ${1+"$@"}
 }
 
 fail ()
 {
     report "Internal error: " ${1+"$@"}
     exit 1
+}
+
+verbose ()
+{
+    if [ $verb -ne 0 ]
+    then
+	echo $prog":" ${1+"$@"}
+    fi
 }
 
 # Initialise global variables.
@@ -115,6 +124,7 @@ init ()
 
     failed=0
     silent=0
+    verb=0
     ignore_unknown=0
     scanner=readelf
     tmpfile=/dev/shm/built.by.delme
@@ -149,6 +159,11 @@ parse_args ()
 		;;
 	    -s | --silent)
 		silent=1;
+		verb=0;
+		;;
+	    -V | --verbose)
+		silent=0;
+		verb=1;
 		;;
 	    -i | --ignore)
 		ignore_unknown=1;
@@ -203,7 +218,7 @@ parse_args ()
 	shift
     done
 
-    if [ $num_files -gt 0 ] ;
+    if [ $num_files -gt 0 ];
     then
 	# Remember that we are counting from zero not one.
 	let "num_files--"
@@ -277,8 +292,10 @@ scan_file ()
     fi
 
     file $file | grep --silent -e ELF
-    if [ $? != 0 ] ; then
-	if [ $ignore_unknown -eq 0 ]; then
+    if [ $? != 0 ];
+    then
+	if [ $ignore_unknown -eq 0 ];
+	then
 	    report "$file: not an ELF format file"
 	    failed=1
 	fi
@@ -286,7 +303,8 @@ scan_file ()
     fi
     
     $scanner --wide --notes $file > $tmpfile 2>&1
-    if [ $? != 0 ] ; then
+    if [ $? != 0 ];
+    then
 	if [ $ignore_unknown -eq 0 ]; then
 	    report "$file: scanner '$scanner' failed - see $tmpfile"
 	    failed=1
@@ -300,7 +318,8 @@ scan_file ()
 
     grep --silent -e "\$<tool>" $tmpfile
 
-    if [ $? == 0 ] ; then
+    if [ $? == 0 ];
+    then
 	# Convert:
 	#   $<tool>gcc 7.0.0 20161212 0x00000000 NT_GNU...
 	# or
@@ -314,13 +333,19 @@ scan_file ()
 	ver_index=1
 	date_index=2
 
-	eval 'builder=($(grep -e tool $tmpfile | cut -d " " -f 3-5))'
-
-	if [ ${#builder[*]} -gt 3 ] ; then
-	    report "$file: contains multiple different creator notes"
+	eval 'builder=($(grep -e tool $tmpfile | cut -d " " -f 3-5 | sort -u))'
+	
+	verbose "build notes contain: ${builder[*]}"
+	
+	if [ ${#builder[*]} -gt 3 ];
+	then
+	    report "$file: contains multiple, different creator notes"
 	fi
-	if [ ${#builder[*]} -lt 3 ] ; then
-	    if [ $ignore_unknown -eq 0 ]; then
+
+	if [ ${#builder[*]} -lt 3 ];
+	then
+	    if [ $ignore_unknown -eq 0 ];
+	    then
 		report "$file: contains truncated creator notes"
 		failed=1
 	    fi
@@ -328,27 +353,39 @@ scan_file ()
 	fi
 	builder[0]=`echo ${builder[0]} | cut -d \> -f 2`
     else
+	verbose "scan for build notes failed, trying debug information"
+
 	# Try examining the debug information in case -grecord-gcc-switches has been used.
 	$scanner --wide --debug-dump=info $file | grep -e DW_AT_producer > $tmpfile
 	eval 'builder=($(grep -e GNU $tmpfile))'
 
-	if [ ${#builder[*]} -ge 11 ] ; then
+	if [ ${#builder[*]} -ge 11 ];
+	then
 	    # FIXME: We should grep for the right strings, rather than using
 	    # builtin knowledge of the format of the DW_AT_producer contents
+
+	    verbose "DW_AT_producer contains: ${builder[*]}"
+
 	    tool_index=7
 	    ver_index=9
 	    date_index=10
 	    builder[7]="${builder[7]} ${builder[8]}"
 	else
+	    verbose "scan for debug information failed, trying .comment section"
+	    
 	    # Alright - last chance.  Check the .comment section
 	    $scanner -p.comment $file > $tmpfile 2>&1
 	    grep --silent -e "does not exist" $tmpfile
 
-	    if [ $? != 0 ] ; then
+	    if [ $? != 0 ];
+	    then
 		eval 'builder=($(grep -e GNU $tmpfile))'
 
+		verbose ".comment contains: ${builder[*]}"
+
 		# FIXME: We are using assumed knowledge of the layout of the builder comment.
-		if [ ${#builder[*]} -lt 5 ] ; then
+		if [ ${#builder[*]} -lt 5 ];
+		then
 		    if [ $ignore_unknown -eq 0 ]; then
 			report "$file: could not parse .comment section"
 			failed=1
@@ -369,40 +406,54 @@ scan_file ()
 	fi
     fi
 
-    if [ $tell -eq 1 ] ; then
-	if [ x$tool != x ] ; then
-	    if [ ${builder[$tool_index]} != $tool ] ; then
+    if [ $tell -eq 1 ];
+    then
+	if [ x$tool != x ];
+	then
+	    if [ "${builder[$tool_index]}" == $tool ];
+	    then
 		tell=0
 	    fi
 	fi
-	if [ x$nottool != x ] ; then
-	    if [ ${builder[$tool_index]} == $nottool ] ; then
+	if [ x$nottool != x ];
+	then
+	    if [ "${builder[$tool_index]}" == $nottool ];
+	    then
 		tell=0
 	    fi
 	fi
-	if [ x$minver != x ] ; then
-	    if [[ ${builder[$ver_index]} < $minver ]] ; then
+	if [ x$minver != x ];
+	then
+	    if [[ ${builder[$ver_index]} < $minver ]];
+	    then
 		tell=0
 	    fi
 	fi
-	if [ x$maxver != x ] ; then
-	    if [[ ${builder[$ver_index]} > $maxver ]] ; then
+	if [ x$maxver != x ];
+	then
+	    if [[ ${builder[$ver_index]} > $maxver ]];
+	    then
 		tell=0
 	    fi
 	fi
-	if [ x$before != x ] ; then
-	    if [ ${builder[$date_index]} -ge $before ] ; then
+	if [ x$before != x ];
+	then
+	    if [ ${builder[$date_index]} -ge $before ];
+	    then
 		tell=0
 	    fi
 	fi
-	if [ x$after != x ] ; then
-	    if [ ${builder[$date_index]} -le $after ] ; then
+	if [ x$after != x ];
+	then
+	    if [ ${builder[$date_index]} -le $after ];
+	    then
 		tell=0
 	    fi
 	fi	
     fi
     
-    if [ $tell -eq 1 ]; then
+    if [ $tell -eq 1 ];
+    then
 	report "$file: created by: ${builder[$tool_index]} v${builder[$ver_index]} ${builder[$date_index]}"
     fi
 

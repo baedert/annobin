@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Script to check for ABI conflicts in annotated binaries
+# Script to check for ABI conflicts in annotated binaries.
 #
 # Created by Nick Clifton.
-# Copyright (c) 2017 Red Hat.
+# Copyright (c) 2017-2018 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -28,7 +28,7 @@
 #    * Allow arguments to command line options to be separated from the
 #      the option name by a space.  Eg: --readelf foobar
 
-version=2.0
+version=3.0
 
 help ()
 {
@@ -48,8 +48,8 @@ Usage: $prog {files|options}
   -h        --help             Display this information.
   -v        --version          Report the version number of this script.
   -s        --silent           Produce no output, just an exit status.
+  -V        --verbose          Report on progress.
   -i        --inconsistencies  Only report potential ABI problems.
-  -V        --verbose          Report files without conflicts
   -r=<PATH> --readelf=<PATH>   Path to version of readelf to use to read notes.
   -t=<PATH> --tmpfile=<PATH>   Temporary file to use.
 
@@ -77,7 +77,8 @@ main ()
 
     scan_files
 
-    if [ $failed -ne 0 ] ; then
+    if [ $failed -ne 0 ];
+    then
 	exit 1
     else
 	exit 0
@@ -86,17 +87,24 @@ main ()
 
 report ()
 {
-    if [ $silent -ne 0 ]
+    if [ $silent -eq 0 ]
     then
-	return
+	echo $prog":" ${1+"$@"}
     fi
-    echo $prog":" ${1+"$@"}
 }
 
 fail ()
 {
     report "Internal error: " ${1+"$@"}
     exit 1
+}
+
+verbose ()
+{
+    if [ $verb -ne 0 ]
+    then
+	echo $prog":" ${1+"$@"}
+    fi
 }
 
 # Initialise global variables.
@@ -109,7 +117,7 @@ init ()
 
     failed=0
     silent=0
-    verbose=0
+    verb=0
     inconsistencies=0
     ignore_abi=0
     ignore_enum=0
@@ -137,18 +145,17 @@ parse_args ()
 		report "version: $version"
 		exit 0
 		;;
-
 	    -h | --help)
 		help 
 		exit 0
 		;;
 	    -s | --silent)
 		silent=1;
-		verbose=0;
+		verb=0;
 		;;
 	    -V | --verbose)
 		silent=0;
-		verbose=1;
+		verb=1;
 		;;
 	    -i | --inconsistencies)
 		silent=0;
@@ -213,7 +220,7 @@ parse_args ()
 	shift
     done
 
-    if [ $num_files -gt 0 ] ;
+    if [ $num_files -gt 0 ];
     then
 	# Remember that we are counting from zero not one.
 	let "num_files--"
@@ -290,7 +297,7 @@ scan_file ()
     fi
 
     file $file | grep --silent -e ELF
-    if [ $? != 0 ] ;
+    if [ $? != 0 ];
     then
 	if [ $ignore_unknown -eq 0 ];
 	then
@@ -301,13 +308,29 @@ scan_file ()
     fi
     
     $scanner --wide --notes $file > $tmpfile 2>&1
-    if [ $? != 0 ] ;
+    if [ $? != 0 ];
     then
 	report "$file: scanner '$scanner' failed - see $tmpfile"
 	failed=1
 	# Leave the tmpfile intact so that it can be examined by the user.
 	return
     fi
+
+    grep -q -e "Unknown note" $tmpfile
+    if [ $? == 0 ];
+    then
+	report "$file: scanner '$scanner' failed - see $tmpfile"
+	failed=1
+	# Leave the tmpfile intact so that it can be examined by the user.
+	return
+    fi
+       
+    grep -q -e "Gap in build notes" $tmpfile
+    if [ $? == 0 ];
+    then
+	report "$file: there are gaps in the build notes"
+	failed=1
+    fi       
 
     local -a abis
 
@@ -320,29 +343,26 @@ scan_file ()
 	# into:
 	#   abis[n]=145e82c442000192
 
-	eval 'abis=($(grep -e \<ABI\> $tmpfile | cut -d " " -f 3 | cut -d x -f 2))'
+	eval 'abis=($(grep -e \<ABI\> $tmpfile | cut -d " " -f 3 | cut -d x -f 2 | sort -u))'
+
+	verbose "ABI Info: ${abis[*]}"
 
 	if [ ${#abis[*]} -lt 1 ];
 	then
 	    if [[ $ignore_abi -eq 0 && $inconsistencies -eq 0 ]];
 	    then
 		report "$file: does not have an ABI note"
-		# grep -e ABI $tmpfile
 	    fi
 	else
-	    if [ ${#abis[*]} -eq 1 ];
+	    if [ ${#abis[*]} -gt 1 ];
 	    then
-		if [ $verbose -eq 1 ];
-		then
-		    report "$file: ABI: ${abis[0]}"
-		fi
-	    else
 		local i mismatch=0
 
 		if [ $inconsistencies -eq 0 ];
 		then
 		    report "$file: contains ${#abis[*]} ABI notes"
 		fi
+
 		i=1;
 		while [ $i -lt ${#abis[*]} ]
 		do
@@ -350,18 +370,15 @@ scan_file ()
 		    then
 			# FIXME: Add code to differentiate between functions which have changed ABI and files ?
 			report "$file: differing ABI values detected: ${abis[i]} vs ${abis[i-1]}"
-			failed=1;
-			mismatch=1;
+			failed=1
+			mismatch=1
 		    fi
 		    let "i++"
 		done
 
 		if [ $mismatch -eq 0 ];
 		then
-		    if [ $verbose -eq 1 ];
-		    then
-			report "$file: ABI: ${abis[0]}"
-		    fi
+		    verbose "$file: ABI: ${abis[0]}"
 		fi
 	    fi
 	fi
@@ -378,7 +395,9 @@ scan_file ()
 	# into:
 	#   abis[n]=false
 
-	eval 'abis=($(grep -e "short enum" $tmpfile | cut -f 2 -d ">" | cut -f 1 -d " "))'
+	eval 'abis=($(grep -e "short enum" $tmpfile | cut -f 2 -d ">" | cut -f 1 -d " " | sort -u))'
+
+	verbose "Enum Info: ${abis[*]}"
 
 	if [ ${#abis[*]} -lt 1 ];
 	then
@@ -387,13 +406,8 @@ scan_file ()
 		report "$file: does not record enum size"
 	    fi
 	else
-	    if [ ${#abis[*]} -eq 1 ];
+	    if [ ${#abis[*]} -gt 1 ];
 	    then
-		if [ $verbose -eq 1 ];
-		then
-		    report "$file: -fshort-enums: ${abis[0]}"
-		fi
-	    else
 		local i mismatch=0
 
 		if [ $inconsistencies -eq 0 ];
@@ -406,18 +420,15 @@ scan_file ()
 		    if test "${abis[i]}" != "${abis[i-1]}" ;
 		    then
 			report "$file: differing -fshort-enums detected: ${abis[i]} vs ${abis[i-1]}"
-			failed=1;
-			mismatch=1;
+			failed=1
+			mismatch=1
 		    fi
 		    let "i++"
 		done
 
-		if [ $mismatch -eq 0 ] ;
+		if [ $mismatch -eq 0 ];
 		then
-		    if [ $verbose -eq 1 ];
-		    then
-			report "$file: -fshort-enums: ${abis[0]}"
-		    fi
+		    verbose "$file: -fshort-enums: ${abis[0]}"
 		fi
 	    fi
 	fi
@@ -432,7 +443,9 @@ scan_file ()
 	# into:
 	#   abis[n]=1
 
-	eval 'abis=($(grep -e FORTIFY $tmpfile | cut -f 2 -d ":" | cut -b 3-5 | sed -e "s/ff/unknown/"))'
+	eval 'abis=($(grep -e FORTIFY $tmpfile | cut -f 2 -d ":" | cut -b 3-5 | sed -e "s/ff/unknown/" | sort -u))'
+
+	verbose "Fortify Info: ${abis[*]}"
 
 	if [ ${#abis[*]} -lt 1 ];
 	then
@@ -441,13 +454,8 @@ scan_file ()
 		report "$file: does not record _FORTIFY_SOURCE level"
 	    fi
 	else
-	    if [ ${#abis[*]} -eq 1 ];
+	    if [ ${#abis[*]} -gt 1 ];
 	    then
-		if [ $verbose -eq 1 ];
-		then
-		    report "$file: -D_FORTIFY_SOURCE=${abis[0]}"
-		fi
-	    else
 		local i mismatch=0
 
 		if [ $inconsistencies -eq 0 ];
@@ -468,10 +476,7 @@ scan_file ()
 
 		if [ $mismatch -eq 0 ];
 		then
-		    if [ $verbose -eq 1 ];
-		    then
-			report "$file: -D_FORTIFY_SOURCE=${abis[0]}"
-		    fi
+		    verbose "$file: -D_FORTIFY_SOURCE=${abis[0]}"
 		fi
 	    fi
 	fi
@@ -484,7 +489,9 @@ scan_file ()
 	# into:
 	#   abis[n]=<type>
 
-	eval 'abis=($(grep -e "stack prot" $tmpfile | cut -f 4 -d " " | cut -b 6-))'
+	eval 'abis=($(grep -e "stack prot" $tmpfile | cut -f 4 -d " " | cut -b 6- | sort -u))'
+
+	verbose "Stack Protection Info: ${abis[*]}"
 
 	if [ ${#abis[*]} -lt 1 ];
 	then
@@ -495,10 +502,7 @@ scan_file ()
 	else
 	    if [ ${#abis[*]} -eq 1 ];
 	    then
-		if [ $verbose -eq 1 ];
-		then
-		    report "$file: -fstack-protect=${abis[0]}"
-		fi
+		verbose "$file: -fstack-protect=${abis[0]}"
 	    else
 		local i mismatch=0
 
@@ -520,10 +524,7 @@ scan_file ()
 
 		if [ $mismatch -eq 0 ];
 		then
-		    if [ $verbose -eq 1 ];
-		    then
-			report "$file: -fstack-protect=${abis[0]}"
-		    fi
+		    verbose "$file: -fstack-protect=${abis[0]}"
 		fi
 	    fi
 	fi

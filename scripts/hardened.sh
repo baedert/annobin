@@ -3,7 +3,7 @@
 # Script to check for hardening options in annotated binaries
 #
 # Created by Nick Clifton.
-# Copyright (c) 2017 Red Hat.
+# Copyright (c) 2017-2018 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -29,7 +29,7 @@
 #    * Allow arguments to command line options to be separated from the
 #      the option name by a space.  Eg: --readelf foobar
 
-version=2.0
+version=3.0
 
 help ()
 {
@@ -64,6 +64,7 @@ Usage: $prog {files|options}
   -v        --version          Report the version number of this script and exit.
 
   -s        --silent           Produce no output, just an exit status.
+  -V        --verbose          Report on progress.
   -u        --vulnerable       Only report files known to be vulnerable. [default]
   -n        --not-hardened     Report any file that is not proven to be hardened.
   -a        --all              Report the hardening status of all files.
@@ -103,7 +104,8 @@ main ()
 
     scan_files
 
-    if [ $failed -ne 0 ] ; then
+    if [ $failed -ne 0 ];
+    then
 	exit 1
     else
 	exit 0
@@ -112,17 +114,52 @@ main ()
 
 report ()
 {
-    if [ $report -eq 0 ]
+    if [ $report -ne 0 ]
     then
-	return
+	echo $prog":" ${1+"$@"}
     fi
-    echo $prog":" ${1+"$@"}
+}
+
+ICE ()
+{
+    report "Internal error: " ${1+"$@"}
+    exit 1
+}
+
+verbose ()
+{
+    if [ $verb -ne 0 ]
+    then
+	echo $prog":" ${1+"$@"}
+    fi
+}
+
+maybe ()
+{
+    if [ $report -gt 1 ]
+    then
+	echo $prog": $file: MAYBE:" ${1+"$@"}
+    fi
+
+    vulnerable=1
 }
 
 fail ()
 {
-    report "Internal error: " ${1+"$@"}
-    exit 1
+    if [ $report -gt 0 ]
+    then
+	echo $prog": $file: FAIL:" ${1+"$@"}
+    fi
+
+    vulnerable=1
+}
+
+pass ()
+{
+    if [ $report -gt 2 ]
+    then
+	echo $prog": $file: PASS:" ${1+"$@"}
+    fi
 }
 
 # Initialise global variables.
@@ -135,6 +172,7 @@ init ()
 
     failed=0
     report=1 # Quad-state, 0=> report nothing, 1=> report known vulnerable, 2=> report not proven hardened, 3=> report all
+    verb=0
     filetype=auto
     skip_opt=0
     skip_stack=0
@@ -167,9 +205,12 @@ parse_args ()
 		help 
 		exit 0
 		;;
-
 	    -s | --silent)
 		report=0;
+		verb=0;
+		;;
+	    -V | --verbose)
+		verb=1;
 		;;
 	    -u | --vulnerable)
 		report=1;
@@ -262,7 +303,7 @@ parse_args ()
 	shift
     done
 
-    if [ $num_files -gt 0 ] ;
+    if [ $num_files -gt 0 ];
     then
 	# Remember that we are counting from zero not one.
 	let "num_files--"
@@ -291,11 +332,11 @@ scan_file ()
     # Paranoia checks - the user should never encounter these.
     if test "x$1" = "x" ;
     then
-	fail "scan_file called without an argument"
+	ICE "scan_file called without an argument"
     fi
     if test "x$2" != "x" ;
     then
-	fail "scan_file called with too many arguments"
+	ICE "scan_file called with too many arguments"
     fi
 
     # Use quotes when accessing files in order to preserve
@@ -339,7 +380,7 @@ scan_file ()
     fi
 
     file $file | grep --silent -e ELF
-    if [ $? != 0 ] ;
+    if [ $? != 0 ];
     then
 	if [ $ignore_unknown -eq 0 ];
 	then
@@ -350,28 +391,43 @@ scan_file ()
     fi
 
     $scanner --wide --notes --debug-dump=info --dynamic --segments $file > $tmpfile 2>&1
-    if [ $? != 0 ] ;
+    if [ $? != 0 ];
     then
-	report "$file: scanner '$scanner' failed - see $tmpfile"
+	report "scanner '$scanner' failed - see $tmpfile"
 	failed=1
 	# Leave the tmpfile intact so that it can be examined by the user.
 	return
     fi
 
+    grep -q -e "Unknown note" $tmpfile
+    if [ $? == 0 ];
+    then
+	report "scanner '$scanner' did not recognise the build attribute notes - see $tmpfile"
+	failed=1
+	# Leave the tmpfile intact so that it can be examined by the user.
+	return
+    fi       
+
+    grep -q -e "Gap in build notes" $tmpfile
+    if [ $? == 0 ];
+    then
+	maybe "there are gaps in the build notes"
+    fi       
+
     local -a hard
     local vulnerable=0
 
-    if [ $skip_opt -eq 0 ] ;
+    if [ $skip_opt -eq 0 ];
     then
 	check_optimization_level
     fi
 
-    if [ $skip_stack -eq 0 ] ;
+    if [ $skip_stack -eq 0 ];
     then
 	check_for_stack_protector
     fi
 
-    if [ $skip_fortify -eq 0 ] ;
+    if [ $skip_fortify -eq 0 ];
     then
 	check_for_fortify
     fi
@@ -379,18 +435,18 @@ scan_file ()
     # Do not check the bind_now or relro status of unlinked files.
     if [[ $filetype == exec || $filetype == lib	|| ( $filetype == auto && $file != *.o && $file != x*.a ) ]] ;
     then
-	if [ $skip_bind_now -eq 0 ] ;
+	if [ $skip_bind_now -eq 0 ];
 	then
 	    check_for_bind_now
 	fi
 	
-	if [ $skip_relro -eq 0 ] ;
+	if [ $skip_relro -eq 0 ];
 	then
 	    check_for_relro
 	fi
     fi
 
-    if [ $skip_pic -eq 0 ] ;
+    if [ $skip_pic -eq 0 ];
     then
 	check_for_pie_or_pic
     fi
@@ -413,46 +469,34 @@ check_for_fortify ()
     # into:
     #   2
     
-    eval 'hard=($(grep -e FORTIFY $tmpfile | grep NT_GNU_BUILD_ATTRIBUTE_OPEN | cut -f 2 -d ":" | cut -b 3-5 | sed -e "s/ff/-1/" | sort | uniq))'
+    eval 'hard=($(grep -e FORTIFY $tmpfile | grep OPEN | cut -f 2 -d ":" | cut -b 3-5 | sed -e "s/ff/-1/" | sort -u))'
 
+    verbose "FORTIFY Info: ${hard[*]}"
+    
     if [ ${#hard[*]} -lt 1 ];
     then
-	if [ $report -gt 1 ];
-	then
-	    # Or an old version of readelf is being used which does not recognise the fortify note...
-	    report "$file: MAYBE: does not record _FORTIFY_SOURCE level"
-	fi
-	vulnerable=1
+	# Or an old version of readelf is being used which does not recognise the fortify note...
+	maybe "does not record _FORTIFY_SOURCE level"
     else
-	if [ ${#hard[*]} -gt 1 ];
-	then
-	    # FIXME: Check for multiple values above 1 ?
-	    if [ $report -gt 1 ];
+	# Check the value(s) to make sure that they are all >= 2.
+	local i
+
+	i=0;
+	while [ $i -lt ${#hard[*]} ]
+	do
+	    if [ ${hard[i]} -lt 0 ];
 	    then
-		report "$file: MAYBE: multiple values for _FORTIFY_SOURCE level recorded"
-	    fi
-	    vulnerable=1
-	else
-	    if [ ${hard[0]} -lt 0 ];
-	    then
-		if [ $report -gt 1 ];
-		then
-		    report "$file: MAYBE: sources compiled with --save-temps do not record _FORTIFY_SOURCE level"
-		fi
-		vulnerable=1
+		maybe "sources compiled with --save-temps do not record _FORTIFY_SOURCE level"
 	    else
-		if [[ ${hard[0]} -lt 2 ]];
+		if [[ ${hard[i]} -lt 2 ]];
 		then
-		    report "$file: FAIL: insufficient value for -D_FORTIFY_SOURCE=${hard[0]}"
-		    vulnerable=1
+		    fail "insufficient value for -D_FORTIFY_SOURCE=${hard[i]}"
 		else
-		    if [ $report -gt 2 ];
-		    then
-			report "$file: PASS: -D_FORTIFY_SOURCE=${hard[0]}"
-		    fi
+		    pass "-D_FORTIFY_SOURCE=${hard[i]}"
 		fi
 	    fi
-	fi
+	    let "i++"
+	done
     fi
 }
 
@@ -464,8 +508,10 @@ check_for_stack_protector ()
     #   GA*<stack prot>strong 0x00000000 NT_GNU_BUILD_ATTRIBUTE_OPEN
     # into:
     #   strong
-    eval 'hard=($(grep -e "stack prot" $tmpfile | grep NT_GNU_BUILD_ATTRIBUTE_OPEN | cut -f 2 -d ">" | cut -f 1 -d " " | sort | uniq))'
+    eval 'hard=($(grep -e "stack prot" $tmpfile | grep OPEN | cut -f 2 -d ">" | cut -f 1 -d " " | sort -u))'
 
+    verbose "Stack Protection Info: ${hard[*]}"
+    
     if [ ${#hard[*]} -lt 1 ];
     then
 	# Stack protector note not recorded.  Try examining the debug
@@ -475,30 +521,23 @@ check_for_stack_protector ()
 	# into:
 	#   strong
 	eval hard=($(gawk -e 'BEGIN { FPAT = "-f[no-]*stack-protector[^ ]*" } /f/ { print substr ($1,19) ; }' $tmpfile | sort | uniq))
+
+	verbose "DW_AT_producer stack records: ${hard[*]}"
     fi
   
     if [ ${#hard[*]} -lt 1 ];
     then
-	if [ $report -gt 1 ];
-	then
-	    report "$file: MAYBE: does not record -fstack_protector setting"
-	fi
-	vulnerable=1
+	maybe "does not record -fstack_protector setting"
     else
 	if [ ${#hard[*]} -gt 1 ];
 	then
-	    report "$file: FAIL: multiple, different, settings of -fstack-protector used"
-	    vulnerable=1
+	    fail "multiple, different, settings of -fstack-protector used"
 	else
 	    if test "x${hard[0]}" = "xstrong" ;
 	    then
-		if [ $report -gt 2 ];
-		then
-		    report "$file: PASS: compiled with -fstack-protector-strong"
-		fi
+		pass "compiled with -fstack-protector-strong"
 	    else
-		vulnerable=1
-		report "$file: FAIL: compiled with -fstack-protector-${hard[0]}"
+		fail "compiled with -fstack-protector-${hard[0]}"
 	    fi
 	fi
     fi
@@ -509,19 +548,19 @@ check_for_stack_protector ()
     #   GA*<stack prot>strong  0x00000000 NT_GNU_BUILD_ATTRIBUTE_FUNC
     # into:
     #   strong
-    eval 'hard=($(grep -e "stack prot" $tmpfile | grep NT_GNU_BUILD_ATTRIBUTE_FUNC | cut -f 2 -d ">" | cut -f 1 -d " " | sort | uniq))'
+    eval 'hard=($(grep -e "stack prot" $tmpfile | grep -e NT_GNU_BUILD_ATTRIBUTE_FUNC -e func | cut -f 2 -d ">" | cut -f 1 -d " " | sort -u))'
+
+    verbose "Stack Prot Info: ${hard[*]}"
 
     if [ ${#hard[*]} -gt 0 ];
     then
 	if [ ${#hard[*]} -gt 1 ];
 	then
-	    report "$file: FAIL: contains functions compiled without -fstack-protector=strong"
-	    vulnerable=1
+	    fail "contains functions compiled without -fstack-protector=strong"
 	else
 	    if test "x${hard[0]}" != "xstrong" ;
 	    then
-		report "$file: FAIL: contains functions compiled with -fstack-protector-${hard[0]}"
-		vulnerable=1
+		fail "contains functions compiled with -fstack-protector-${hard[0]}"
 	    fi
 	fi
     fi
@@ -534,7 +573,9 @@ check_for_pie_or_pic ()
     #   GA*<PIC>PIE          0x00000000	NT_GNU_BUILD_ATTRIBUTE_OPEN
     # into:
     #   PIE
-    eval 'hard=($(grep -e "<PIC>" $tmpfile | grep NT_GNU_BUILD_ATTRIBUTE_OPEN | cut -f 2 -d ">" | cut -f 1 -d " " | sort | uniq))'
+    eval 'hard=($(grep -e "<PIC>" $tmpfile | grep OPEN | cut -f 2 -d ">" | cut -f 1 -d " " | sort -u))'
+
+    verbose "PIC Info: ${hard[*]}"
 
     if [ ${#hard[*]} -lt 1 ];
     then
@@ -544,44 +585,33 @@ check_for_pie_or_pic ()
 	#   <c> DW_AT_producer : (indirect string, offset: 0x0): GNU C11 6.3.1 20161221 (Red Hat 6.3.1-1) -g -O2 -fPIC
 	# into:
 	#   PIC
-	eval hard=($(gawk -e 'BEGIN { FPAT = "-f[pP][iI][cCeE]" } /f/ { print substr ($1,3) ; }' $tmpfile | sort | uniq))
+	eval hard=($(gawk -e 'BEGIN { FPAT = "-f[pP][iI][cCeE]" } /f/ { print substr ($1,3) ; }' $tmpfile | sort -u))
+
+	verbose "DW_AT_producer records: ${hard[*]}"
     fi
   
     if [ ${#hard[*]} -lt 1 ];
     then
-	if [ $report -gt 1 ];
-	then
-	    report "$file: MAYBE: does not record -fpic/-fpie setting"
-	fi
-	vulnerable=1
+	maybe "does not record -fpic/-fpie setting"
     else
 	if [ ${#hard[*]} -gt 1 ];
 	then
-	    report "$file: FAIL: multiple, different, settings of -fpic/-fpie used"
-	    vulnerable=1
+	    fail "multiple, different, settings of -fpic/-fpie used"
 	else
 	    if [[ $filetype = lib || ( $filetype = auto && $file == *.so ) ]] ;
 	    then
 		if [[ "x${hard[0]}" -eq "xPIC" || "x${hard[0]}" -eq "xpic" ]] ;
 		then
-		    if [ $report -gt 2 ];
-		    then
-			report "$file: PASS: compiled with -f${hard[0]}"
-		    fi
+		    pass "compiled with -f${hard[0]}"
 		else
-		    vulnerable=1
-		    report "$file: FAIL: compiled with -f${hard[0]}"
+		    fail "compiled with -f${hard[0]}"
 		fi
 	    else
 		if [[ "x${hard[0]}" -eq "xPIE" || "x${hard[0]}" -eq "xpie" ]] ;
 		then
-		    if [ $report -gt 2 ];
-		    then
-			report "$file: PASS: compiled with -f${hard[0]}"
-		    fi
+		    pass "compiled with -f${hard[0]}"
 		else
-		    vulnerable=1
-		    report "$file: FAIL: compiled with -f${hard[0]}"
+		    fail "compiled with -f${hard[0]}"
 		fi
 	    fi
 	fi
@@ -610,7 +640,9 @@ check_optimization_level ()
     #   GA*GOW:0x052b        0x00000000	NT_GNU_BUILD_ATTRIBUTE_OPEN
     # into:
     #   0x052b
-    eval 'hard=($(grep -e "GOW:" $tmpfile | grep NT_GNU_BUILD_ATTRIBUTE_OPEN | cut -f 2 -d ":" | cut -f 1 -d " " | sort | uniq))'
+    eval 'hard=($(grep -e "GOW:" $tmpfile | grep OPEN | cut -f 2 -d ":" | cut -f 1 -d " " | sort -u))'
+
+    verbose "Optimization Info: ${hard[*]}"
 
     if [ ${#hard[*]} -lt 1 ];
     then
@@ -620,16 +652,13 @@ check_optimization_level ()
 	#   <c> DW_AT_producer : (indirect string, offset: 0x0): GNU C11 6.3.1 20161221 (Red Hat 6.3.1-1) -g -O2 -fPIC
 	# into:
 	#   2
-	eval hard=($(gawk -e 'BEGIN { FPAT = "-O[0123]" } /O[0123]/ { print substr ($1,3,1) ; }' $tmpfile | sort | uniq))
+	eval hard=($(gawk -e 'BEGIN { FPAT = "-O[0123]" } /O[0123]/ { print substr ($1,3,1) ; }' $tmpfile | sort -u))
+
+	verbose "DW_AT_producer records: ${hard[*]}"
 
 	if [ ${#hard[*]} -lt 1 ];
 	then
-	    if [ $report -gt 1 ];
-	    then
-		report "$file: MAYBE: does not record -O setting"
-	    fi
-
-	    vulnerable=1
+	    maybe "does not record -O setting"
 	else
 	    local i
 
@@ -638,14 +667,10 @@ check_optimization_level ()
 	    do
 		if [ ${hard[i]} -lt 2 ];
 		then
-		    report "$file: FAIL: optimization level of -O${hard[i]} used"
-		    vulnerable=1
+		    fail "optimization level of -O${hard[i]} used"
 		    break
 		else
-		    if [ $report -gt 2 ];
-		    then
-			report "$file: PASS: optimization level of -O${hard[i]} used"
-		    fi
+		    pass "optimization level of -O${hard[i]} used"
 		fi
 		let "i++"
 	    done
@@ -659,14 +684,10 @@ check_optimization_level ()
 	    declare -i opt=$(((${hard[i]} & 0x600) >> 9))
 	    if [ $opt -lt 2 ];
 	    then
-		report "$file: FAIL: optimization level of -O$opt used"
-		vulnerable=1
+		fail "optimization level of -O$opt used"
 		break
 	    else
-		if [ $report -gt 2 ];
-		then
-		    report "$file: PASS: optimization level of -O$opt used"
-		fi
+		pass "optimization level of -O$opt used"
 	    fi
 	    let "i++"
 	done
@@ -677,15 +698,14 @@ check_for_bind_now ()
 {
     # Look for the DT_BIND_NOW dynamic tag
     eval hard='($(grep -e BIND_NOW $tmpfile))'
+
+    verbose "BIND_NOW tags: ${hard[*]}"
+
     if [ ${#hard[*]} -lt 1 ];
     then
-	report "$file: FAIL: -Wl,-z,now not used"
-	vulnerable=1
+	fail "-Wl,-z,now not used"
     else
-	if [ $report -gt 2 ];
-	then
-	    report "$file: PASS: -Wl,-z,now used"
-	fi
+	pass "-Wl,-z,now used"
     fi
 }
 
@@ -693,15 +713,14 @@ check_for_relro ()
 {
     # Look for the DT_BIND_NOW dynamic tag
     eval hard='($(grep -e GNU_RELRO $tmpfile))'
+
+    verbose "GNU_RELRO tags: ${hard[*]}"
+
     if [ ${#hard[*]} -lt 1 ];
     then
-	report "$file: FAIL: -Wl,-z,relro not used"
-	vulnerable=1
+	fail "-Wl,-z,relro not used"
     else
-	if [ $report -gt 2 ];
-	then
-	    report "$file: PASS: -Wl,-z,relro used"
-	fi
+	pass "-Wl,-z,relro used"
     fi
 }
 

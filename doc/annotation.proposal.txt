@@ -42,7 +42,7 @@ ChangeLog:
     section using this proposal.
 
 
-* The information is stored in a new section called .gnu.static.attributes.
+* The information is stored in a new section called .gnu.build.attributes.
   (The name can be changed - it is basically irrelevant anyway, it is
   the new section flag (defined below) that matters). 
 
@@ -57,7 +57,7 @@ ChangeLog:
 * The type field of a note is used to distinguish the range of memory
   over which an attribute applies.  The name field identifies the
   attribute and gives it a value.  The description field specifies the
-  starting address for where the attribute is applied.
+  starting and ending addresses for where the attribute is applied.
 
   Two new note types are defined:  NT_GNU_BUILD_ATTRIBUTE_OPEN (0x100)
   and NT_GNU_BUILD_ATTRIBUTE_FUNC (0x101).  These are used by the
@@ -101,7 +101,7 @@ ChangeLog:
 
      Character      Allowed    Meaning
     --------------- Types      -------
-    -              <none>      Reserved for future use.
+    0              <none>      Reserved for future use.
     1               $          Version of the specification supported and producer(s) of the notes (see below).
     2               *          Stack protector
     3               !+         Relro
@@ -110,8 +110,8 @@ ChangeLog:
     6               $*         ABI
     7               *          Position Independence Status: 0 => static, 1 => pic, 2 => PIC, 3 => pie
     8               !+         Short enums
-    9..30          <none>      Reserved for future use.
-    31..126         $*         An annotation type not explicitly defined by this specification.
+    9..31          <none>      Reserved for future use.
+    32..126         $*         An annotation type not explicitly defined by this specification.
     127+           <none>      Reserved for future use.
 
   For * and $ type attributes the value is then appended.
@@ -149,15 +149,6 @@ Some examples:
   The description field for the version note should not be empty.
   This note serves as the base address for other open notes that
   follow, allowing them to use an empty description field.
-
-  The last note should be an end-note (ascii value 0) which specifies
-  the end address of the range covered by the previous open notes.  If
-  no end note is present then the address range is presumed to be open
-  at the higher end.
-
-  End-notes can also be used to indicate the end of a function
-  specific note's address range.  These notes must have the
-  NT_GNU_BUILD_ATTRIBUTE_FUNC type.
 
 * When the linker merges two or more files containing these notes it
   should ensure that the above rules are maintained.  Simply
