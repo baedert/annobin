@@ -62,7 +62,9 @@ static bool           annobin_enable_static_notes = true;
 static unsigned int   annobin_note_count = 0;
 static unsigned int   global_GOWall_options = 0;
 static int            global_stack_prot_option = -1;
+#ifdef flag_stack_clash_protection
 static int            global_stack_clash_option = -1;
+#endif
 static int            global_pic_option = -1;
 static int            global_short_enums = -1;
 static char *         compiler_version = NULL;
