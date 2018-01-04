@@ -76,12 +76,14 @@ Usage: $prog {files|options}
   -f=obj    --filetype=obj     Assume all files are object files/archives.
  [The last one of these on the command line is used]. 
 
-  -k=opt    --skip=opt	       Skip check of optimization level
-  -k=stack  --skip=stack       Skip check of stack-protector status
-  -k=fort   --skip=fort        Skip check of fortify source status
-  -k=now    --skip=now         Skip check of BIND_NOW status
-  -k=relro  --skip=relro       Skip check of RELRO status
-  -k=pic    --skip=pic         Skip check for PIC/PIE compilation.  (Good for RHEL-6 binaries)
+  -k=opt      --skip=opt       Skip check of optimization level
+  -k=stack    --skip=stack     Skip check of stack-protector status
+  -k=fort     --skip=fort      Skip check of fortify source status
+  -k=now      --skip=now       Skip check of BIND_NOW status
+  -k=relro    --skip=relro     Skip check of RELRO status
+  -k=pic      --skip=pic       Skip check for PIC/PIE compilation.  (Good for RHEL-6 binaries)
+  -k=operator --skip=operator  Skip check for operator[] range testing.
+  -k=clash    --skip=clash     Skip check for stack clash protection.
  [These options stack]
   
   -i        --ignore-unknown   Silently skip any file that is not an ELF binary.
@@ -180,6 +182,8 @@ init ()
     skip_bind_now=0
     skip_relro=0
     skip_pic=0
+    skip_operator=0
+    skip_clash=0
     ignore_unknown=0
     scanner=readelf
     tmpfile=/dev/shm/hardened.delme
@@ -261,6 +265,12 @@ parse_args ()
 			;;
 		    pic)
 			skip_pic=1;
+			;;
+		    operator)
+			skip_operator=1;
+			;;
+		    clash)
+			skip_clash=1;
 			;;
 		    *)
 			report "unknown option skip: $optarg"
@@ -454,6 +464,16 @@ scan_file ()
     if [ $skip_pic -eq 0 ];
     then
 	check_for_pie_or_pic
+    fi
+
+    if [ $skip_operator -eq 0 ];
+    then
+	check_operator_range
+    fi
+
+    if [ $skip_clash -eq 0 ];
+    then
+	check_stack_clash
     fi
 
     # If we found a vulnerable file then consider the check to have failed.
@@ -728,6 +748,67 @@ check_for_relro ()
 	pass "-Wl,-z,relro used"
     fi
 }
+
+check_operator_range ()
+{
+    # Turn:
+    #   GA!GLIBCXX_ASSERTIONS:false  0x00000000	OPEN	    Applies to region from 0 to 0x3a
+    # into:
+    #   false
+    eval 'hard=($(grep -e "ASSERTIONS" $tmpfile | cut -f 2 -d ":" | cut -f 1 -d " " | sort -u))'
+
+    verbose "Operator Range Info: ${hard[*]}"
+
+    if [ ${#hard[*]} -lt 1 ];
+    then
+	maybe "does not record operator range test setting"
+    else
+	if [ ${#hard[*]} -gt 1 ];
+	then
+	    fail "some parts built without operator range checking"
+	else
+	    if [ "x${hard[0]}" == "xtrue" ];
+	    then
+		pass "compiled with operator range checking enabled"
+	    else
+		fail "compiled with operator range checking disabled"
+	    fi
+	fi
+    fi
+
+    # FIXME: Do we need to check for individual functions compiled without range checking ?
+}
+
+check_stack_clash ()
+{
+    # Turn:
+    #   GA+stack_clash:true          0x00000000	OPEN	    Applies to region from 0 to 0x3a
+    # into:
+    #   true
+    eval 'hard=($(grep -e "stack_clash" $tmpfile | cut -f 2 -d ":" | cut -f 1 -d " " | sort -u))'
+
+    verbose "Stack Clash Info: ${hard[*]}"
+
+    if [ ${#hard[*]} -lt 1 ];
+    then
+	maybe "does not record stack clash protection setting"
+    else
+	if [ ${#hard[*]} -gt 1 ];
+	then
+	    fail "some parts built without stack clash protection enabled"
+	else
+	    if [ "x${hard[0]}" == "xtrue" ];
+	    then
+		pass "compiled with stack clash protection enabled"
+	    else
+		fail "compiled with stack clash protection disabled"
+	    fi
+	fi
+    fi
+
+    # FIXME: Do we need to check for individual functions compiled without protection ?
+}
+
 
 # Invoke main
 main ${1+"$@"}

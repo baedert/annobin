@@ -37,10 +37,10 @@ $GCC -fplugin=$PLUGIN \
 
 # $OBJCOPY --merge-notes hardening-test.exe hardening-test-merged.exe
 
-# The --skip=fort option is here to skip the check of _FORTIFY_SOURCE as this
-# requires a version of readelf that knows how to fully parse the annobin notes
-# and such a version is not in common release (yet).  The other hardening
+# The --skip={fort|clash|operator} options are here to skip the checks that
+# requires a version of readelf that knows how to fully parse v3 annobin notes.
+# Such a version is not in common release (yet).  The other hardening
 # properties can be deduced by the hardened.sh script without needing the notes
 # so that is why the test is allowed to proceed.
-# FIXME: Remove --skip=fort once readelf has been updated.
-$srcdir/../scripts/hardened.sh  --readelf=$READELF --all --skip=fort hardening-test.exe
+# FIXME: Remove the --skip= options once readelf has been updated.
+$srcdir/../scripts/hardened.sh  --readelf=$READELF --all --skip=fort -k=operator --skip=clash hardening-test.exe

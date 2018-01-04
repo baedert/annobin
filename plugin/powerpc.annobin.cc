@@ -81,7 +81,7 @@ annobin_target_specific_loader_notes (void)
   memcpy (ptr, & note64, sizeof note64);
   ptr += sizeof (note64);
 
-  annobin_output_note ("GNU", 4, true, "Loader notes", buffer, ptr - buffer,
+  annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
 		       false, NT_GNU_PROPERTY_TYPE_0);
   fflush (asm_out_file);
 }
