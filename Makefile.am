@@ -1,4 +1,4 @@
-## Copyright (C) 2017 Free Software Foundation, Inc.
+## Copyright (C) 2017-2018 Red Hat.
 
 ## You should have received a copy of the GNU General Public License v3
 ## along with this program; see the file COPYING3.  If not see

@@ -1,5 +1,9 @@
+# file      : configure.ac
+# copyright : Copyright (c) 2017-2018 Red Hat
+# license   : GNU GPL v3; see accompanying LICENSE file.
+
 AC_PREREQ(2.64)
-AC_INIT([Binary Annotation plugin for gcc], 2.2,,[annobin-plugin])
+AC_INIT([Binary Annotation plugin for gcc], 3.1,,[annobin-plugin])
 AC_CANONICAL_SYSTEM
 AC_USE_SYSTEM_EXTENSIONS
 GCC_TOPLEV_SUBDIRS

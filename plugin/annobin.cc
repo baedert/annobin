@@ -1131,17 +1131,17 @@ plugin_init (struct plugin_name_args *   plugin_info,
 		     NULL,
 		     & annobin_info);
 
-  register_callback ("Generate global annotations",
+  register_callback ("annobin: Generate global annotations",
 		     PLUGIN_START_UNIT,
 		     annobin_create_global_notes,
 		     NULL);
 
-  register_callback ("Generate per-function annotations",
+  register_callback ("annobin: Generate per-function annotations",
 		     PLUGIN_ALL_PASSES_END,
 		     annobin_create_function_notes,
 		     NULL);
 
-  register_callback ("Generate final annotations",
+  register_callback ("annobin: Generate final annotations",
 		     PLUGIN_FINISH_UNIT,
 		     annobin_create_loader_notes,
 		     NULL);

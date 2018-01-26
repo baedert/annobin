@@ -1,4 +1,4 @@
-# copyright : Copyright (c) 2017 Red Hat
+# copyright : Copyright (c) 2017-2018 Red Hat
 # license   : GNU GPL v3; see accompanying LICENSE file
 
 plugindir = @plugindir@
