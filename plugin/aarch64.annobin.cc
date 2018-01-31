@@ -1,5 +1,5 @@
 /* aarch64.annobin - AArch64 specific parts of the annobin plugin.
-   Copyright (c) 2017 Red Hat.
+   Copyright (c) 2017 - 2018 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -32,7 +32,7 @@ annobin_record_global_target_notes (void)
   saved_tls_dialect = aarch64_tls_dialect;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
-			       "numeric: ABI: TLS dialect", NULL, NULL, NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			       "numeric: ABI: TLS dialect", NULL, NULL, OPEN);
   annobin_inform (1, "Recording global TLS dialect of %d", saved_tls_dialect);
 }
 
@@ -47,7 +47,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
 			       "numeric: ABI: TLS dialect", aname, aname_end,
-			       NT_GNU_BUILD_ATTRIBUTE_FUNC);
+			       FUNC);
 }
 
 typedef struct

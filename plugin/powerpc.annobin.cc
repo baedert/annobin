@@ -1,5 +1,5 @@
 /* powerpc64le.annobin - PowerPC64 specific parts of the annobin plugin.
-   Copyright (c) 2017 Red Hat.
+   Copyright (c) 2017 - 2018 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -31,8 +31,7 @@ annobin_record_global_target_notes (void)
   saved_tls_size = rs6000_tls_size;
   
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
-			       "numeric: ABI: TLS size", NULL, NULL,
-			       NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			       "numeric: ABI: TLS size", NULL, NULL, OPEN);
   annobin_inform (1, "Recording global TLS size of %d", saved_tls_size);
 }
 
@@ -46,8 +45,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 		  saved_tls_size, rs6000_tls_size, aname);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, rs6000_tls_size,
-			       "numeric: ABI: TLS size", aname, aname_end,
-			       NT_GNU_BUILD_ATTRIBUTE_FUNC);
+			       "numeric: ABI: TLS size", aname, aname_end, FUNC);
 }
 
 typedef struct

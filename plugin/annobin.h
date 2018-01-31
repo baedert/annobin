@@ -1,5 +1,5 @@
 /* annobin - Header file for the gcc plugin for annotating binary files.
-   Copyright (c) 2017 Red Hat.
+   Copyright (c) 2017 - 2018 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -53,6 +53,15 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 #define GNU_BUILD_ATTRIBUTE_TYPE_BOOL_TRUE	'+'
 #define GNU_BUILD_ATTRIBUTE_TYPE_BOOL_FALSE	'!'
 
+/* Short-hand versions of the above defines.  */
+#define OPEN NT_GNU_BUILD_ATTRIBUTE_OPEN
+#define FUNC NT_GNU_BUILD_ATTRIBUTE_FUNC
+
+#define NUMERIC GNU_BUILD_ATTRIBUTE_TYPE_NUMERIC
+#define STRING  GNU_BUILD_ATTRIBUTE_TYPE_STRING
+#define BOOL_T  GNU_BUILD_ATTRIBUTE_TYPE_BOOL_TRUE
+#define BOOL_F  GNU_BUILD_ATTRIBUTE_TYPE_BOOL_FALSE
+
 #define GNU_BUILD_ATTRIBUTE_VERSION	1
 #define GNU_BUILD_ATTRIBUTE_STACK_PROT	2
 #define GNU_BUILD_ATTRIBUTE_RELRO	3
@@ -92,6 +101,7 @@ extern void annobin_target_specific_loader_notes (void);
 
 extern void annobin_inform (unsigned, const char *, ...);
 extern void annobin_output_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned, bool, unsigned);
+extern void annobin_output_static_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned);
 extern void annobin_output_bool_note (const char, const bool, const char *, const char *, const char *, unsigned);
 extern void annobin_output_string_note (const char, const char *, const char *, const char *, const char *, unsigned);
 extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, const char *, unsigned);

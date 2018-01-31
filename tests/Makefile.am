@@ -9,3 +9,5 @@
 TESTS=compile-test hardening-test hardening-fail-test abi-test missing-notes-test
 XFAIL_TESTS=hardening-fail-test
 
+# FIXME: Add a test for merging notes...
+

@@ -26,7 +26,7 @@ Annotating Binaries: How Was Your Program Built ?
 This manual describes the ANNOBIN plugin, and how you can use it to
 determine what security features were used when building your binary.
 
-   This manual is for 'annobin' (Annobin) version 3.1.
+   This manual is for 'annobin' (Annobin) version 3.2.
 
    This document is distributed under the terms of the GNU Free
 Documentation License version 1.3.  A copy of the license is included in
@@ -195,6 +195,8 @@ below.
 
 * The Version Encoding::  Encoding Versions
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
+* The CF Encoding::       Encoding Control Flow Protection
+* The CET Encoding::      Encoding Control Flow Enforcement Technology
 
    The 'annobin' package includes some example scripts that demonstrate
 how the binary information can be used.  The scripts are:
@@ -220,8 +222,10 @@ how the binary information can be used.  The scripts are:
      Reports on the hardening status of the specified file(s).  In
      particular it checks that the whole file was compiled with '-O2' or
      higher and the '-fstack-protector-strong', '-D_FORTIFY_SOURCE=2',
-     '-Wl,-z,now', '-Wl,-z,relro', '-fPIE', '-Wp,-D_GLIBCXX_ASSERTIONS'
-     and '-fstack-clash-protection' options.
+     '-Wl,-z,now', '-Wl,-z,relro', '-fPIE', '-Wp,-D_GLIBCXX_ASSERTIONS',
+     '-fstack-clash-protection' '-fcf-protection=full' and '-mcet'
+     options.  Tests of each of these options can be individually
+     toggled on and off using command line options to the script.
 
 
 File: annobin.info,  Node: The Version Encoding,  Next: The GOW Encoding,  Up: Checking
@@ -234,7 +238,7 @@ used and the version of the tool used to generate the notes.  Typically
 these will both be 3.
 
 
-File: annobin.info,  Node: The GOW Encoding,  Prev: The Version Encoding,  Up: Checking
+File: annobin.info,  Node: The GOW Encoding,  Next: The CF Encoding,  Prev: The Version Encoding,  Up: Checking
 
 3.2 Encoding Optimization and Debugging Levels
 ==============================================
@@ -277,6 +281,61 @@ stored as a bit field with the bits having the following meanings:
 
    The other bits are not currently used and should be set to zero so
 they can be used in future extensions to the specification.
+
+
+File: annobin.info,  Node: The CF Encoding,  Next: The CET Encoding,  Prev: The GOW Encoding,  Up: Checking
+
+3.3 Encoding Control Flow Protection
+====================================
+
+Records the setting of the '-cf-protection' option.  This is a bit mask
+using the following bits, based upon the definition of the 'enum
+cf_protection_level' from gcc's 'flag-types.h' header file:
+
+'bit 0'
+     Branches are protected.  (ie '-fcf-protection=branch').
+
+'bit 1'
+     Returns are protected.  (ie '-fcf-protection=return').
+
+'bit 2'
+     If set, this indicates that the other bits were explicitly set by
+     an option on the gcc command line.  Otherwise those bits were
+     implicitly set by either other options or the backend concerned.
+
+   If both bits 0 and 1 are set then this implies the
+'-fcf-protection=full' option, and if neither are set then this implies
+the '-fcf-protection=none' option.
+
+   Note - in order to avoid storing a value of 0 in the note (which can
+be confused with a NUL-byte to indicate the end of a string), the value
+stored is biased by 1.
+
+
+File: annobin.info,  Node: The CET Encoding,  Prev: The CF Encoding,  Up: Checking
+
+3.4 Encoding Control Flow Enforcement Technology
+================================================
+
+Records the setting of the Control Flow Enforcement Technology options.
+(These are specific to the x86_64 port of gcc).  The value is a sequence
+of bytes that indicate various different flags:
+
+'byte 0'
+     The setting of the '-mcet' option.  This is either 1 (not set) or 2
+     (set).
+
+'byte 1'
+     The setting of the '-mcet-switch' option.  This is either 1 (not
+     set) or 2 (set).
+
+'byte 2'
+     The setting of the '-mibt' option.  This is either 1 (not set) or 2
+     (set).
+
+'byte 3'
+     The setting of the '-mshstk' option.  This is either 1 (not set) or
+     2 (set).
 
 
 File: annobin.info,  Node: GNU Free Documentation License,  Prev: Checking,  Up: Top
@@ -767,8 +826,10 @@ Node: Top706
 Node: Introduction1543
 Node: Invocation3645
 Node: Checking6476
-Node: The Version Encoding9958
-Node: The GOW Encoding10303
-Node: GNU Free Documentation License11730
+Node: The Version Encoding10243
+Node: The GOW Encoding10588
+Node: The CF Encoding12039
+Node: The CET Encoding13109
+Node: GNU Free Documentation License13877
 
 End Tag Table

@@ -111,7 +111,7 @@ ChangeLog:
     7               *          Position Independence Status: 0 => static, 1 => pic, 2 => PIC, 3 => pie
     8               !+         Short enums
     9..31          <none>      Reserved for future use.
-    32..126         $*         An annotation type not explicitly defined by this specification.
+    32..126         $*!+       An annotation type not explicitly defined by this specification.
     127+           <none>      Reserved for future use.
 
   For * and $ type attributes the value is then appended.

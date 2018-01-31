@@ -1,5 +1,5 @@
 /* x86_64.annobin - x86_64 specific parts of the annobin plugin.
-   Copyright (c) 2017 Red Hat.
+   Copyright (c) 2017 - 2018 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -36,15 +36,45 @@
 #define GNU_PROPERTY_X86_ISA_1_AVX512DQ      (1U << 16)
 #define GNU_PROPERTY_X86_ISA_1_AVX512BW      (1U << 17)
 
-
 static unsigned long global_x86_isa = 0;
 static unsigned long min_x86_isa = 0;
 static unsigned long max_x86_isa = 0;
+
+#ifdef flag_cet
+static int                     global_cet = -1;
+static int                     global_set_switch = -1;
+static unsigned HOST_WIDE_INT  global_ibt = 0;
+static unsigned HOST_WIDE_INT  global_shstk = 0;
+#endif
 
 void
 annobin_save_target_specific_information (void)
 {
 }
+
+#ifdef flag_cet
+static void
+record_cet_note (const char * start, const char * end, int type)
+{
+  char buffer [128];
+  unsigned len = sprintf (buffer, "GA%ccet status", NUMERIC);
+
+  /* We bias the values by 1 so that we do not get confused by a zero value.  */
+  buffer[++len] = flag_cet + 1;
+  buffer[++len] = flag_cet_switch + 1;
+  buffer[++len] = (ix86_isa_flags2 & OPTION_MASK_ISA_IBT) ? 2 : 1;
+  buffer[++len] = (ix86_isa_flags & OPTION_MASK_ISA_SHSTK) ? 2 : 1;
+  buffer[++len] = 0;
+
+  annobin_inform (1, "Record CET values of %d:%d:%lx:%lx",
+		  flag_cet, flag_cet_switch,
+		  ix86_isa_flags2 & OPTION_MASK_ISA_IBT,
+		  ix86_isa_flags & OPTION_MASK_ISA_SHSTK);
+
+  annobin_output_static_note (buffer, len + 1, false, "numeric: -mcet status",
+			      start, end, type);
+}
+#endif
 
 void
 annobin_record_global_target_notes (void)
@@ -56,9 +86,17 @@ annobin_record_global_target_notes (void)
   min_x86_isa = max_x86_isa = global_x86_isa = ix86_isa_flags;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
-			       "numeric: ABI", NULL, NULL,
-			       NT_GNU_BUILD_ATTRIBUTE_OPEN);
+			       "numeric: ABI", NULL, NULL, OPEN);
   annobin_inform (1, "Record global isa of %lx", global_x86_isa);
+
+#ifdef flag_cet
+  global_cet = flag_cet;
+  global_set_switch = flag_cet_switch;
+  global_ibt = ix86_isa_flags2 & OPTION_MASK_ISA_IBT;
+  global_shstk = ix86_isa_flags & OPTION_MASK_ISA_SHSTK;
+
+  record_cet_note (NULL, NULL, OPEN);
+#endif
 }
 
 void
@@ -70,14 +108,38 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 		   global_x86_isa, ix86_isa_flags, aname);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, ix86_isa_flags,
-				   "numeric: ABI", aname, aname_end,
-				   NT_GNU_BUILD_ATTRIBUTE_FUNC);
+				   "numeric: ABI", aname, aname_end, FUNC);
 
       if ((unsigned long) ix86_isa_flags < min_x86_isa)
 	min_x86_isa = ix86_isa_flags;
       if ((unsigned long) ix86_isa_flags > max_x86_isa)
 	max_x86_isa = ix86_isa_flags;
     }
+  
+#ifdef flag_cet
+  if (global_cet != flag_cet)
+    fprintf (stderr, "1\n");
+  if (global_set_switch != flag_cet_switch)
+    fprintf (stderr, "2\n");
+  if (global_ibt != (ix86_isa_flags2 & OPTION_MASK_ISA_IBT))
+    fprintf (stderr, "3\n");
+  if (global_shstk != (ix86_isa_flags & OPTION_MASK_ISA_SHSTK))
+    fprintf (stderr, "4\n");
+      
+  if ((global_cet != flag_cet)
+      || (global_set_switch != flag_cet_switch)
+      || (global_ibt != (ix86_isa_flags2 & OPTION_MASK_ISA_IBT))
+      || (global_shstk != (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)))
+    {
+      annobin_inform (0, "CET values have changed from %d:%d:%lx:%lx to %d:%d:%lx:%lx",
+		      global_cet, global_set_switch, global_ibt, global_shstk,
+		      flag_cet, flag_cet_switch,
+		      (ix86_isa_flags2 & OPTION_MASK_ISA_IBT),
+		      (ix86_isa_flags & OPTION_MASK_ISA_SHSTK));
+	
+      record_cet_note (aname, aname_end, FUNC);
+    }
+#endif
 }
 
 static unsigned int

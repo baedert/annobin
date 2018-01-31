@@ -57,6 +57,13 @@ Plus for executables (although on RHEL6 these should be omitted due to a kernel 
    -fPIE
    -Wl,-pie
 
+Plus for RHEL-8:
+
+   -D_GLIBCXX_ASSERTIONS
+   -fstack-clash-protection
+   -fcf-protection=full
+   -mcet
+
 Usage: $prog {files|options}
 
  {options} are:
@@ -84,6 +91,8 @@ Usage: $prog {files|options}
   -k=pic      --skip=pic       Skip check for PIC/PIE compilation.  (Good for RHEL-6 binaries)
   -k=operator --skip=operator  Skip check for operator[] range testing.
   -k=clash    --skip=clash     Skip check for stack clash protection.
+  -k=cf       --skip=cf        Skip check for control flow protection.
+  -k=cet      --skip-cet       Skip check for control flow enforcement technology.
  [These options stack]
   
   -i        --ignore-unknown   Silently skip any file that is not an ELF binary.
@@ -176,6 +185,7 @@ init ()
     report=1 # Quad-state, 0=> report nothing, 1=> report known vulnerable, 2=> report not proven hardened, 3=> report all
     verb=0
     filetype=auto
+
     skip_opt=0
     skip_stack=0
     skip_fortify=0
@@ -184,6 +194,9 @@ init ()
     skip_pic=0
     skip_operator=0
     skip_clash=0
+    skip_cf=0
+    skip_cet=0
+    
     ignore_unknown=0
     scanner=readelf
     tmpfile=/dev/shm/hardened.delme
@@ -271,6 +284,12 @@ parse_args ()
 			;;
 		    clash)
 			skip_clash=1;
+			;;
+		    cf)
+			skip_cf=1;
+			;;
+		    cet)
+			skip_cet=1;
 			;;
 		    *)
 			report "unknown option skip: $optarg"
@@ -416,10 +435,7 @@ scan_file ()
 	# The other checks can use other sources of information.
 	if [ $skip_fortify -eq 0 ];
 	then
-	    report "scanner '$scanner' did not recognise the build attribute notes - see $tmpfile"
-	    failed=1
-	    # Leave the tmpfile intact so that it can be examined by the user.
-	    return
+	    maybe "scanner '$scanner' did not recognise the build attribute notes "
 	fi
     fi       
 
@@ -474,6 +490,17 @@ scan_file ()
     if [ $skip_clash -eq 0 ];
     then
 	check_stack_clash
+    fi
+
+    if [ $skip_cf -eq 0 ];
+    then
+	check_control_flow_protection
+    fi
+
+    # FIXME: This check should only be applied to x86_64 binaries...
+    if [ $skip_cet -eq 0 ];
+    then
+	check_control_flow_enforcement_technology
     fi
 
     # If we found a vulnerable file then consider the check to have failed.
@@ -775,8 +802,6 @@ check_operator_range ()
 	    fi
 	fi
     fi
-
-    # FIXME: Do we need to check for individual functions compiled without range checking ?
 }
 
 check_stack_clash ()
@@ -805,8 +830,78 @@ check_stack_clash ()
 	    fi
 	fi
     fi
+}
 
-    # FIXME: Do we need to check for individual functions compiled without protection ?
+check_control_flow_protection ()
+{
+    # Turn:
+    #   GA*cf_protection:0x8          0x00000000	OPEN	    Applies to region from 0 to 0x3a
+    # into:
+    #   0x8
+    eval 'hard=($(grep -e "cf_protection" $tmpfile | cut -f 2 -d ":" | cut -f 1 -d " " | sort -u))'
+
+    verbose "Control Flow Info: ${hard[*]}"
+
+    if [ ${#hard[*]} -lt 1 ];
+    then
+	maybe "does not record control flow protection setting"
+    else
+	if [ ${#hard[*]} -gt 1 ];
+	then
+	    fail "some parts built with different settings for -fcf-protection"
+	else
+	    if [ "x${hard[0]}" == "x0x8" ];
+	    then
+		pass "compiled with -fcf-protection=full"
+	    else
+		if [ "x${hard[0]}" == "x0x7" ];
+		then
+		    fail "compiled with -fcf-protection=return"
+		else
+		    if [ "x${hard[0]}" == "x0x5" ];
+		    then
+			fail "compiled with -fcf-protection=branch"
+		    else
+			fail "compiled with unknown setting for -fcf-protection"
+		    fi
+		fi
+	    fi
+	fi
+    fi
+}
+
+check_control_flow_enforcement_technology ()
+{
+    # Turn:
+    #   GA*cet status:0x2020102          0x00000000	OPEN	    Applies to region from 0 to 0x3a
+    # into:
+    #   0x2020102
+    eval 'hard=($(grep -e "cet status" $tmpfile | cut -f 2 -d ":" | cut -f 1 -d " " | sort -u))'
+
+    verbose "CET Info: ${hard[*]}"
+
+    if [ ${#hard[*]} -lt 1 ];
+    then
+	maybe "does not record control flow enforcement technology setting"
+    else
+	if [ ${#hard[*]} -gt 1 ];
+	then
+	    fail "some parts built different CET settings"
+	else
+	    if [ "x${hard[0]}" == "x0x2020102" ];
+	    then
+		pass "compiled with CET enabled"
+	    else
+		if [ "x${hard[0]}" == "x0x2020202" ];
+		then
+		    pass "compiled with CET enabled (and switch protection)"
+		else
+		    # FIXME: Tell the user exactly which bits were not enabled.
+		    fail "compiled with CET disabled"
+		fi
+	    fi
+	fi
+    fi
 }
 
 
