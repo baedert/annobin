@@ -2,7 +2,7 @@
 
 # Script to check for hardening options in annotated binaries
 #
-# Created by Nick Clifton.
+# Created by Nick Clifton.  <nickc@redhat.com>
 # Copyright (c) 2017-2018 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@
 #    * Allow arguments to command line options to be separated from the
 #      the option name by a space.  Eg: --readelf foobar
 
-version=3.0
+version=3.1
 
 help ()
 {
@@ -70,6 +70,7 @@ Usage: $prog {files|options}
   -h        --help             Display this information and exit.
   -v        --version          Report the version number of this script and exit.
 
+  -q        --quiet            Do not include the script name in the output.
   -s        --silent           Produce no output, just an exit status.
   -V        --verbose          Report on progress.
   -u        --vulnerable       Only report files known to be vulnerable. [default]
@@ -125,10 +126,17 @@ main ()
 
 report ()
 {
-    if [ $report -ne 0 ]
+    if [ $report -eq 0 ];
     then
-	echo $prog":" ${1+"$@"}
+	return
     fi
+
+    if [ $quiet -eq 0 ];
+    then
+	echo -n $prog": "
+    fi
+    
+    echo ${1+"$@"}
 }
 
 ICE ()
@@ -141,7 +149,7 @@ verbose ()
 {
     if [ $verb -ne 0 ]
     then
-	echo $prog":" ${1+"$@"}
+	report ${1+"$@"}
     fi
 }
 
@@ -149,7 +157,7 @@ maybe ()
 {
     if [ $report -gt 1 ]
     then
-	echo $prog": $file: MAYBE:" ${1+"$@"}
+	report "$file: MAYBE:" ${1+"$@"}
     fi
 
     vulnerable=1
@@ -159,7 +167,7 @@ fail ()
 {
     if [ $report -gt 0 ]
     then
-	echo $prog": $file: FAIL:" ${1+"$@"}
+	report "$file: FAIL:" ${1+"$@"}
     fi
 
     vulnerable=1
@@ -169,7 +177,7 @@ pass ()
 {
     if [ $report -gt 2 ]
     then
-	echo $prog": $file: PASS:" ${1+"$@"}
+	report "$file: PASS:" ${1+"$@"}
     fi
 }
 
@@ -184,6 +192,7 @@ init ()
     failed=0
     report=1 # Quad-state, 0=> report nothing, 1=> report known vulnerable, 2=> report not proven hardened, 3=> report all
     verb=0
+    quiet=0
     filetype=auto
 
     skip_opt=0
@@ -226,6 +235,9 @@ parse_args ()
 		report=0;
 		verb=0;
 		;;
+	    -q | --quiet)
+		quiet=1;
+		;;
 	    -V | --verbose)
 		verb=1;
 		;;
@@ -240,7 +252,19 @@ parse_args ()
 		;;
 
 	    -f | --file-type)
-		case "$optarg" in
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			ft=$1
+		    fi
+		else
+		    ft=$optarg
+		fi
+		case "$ft" in
 		    auto)
 			filetype=auto
 			;;
@@ -254,13 +278,25 @@ parse_args ()
 			filetype=object
 			;;
 		    *)
-			report "unknown file type: $optarg"
+			report "unknown argument to $optname: $ft"
 			;;
 		esac
 		;;
 
 	    -k | --skip)
-		case "$optarg" in
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			sk=$1
+		    fi
+		else
+		    sk=$optarg
+		fi
+		case "$sk" in
 		    opt)
 			skip_opt=1
 			;;
@@ -292,16 +328,39 @@ parse_args ()
 			skip_cet=1;
 			;;
 		    *)
-			report "unknown option skip: $optarg"
+			report "unknown argument to $optname: $sk"
 			;;
 		esac
 		;;
 		
 	    -r | --readelf)
-		scanner="$optarg"
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			scanner=$1
+		    fi
+		else
+		    scanner="$optarg"
+		fi
 		;;
+
 	    -t | --tmpfile)
-		tmpfile="$optarg"
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			tmpfile=$1
+		    fi
+		else
+		    tmpfile="$optarg"
+		fi
 		;;
 
 	    -i | --ignore-unknown)
@@ -309,6 +368,7 @@ parse_args ()
 		;;
 
 	    --)
+		shift
 		break;
 		;;
 	    --*)

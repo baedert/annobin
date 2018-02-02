@@ -2,7 +2,7 @@
 
 # Script to check which tools built the specified binaries.
 #
-# Created by Nick Clifton.
+# Created by Nick Clifton.  <nickc@redhat.com>
 # Copyright (c) 2016-2018 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
@@ -16,7 +16,7 @@
 # GNU General Public License for more details.
 #
 # Usage:
-#   built-by [switches] file(s)
+#   built-by [options] file(s)
 #
 # This script does not handle directories.  This is deliberate.
 # It is intended that if recursion is needed then it will be
@@ -24,12 +24,7 @@
 #
 #   find . -type f -exec built-by.sh {} \;
 
-# To Do:
-#
-#    * Allow arguments to command line options to be separated from the
-#      the option name by a space.  Eg: --before 20161212
-
-version=3.0
+version=3.1
 
 help ()
 {
@@ -50,6 +45,7 @@ Usage: $prog {files|options}
   -v        --version         Report the version number of this script.
   -V        --verbose         Report on progress.
   -s        --silent          Produce no output, just an exit status.
+  -q        --quiet           Do not include the script name in the output.
   -i        --ignore          Silently ignore files where the builder cannot be found.
   -r=<PATH> --readelf=<PATH>  Path to version of readelf to use to read notes.
   -t=<PATH> --tmpfile=<PATH>  Temporary file to use.
@@ -94,10 +90,17 @@ main ()
 
 report ()
 {
-    if [ $silent -eq 0 ]
+    if [ $silent -ne 0 ];
     then
-	echo $prog":" ${1+"$@"}
+	return
     fi
+
+    if [ $quiet -eq 0 ];
+    then
+	echo -n $prog": "
+    fi
+    
+    echo ${1+"$@"}
 }
 
 fail ()
@@ -110,7 +113,7 @@ verbose ()
 {
     if [ $verb -ne 0 ]
     then
-	echo $prog":" ${1+"$@"}
+	report ${1+"$@"}
     fi
 }
 
@@ -124,6 +127,7 @@ init ()
 
     failed=0
     silent=0
+    quiet=0
     verb=0
     ignore_unknown=0
     scanner=readelf
@@ -161,6 +165,9 @@ parse_args ()
 		silent=1;
 		verb=0;
 		;;
+	    -q | --quiet)
+		quiet=1;
+		;;
 	    -V | --verbose)
 		silent=0;
 		verb=1;
@@ -169,32 +176,121 @@ parse_args ()
 		ignore_unknown=1;
 		;;
 	    -r | --readelf)
-		scanner="$optarg"
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs a program name"
+		    else
+			scanner=$1
+		    fi
+		else
+		    scanner="$optarg"
+		fi
 		;;
 	    -t | --tmpfile)
-		tmpfile="$optarg"
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs a filename argument"
+		    else
+			tmpfile=$1
+		    fi
+		else
+		    tmpfile="$optarg"
+		fi
 		;;
 	    --tool)
 		nottool=""
-		tool=$optarg
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			tool=$1
+		    fi
+		else
+		    tool=$optarg
+		fi
 		;;
 	    --nottool)
 		tool=""
-		nottool=$optarg
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			nottool=$1
+		    fi
+		else
+		    nottool=$optarg
+		fi
 		;;
 	    --before)
-		before=$optarg
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			before=$1
+		    fi
+		else
+		    before=$optarg
+		fi
 		;;
 	    --after)
-		after=$optarg
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			after=$1
+		    fi
+		else
+		    after=$optarg
+		fi
 		;;
 	    --minver)
-		minver=$optarg
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			minver=$1
+		    fi
+		else
+		    minver=$optarg
+		fi
 		;;
 	    --maxver)
-		maxver=$optarg
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "$optname needs an argument"
+		    else
+			maxver=$1
+		    fi
+		else
+		    maxver=$optarg
+		fi
 		;;
 	    --)
+		shift
 		break;
 		;;
 	    --*)
@@ -356,6 +452,10 @@ scan_file ()
 	verbose "scan for build notes failed, trying debug information"
 
 	# Try examining the debug information in case -grecord-gcc-switches has been used.
+
+	# FIXME: If we have a new enough version of readelf we could add the
+	# --debug-dump=follow-links option to cope with separate debug info files..
+
 	$scanner --wide --debug-dump=info $file | grep -e DW_AT_producer > $tmpfile
 	eval 'builder=($(grep -e GNU $tmpfile))'
 
@@ -387,7 +487,8 @@ scan_file ()
 		if [ ${#builder[*]} -lt 5 ];
 		then
 		    if [ $ignore_unknown -eq 0 ]; then
-			report "$file: could not parse .comment section"
+			verbose "$file: could not parse .comment section"
+			report "$file: creator unknown"
 			failed=1
 		    fi
 		    tell=0

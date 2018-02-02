@@ -65,6 +65,7 @@ Copyright @copyright{} 2018 Red Hat
 @end titlepage
 @contents
 
+@c -----------------------------------------------------------------
 @ifnottex
 @node Top
 @top Annotating Binaries: How Was Your Program Built ?
@@ -86,10 +87,12 @@ in the section entitled ``GNU Free Documentation License''.
 * Introduction::        What is Binary Annotation ?
 * Invocation::          How to add Binary Annotations to your application.
 * Checking::            How to examine the information stored in the binary.
+* Using::               How to use the information stored in the binary.
 * GNU Free Documentation License::  GNU Free Documentation License
 @end menu
 @end ifnottex
 
+@c -----------------------------------------------------------------
 @node Introduction
 @chapter What is Binary Annotation ?
 
@@ -131,6 +134,7 @@ of an application, such as its conformation to the hardening
 requirements, or possible ABI violations.
 
 
+@c -----------------------------------------------------------------
 @node Invocation
 @chapter How to add Binary Annotations to your application.
 
@@ -202,9 +206,9 @@ recorded.  If not set, then @code{N} defaults to 1024.
 
 @end table
 
-
+@c -----------------------------------------------------------------
 @node Checking
-@chapter How to examine the Binary Annotations stored in an application.
+@chapter How to examine the information stored in the binary.
 
 The information is stored in the ELF Note format in a special section
 called @code{.gnu.build.attributes}.  The @code{readelf} program from
@@ -247,48 +251,14 @@ explained below.
 * The CET Encoding::      Encoding Control Flow Enforcement Technology
 @end menu
 
-The @command{annobin} package includes some example scripts that
-demonstrate how the binary information can be used.  The scripts are:
-
-@table @code
-@item built-by.sh
-Reports the name and version of the tool used to build the specified
-file(s).  This script also demonstrates how information can be
-extracted from other other locations in the file, not just the binary
-annotation notes.
-
-The script can also be used to filter files, only reporting those
-built by a specific tool, or a specific version of a tool, or even by
-a version of a tool that was built between a range of dates.
-
-@item check-abi.sh
-Reports any potential ABI conflicts in the files specified.  This
-includes the use of the @option{-fshort-enums} option, the
-@option{-fstack-protector} option and the @option{-D_FORTIFY_SOURCE}
-option.  All of these can affect passing data between functions and
-hence should be used uniformly throughout the binary.
-
-@item hardened.sh
-Reports on the hardening status of the specified file(s).  In
-particular it checks that the whole file was compiled with
-@option{-O2} or higher and the @option{-fstack-protector-strong},
-@option{-D_FORTIFY_SOURCE=2}, @option{-Wl,-z,now},
-@option{-Wl,-z,relro}, @option{-fPIE},
-@option{-Wp,-D_GLIBCXX_ASSERTIONS}, @option{-fstack-clash-protection}
-@option{-fcf-protection=full} and @option{-mcet}
-options.
-Tests of each of these options can be individually toggled on and off
-using command line options to the script.
-@end table
-
-
+@c -----------------------------------------------------------------
 @node The Version Encoding
 @section Encoding Protocol and Producer Versions
 The @code{version} note encodes the version of the Watermark
 specification used and the version of the tool used to generate the
 notes.  Typically these will both be 3.
 
-
+@c -----------------------------------------------------------------
 @node The GOW Encoding
 @section Encoding Optimization and Debugging Levels
 
@@ -337,7 +307,7 @@ enabled.
 The other bits are not currently used and should be set to zero so
 they can be used in future extensions to the specification.
 
-
+@c -----------------------------------------------------------------
 @node The CF Encoding
 @section Encoding Control Flow Protection
 Records the setting of the @option{-cf-protection} option.  This is a
@@ -366,7 +336,7 @@ Note - in order to avoid storing a value of 0 in the note (which can
 be confused with a NUL-byte to indicate the end of a string), the
 value stored is biased by 1.
 
-
+@c -----------------------------------------------------------------
 @node The CET Encoding
 @section Encoding Control Flow Enforcement Technology
 Records the setting of the Control Flow Enforcement Technology
@@ -391,7 +361,456 @@ The setting of the @option{-mshstk} option.  This is either 1 (not
 set) or 2 (set).
 @end table
 
+@c -----------------------------------------------------------------
+@node Using
+@chapter How to use the information stored in the binary.
 
+The @command{annobin} package includes some example scripts that
+demonstrate how the binary information can be used.  The scripts are:
+
+@menu
+* Who Built Me::       The built-by.sh script
+* ABI Checking::       The check-abi.sh script
+* Hardening Checks::   The hardened.sh script
+* Checking Archives::  The run-on-binaries-in.sh script
+@end menu
+
+@c -----------------------------------------------------------------
+@node Who Built Me
+@section The built-by.sh script
+
+@smallexample
+built-by.sh
+  [@option{--help}]
+  [@option{--version}]
+  [@option{--verbose}]
+  [@option{--quiet}]
+  [@option{--silent}]
+  [@option{--ignore}]
+  [@option{--readelf=}@file{path}]
+  [@option{--tmpdir=}@file{dir}]
+  [@option{--tool=}@var{name}]
+  [@option{--nottool=}@var{name}]
+  [@option{--before=}@var{date}]
+  [@option{--after=}@var{date}]
+  [@option{--minver=}@var{version}]
+  [@option{--maxver=}@var{version}]
+  [@option{--}]
+  @var{file}@dots{}
+@end smallexample
+
+The @file{built-by.sh} script reports the name and version of the tool
+used to build the specified file(s).  This script also demonstrates
+how information can be extracted from other other locations in the
+file, not just the binary annotation notes.
+
+The script can also be used to filter files, only reporting those
+built by a specific tool, or a specific version of a tool, or even by
+a version of a tool that was built between a range of dates.
+
+The options available are:
+
+@table @samp
+
+@item --help
+@itemx -h
+Displays the usage of the script and then exits.
+
+@item --version
+@itemx -v
+Displays the version of the script.
+
+@item --verbose
+@itemx -V
+Enables verbose mode, causing the script to detail each action it
+takes.
+
+@item --quiet
+@itemx -q
+Do not include the name of script in the out generated by the script.
+
+@item --silent
+@itemx -s
+Produce no output.  Just return an exit status.
+
+@item --ignore
+Do not report file types that do not contain any builder information.
+
+@item --tool=@var{name}
+Only report binaries built by @var{name}.  The @var{name} is only an
+ordinary string, not a regular expression.
+
+@item --nottool=@var{name}
+Skip any binary build by @var{name}.  The @var{name} is only an
+ordinary string, not a regular expression.
+
+@item --before=@var{date}
+Only report binaries built by a tool that was created before
+@var{date}.  @var{date} has the format @var{YYYYMMDD}.
+
+@item --after=@var{date}
+Only report binaries built by a tool that was created after
+@var{date}.  When combined with the @option{--before} option can be
+used to restrict output to files which were built by tools created in
+a specific date range.
+
+@item --minver=@var{version}
+Only report binaries built by a tool whose version is @var{version} or
+higher.  The @var{version} string should be in the form @var{V.V.V},
+for example @var{6.2.1}.
+
+@item --maxver=@var{version}
+Only report binaries built by a tool whoes version is @var{version} or
+lower.  Can be combined with the @option{--minver} option to restrict
+output to those binaries created by tools within a specific version
+range.
+
+@item --tmpdir=@file{dir}
+@itemx -t=@file{dir}
+Directory to use to store temporary files.
+
+@item --readelf=@file{path}
+@itemx -r=@file{path}
+Use the specified program to read the notes from the files.
+
+@item --
+Stop accumulating command line options.  This allows the script to be
+run on files whose names starts with a dash.
+
+@end table
+
+
+@c -----------------------------------------------------------------
+@node ABI Checking
+@section The check-abi.sh script
+
+@smallexample
+check-abi.sh
+  [@option{--help}]
+  [@option{--version}]
+  [@option{--verbose}]
+  [@option{--quiet}]
+  [@option{--silent}]
+  [@option{--inconsistencies}]
+  [@option{--ignore-unknown}]
+  [@option{--ignore-}@var{ABI|enum|FORTIFY|stack-prot}]
+  [@option{--readelf=}@file{path}]
+  [@option{--tmpdir=}@file{dir}]
+  [@option{--}]
+  @var{file}@dots{}
+@end smallexample
+
+The @file{check-abi.sh} script reports any potential ABI conflicts in
+the files specified.  This includes the use of the
+@option{-fshort-enums} option, the @option{-fstack-protector} option
+and the @option{-D_FORTIFY_SOURCE} option.  All of these can affect
+passing data between functions and hence should be used uniformly
+throughout the binary.
+
+The script accepts the following command line options:
+@table @env
+
+@item --help
+@itemx -h
+Displays the usage of the script and then exits.
+
+@item --version
+@itemx -v
+Displays the version of the script.
+
+@item --verbose
+@itemx -V
+Enables verbose mode, causing the script to detail each action it
+takes.
+
+@item --quiet
+@itemx -q
+Do not include the name of script in the out generated by the script.
+
+@item --silent
+@itemx -s
+Produce no output.  Just return an exit status.
+
+@item --inconsitencies
+@itemx -i
+Only report files with potential ABI problems.
+
+@item --ignore-unknown
+Do not report file types that are not supported or recognised.
+
+@item --ignore-@var{ABI|enum|FORTIFY|stack-prot}
+Disables individual ABI checks.  Multiple occurences of this option
+accumulate.  Possible option values are:
+
+@table @samp
+@item ABI
+Disable checks of the general ABI information.
+
+@item enum
+Disable checks of the @option{-fshort-enum} option.
+
+@item FORTIFY
+Disable checks of the @samp{-D_FORTIFY_SOURCE} option.
+
+@item stack-prot
+Disable checks of the @option{-fstack-protect} option.
+@end table
+
+@item --tmpdir=@file{dir}
+@itemx -t=@file{dir}
+Directory to use to store temporary files.
+
+@item --readelf=@file{path}
+@itemx -r=@file{path}
+Use the specified program to read the notes from the files.
+
+@item --
+Stop accumulating command line options.  This allows the script to be
+run on files whose names starts with a dash.
+
+@end table
+
+@c -----------------------------------------------------------------
+@node Hardening Checks
+@section The hardened.sh script
+
+@smallexample
+hardened.sh
+  [@option{--help}]
+  [@option{--version}]
+  [@option{--verbose}]
+  [@option{--quiet}]
+  [@option{--ignore-unknown}]
+  [@option{--silent}]
+  [@option{--vulnerable}]
+  [@option{--not-hardened}]
+  [@option{--all}]
+  [@option{--file-type=}@var{auto|lib|exec|obj}]
+  [@option{--skip=}@var{opt|stack|fort|now|relro|pic|operator|clash|cf|cet}]
+  [@option{--readelf=}@file{path}]
+  [@option{--tmpdir=}@file{dir}]
+  [@option{--}]
+  @var{file}@dots{}
+@end smallexample
+
+The @file{hardened.sh} script reports on the hardening status of the
+specified file(s).  In particular it checks that the whole file was
+compiled with @option{-O2} or higher and the
+@option{-fstack-protector-strong}, @option{-D_FORTIFY_SOURCE=2},
+@option{-Wl,-z,now}, @option{-Wl,-z,relro}, @option{-fPIE}, 
+@option{-Wp,-D_GLIBCXX_ASSERTIONS}, @option{-fstack-clash-protection}
+@option{-fcf-protection=full} and @option{-mcet}
+options.
+
+The script accepts the following command line options:
+@table @env
+
+@item --help
+@itemx -h
+Displays the usage of the script and then exits.
+
+@item --version
+@itemx -v
+Displays the version of the script.
+
+@item --verbose
+@itemx -V
+Enables verbose mode, causing the script to detail each action it
+takes.
+
+@item --quiet
+@itemx -q
+Do not include the name of script in the out generated by the script.
+
+@item --ignore-unknown
+@itemx -i
+Do not report file types that are not supported or recognised.
+
+@item --tmpdir=@file{dir}
+@itemx -t=@file{dir}
+Directory to use to store temporary files.
+
+@item --silent
+@itemx -s
+Produce no output.  Just return an exit status.
+
+@item --vulnerable
+@itemx -u
+Only report files that are known to be vulnerable.  Ie files that
+record all of the necessary information about how they were built,
+but which were built with an incorrect set of options.
+
+This option is the default behaviour of the script.
+
+@item --not-hardened
+@itemx -n
+Report any file that cannot be proven to be hardened.  This is like
+the @option{--vulnerable} option, except that it will also report
+files that do not record all of the necessary information.
+
+@item --all
+@itemx -a
+Report the hardening status of all of the files examined.
+
+@item --file-type=@var{auto|lib|exec|obj}
+@itemx -f=@var{auto|lib|exec|obj}
+Specifies the type of file being examined.  Possible values are:
+
+@table @samp
+@item auto
+Automatically determine the file type from its extension.
+This is the default.
+@item lib
+Assume all files are shared libraries.  Checks that the @option{-fPIC}
+option was used.
+@item exec
+Assume all files are executables.  Checks that the @option{-fPIE}
+option was used.
+@item obj
+Assume all files are object files.  Skips checks of the bind now status.
+@end table
+
+@item --skip=@var{opt|stack|fort|now|relro|pic|operator|clash|cf|cet}
+@itemx -k=@var{opt|stack|fort|now|relro|pic|operator|clash|cf|cet}
+Disables checks of various different hardening features.    This
+option can be repeated multiple times, and the values accumulate.
+Possible values are:
+
+@table @samp
+@item opt
+Disables checks of the optimization level used.
+
+@item stack
+Disables checks of the stack protection level.
+
+@item fort
+Disables checks for @env{-D_FORTIFY_SOURCE}.
+
+@item now
+Disables checks for @samp{BIND NOW} status.
+
+@item relro
+Disables checks for @samp{relro} or read-only-relocs.
+
+@item pic
+Disables checks for @option{-fPIC}/@option{-fPIE}.
+
+@item operator
+Disables checks for @samp{-D_GLIBCXX_ASSERTIONS}.
+
+@item clash
+Disables checks for stack clash protection.
+
+@item cf
+Disables checks for control flow protections.
+
+@item cet
+Disables checks for control flow enforcement.
+@end table
+
+@item --readelf=@file{path}
+@itemx -r=@file{path}
+Use the specified program to read the notes from the files.
+
+@item --
+Stop accumulating command line options.  This allows the script to be
+run on files whose names starts with a dash.
+
+@end table
+
+@c -----------------------------------------------------------------
+@node Checking Archives
+@section The run-on-binaries-in.sh script
+
+@smallexample
+run-on-binaries-in.sh
+  [@option{--help}]
+  [@option{--version}]
+  [@option{--verbose}]
+  [@option{--quiet}]
+  [@option{--ignore}]
+  [@option{--prefix=}@samp{text}]
+  [@option{--tmpdir=}@file{dir}]
+  [@option{--files-from=}@file{file}]
+  [@option{--skip-list=}@file{file}]
+  [@option{--}]
+  @file{program}
+  [@option{program-options}]
+  @var{file}@dots{}
+@end smallexample
+
+The @file{run-on-binaries-in.sh} script allows other scripts, or
+programs, to be run on the executable files contained inside archives.
+This includes @samp{rpm} files, @samp{tar} and @samp{ar} files and
+compressed files.
+
+The script does not recurse into directories, but this can be handled
+by the @code{find} command, like this:
+
+@smallexample
+  find . -type f -exec run-on-binaries-in.sh <script-to-run> @{@} \;
+@end smallexample
+
+The script accepts the following command line options:
+@table @env
+
+@item --help
+@itemx -h
+Displays the usage of the script and then exits.
+
+@item --version
+@itemx -v
+Displays the version of the script.
+
+@item --verbose
+@itemx -V
+Enables verbose mode, causing the script to detail each action it
+takes.
+
+If this option is repeated it has the special effect of cancelling out
+the automatic addition of the  @option{-i} to recursive invocations of
+the script.
+
+@item --quiet
+@itemx -q
+Do not include the name of script in the out generated by the script.
+
+@item --ignore
+@itemx -i
+Do not report file types that are not supported or recognised.
+
+This option is automatically enabled when the script is recursively
+invoked on an archive, unless the @option{-V} @option{-V} has been
+enabled.  This is because it is assumed that archives are likely to
+contain files that do not need to be scanned.
+
+@item --prefix=@samp{text}
+@itemx -p=@samp{text}
+Add this text to the output from the script when it runs the program
+on a normal executable.
+
+@item --tmpdir=@file{dir}
+@itemx -t=@file{dir}
+Directory to use to store temporary files.
+
+@item --files-from=@file{file}
+@itemx -f=@file{file}
+Specifies a file containing a list of other files to examine,
+one per line.
+
+@item --skip-list=@file{file}
+@itemx -s=@file{file}
+Specifies a file containing a list of files not to examine, one per
+line.  Blank lines and comments are ignored.  Text after a file's name
+is also ignored.  Filenames should start at the beginning of a line.
+
+@item --
+Stops processing of command line options.  This allows the script to
+be run with a program whoes name starts with a dash.
+
+@end table
+
+@c -----------------------------------------------------------------
 @node GNU Free Documentation License
 @appendix GNU Free Documentation License
 @include fdl.texi

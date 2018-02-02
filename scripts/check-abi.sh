@@ -2,7 +2,7 @@
 
 # Script to check for ABI conflicts in annotated binaries.
 #
-# Created by Nick Clifton.
+# Created by Nick Clifton.  <nickc@redhat.com>
 # Copyright (c) 2017-2018 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
@@ -24,11 +24,7 @@
 #
 #   find . -type f -exec check-abi.sh {} \;
 
-# To Do:
-#    * Allow arguments to command line options to be separated from the
-#      the option name by a space.  Eg: --readelf foobar
-
-version=3.0
+version=3.1
 
 help ()
 {
@@ -48,6 +44,7 @@ Usage: $prog {files|options}
   -h        --help             Display this information.
   -v        --version          Report the version number of this script.
   -s        --silent           Produce no output, just an exit status.
+  -q        --quiet            Do not include the script name in the output.
   -V        --verbose          Report on progress.
   -i        --inconsistencies  Only report potential ABI problems.
   -r=<PATH> --readelf=<PATH>   Path to version of readelf to use to read notes.
@@ -87,10 +84,17 @@ main ()
 
 report ()
 {
-    if [ $silent -eq 0 ]
+    if [ $silent -ne 0 ];
     then
-	echo $prog":" ${1+"$@"}
+	return
     fi
+
+    if [ $quiet -eq 0 ];
+    then
+	echo -n $prog": "
+    fi
+    
+    echo ${1+"$@"}
 }
 
 fail ()
@@ -103,7 +107,7 @@ verbose ()
 {
     if [ $verb -ne 0 ]
     then
-	echo $prog":" ${1+"$@"}
+	report ${1+"$@"}
     fi
 }
 
@@ -118,6 +122,7 @@ init ()
     failed=0
     silent=0
     verb=0
+    quiet=0
     inconsistencies=0
     ignore_abi=0
     ignore_enum=0
@@ -153,6 +158,9 @@ parse_args ()
 		silent=1;
 		verb=0;
 		;;
+	    -q | --quiet)
+		quiet=1;
+		;;
 	    -V | --verbose)
 		silent=0;
 		verb=1;
@@ -162,10 +170,32 @@ parse_args ()
 		inconsistencies=1;
 		;;
 	    -r | --readelf)
-		scanner="$optarg"
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "-$optname option needs a program name"
+		    else
+			scanner=$1
+		    fi
+		else
+		    scanner="$optarg"
+		fi
 		;;
 	    -t | --tmpfile)
-		tmpfile="$optarg"
+		if test "x$optarg" = "x$optname" ;
+		then
+		    shift
+		    if [ $# -eq 0 ]
+		    then
+			fail "-t option needs a file name"
+		    else
+			tmpfile=$1
+		    fi
+		else
+		    tmpfile="$optarg"
+		fi
 		;;
 
 	    --ignore-unknown)
@@ -197,6 +227,7 @@ parse_args ()
 		;;
 	    
 	    --)
+		shift
 		break;
 		;;
 	    --*)
