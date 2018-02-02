@@ -456,7 +456,7 @@ scan_file ()
 	# FIXME: If we have a new enough version of readelf we could add the
 	# --debug-dump=follow-links option to cope with separate debug info files..
 
-	$scanner --wide --debug-dump=info $file | grep -e DW_AT_producer > $tmpfile
+	$scanner --wide --debug-dump=info $file 2>&1 | grep -e DW_AT_producer > $tmpfile
 	eval 'builder=($(grep -e GNU $tmpfile))'
 
 	if [ ${#builder[*]} -ge 11 ];
@@ -486,7 +486,8 @@ scan_file ()
 		# FIXME: We are using assumed knowledge of the layout of the builder comment.
 		if [ ${#builder[*]} -lt 5 ];
 		then
-		    if [ $ignore_unknown -eq 0 ]; then
+		    if [ $ignore_unknown -eq 0 ];
+		    then
 			verbose "$file: could not parse .comment section"
 			report "$file: creator unknown"
 			failed=1
@@ -498,7 +499,8 @@ scan_file ()
 		date_index=5	
 		builder[2]="${builder[2]} ${builder[3]}"
 	    else
-		if [ $ignore_unknown -eq 0 ]; then
+		if [ $ignore_unknown -eq 0 ];
+		then
 		    report "$file: creator unknown"
 		    failed=1
 		fi

@@ -38,7 +38,7 @@ help ()
 
 This is a shell script to run another script/program on one or more binary
 files.  If the file(s) specified are archives of some kind (including rpms)
-then the script/program is run on the binary excecutables inside the archive.
+then the script/program is run on the binary executables inside the archive.
 
 Usage: $prog {options} program {options-for-the-program} files(s)
 
@@ -47,7 +47,7 @@ Usage: $prog {options} program {options-for-the-program} files(s)
   -v         --version            Report the version number of this script.
   -V         --verbose            Report on progress.
   -q         --quiet              Do not include the script name in the output.
-  -i         --ignore             Silently ignore files that are not exectuables or archives.
+  -i         --ignore             Silently ignore files that are not executables or archives.
   -p=<TEXT>  --prefix=<TEXT>      Prefix normal output with this string.
   -t=<DIR>   --tmpdir=<DIR>       Temporary directory to use when opening archives.
   -f=<FILE>  --files-from=<FILE>  Process files listed in <FILE>.
@@ -107,16 +107,6 @@ report ()
     fi
     
     echo ${1+"$@"}
-}
-
-report_n ()
-{
-    if [ $quiet -eq 0 ];
-    then
-	echo -n $prog": "
-    fi
-    
-    echo -n ${1+"$@"}
 }
 
 ice ()
@@ -417,7 +407,7 @@ decompress ()
 	fail "$orig_file: Unable to decompress"
     fi
 
-    rm $base_file
+    rm -f $base_file
 }
 
 run_on_file ()
@@ -502,7 +492,7 @@ run_on_file ()
             verbose "$file: ELF format - running script/program"
 	    if test "x$prefix" != "x" ;
 	    then
-		report_n "$prefix: "
+		report "$prefix:"
 	    fi
 	    run $script $script_opts $file
 	    return
@@ -592,7 +582,7 @@ run_on_file ()
 			 
     # Run the file type switch again, although this time we do not need to
     # check for unrecognised types.  (But we do, just in case...)
-    # Note since are transforming the file we reinvoke the run-on-binaries
+    # Note since are transforming the file we re-invoke the run-on-binaries
     # script on the decoded contents.  This allows for archives that contain
     # other archives, and so on.  We normally pass the -i option to the
     # invoked script so that it will not complain about unrecognised files in
@@ -659,7 +649,7 @@ run_on_file ()
 	    decompress $abs_file xz "--quiet --decompress" $file
 	    ;;
 	*)
-	    ice "unahndled file type: $file_type"
+	    ice "unhandled file type: $file_type"
 	    ;;
      esac
 

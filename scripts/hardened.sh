@@ -632,7 +632,7 @@ check_for_stack_protector ()
 	#   <c> DW_AT_producer : (indirect string, offset: 0x0): GNU C11 6.3.1 20161221 (Red Hat 6.3.1-1) -fstack-proector-strong
 	# into:
 	#   strong
-	eval hard=($(gawk -e 'BEGIN { FPAT = "-f[no-]*stack-protector[^ ]*" } /f/ { print substr ($1,19) ; }' $tmpfile | sort | uniq))
+	eval hard=($(gawk 'BEGIN { FPAT = "-f[no-]*stack-protector[^ ]*" } /f/ { print substr ($1,19) ; }' $tmpfile | sort | uniq))
 
 	verbose "DW_AT_producer stack records: ${hard[*]}"
     fi
@@ -697,7 +697,7 @@ check_for_pie_or_pic ()
 	#   <c> DW_AT_producer : (indirect string, offset: 0x0): GNU C11 6.3.1 20161221 (Red Hat 6.3.1-1) -g -O2 -fPIC
 	# into:
 	#   PIC
-	eval hard=($(gawk -e 'BEGIN { FPAT = "-f[pP][iI][cCeE]" } /f/ { print substr ($1,3) ; }' $tmpfile | sort -u))
+	eval hard=($(gawk 'BEGIN { FPAT = "-f[pP][iI][cCeE]" } /f/ { print substr ($1,3) ; }' $tmpfile | sort -u))
 
 	verbose "DW_AT_producer records: ${hard[*]}"
     fi
@@ -764,7 +764,7 @@ check_optimization_level ()
 	#   <c> DW_AT_producer : (indirect string, offset: 0x0): GNU C11 6.3.1 20161221 (Red Hat 6.3.1-1) -g -O2 -fPIC
 	# into:
 	#   2
-	eval hard=($(gawk -e 'BEGIN { FPAT = "-O[0123]" } /O[0123]/ { print substr ($1,3,1) ; }' $tmpfile | sort -u))
+	eval hard=($(gawk 'BEGIN { FPAT = "-O[0123]" } /O[0123]/ { print substr ($1,3,1) ; }' $tmpfile | sort -u))
 
 	verbose "DW_AT_producer records: ${hard[*]}"
 
