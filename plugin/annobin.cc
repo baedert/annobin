@@ -98,7 +98,10 @@ static struct plugin_info annobin_info =
    Since there can be multiple input files, we choose the main output
    filename (stripped of any path prefixes).  Since filenames can
    contain characters that symbol names do not (eg '-') we have to
-   allocate our own name.  */
+   allocate our own name.
+
+   FIXME: Currently we do not create symbols for other sections that
+   might contain generate code.  Eg because of __attribute__((section)).  */
 
 static void
 init_annobin_current_filename (void)
@@ -310,9 +313,6 @@ annobin_output_note (const char * name,
     {
       if (desc_is_string)
 	{
-	  /* The DESCRIPTION string is the name of a symbol.  We want to produce
-	     a reference to this symbol of the appropriate size for the target
-	     architecture.  */
 	  if (annobin_is_64bit)
 	    fprintf (asm_out_file, "\t.quad %s", (char *) desc1);
 	  else
@@ -845,9 +845,22 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   /* Create a symbol for this compilation unit.  */
   if (global_file_name_symbols)
     fprintf (asm_out_file, ".global %s\n", annobin_current_filename);
-  fprintf (asm_out_file, ".type %s STT_OBJECT\n", annobin_current_filename);
-  fprintf (asm_out_file, ".size %s, %s - %s\n",annobin_current_filename, annobin_current_endname, annobin_current_filename);
+
+  /* Note - we used to set the type of the symbol to STT_OBJECT, but that is
+     incorrect because that type is for:
+       "A data object, such as a variable, an array, and so on".
+
+     There is no ELF symbol to represent a compilation unit, (STT_FILE only
+     covers a single source file and has special sematic requirements), so
+     instead we use STT_NOTYPE.  (Ideally we could use STT_LOOS+n, but there
+     is a problem with the GAS assembler, which does not allow such values to
+     be set on symbols).  */
+  fprintf (asm_out_file, ".type %s, STT_NOTYPE\n", annobin_current_filename);
   fprintf (asm_out_file, "%s:\n", annobin_current_filename);
+  /* We explicitly set the size of the symbol to 0 so that it will not
+     confuse other tools (eg GDB, elfutils) which look for symbols that
+     cover an address range.  */
+  fprintf (asm_out_file, ".size %s, 0\n", annobin_current_filename);
 
   /* Create the static notes section.  */
 #ifdef OLD_GAS
@@ -979,6 +992,10 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
   /* FIXME: This assumes that functions are being placed into the .text section.  */
   fprintf (asm_out_file, "\t.pushsection .text\n");
   fprintf (asm_out_file, "%s:\n", annobin_current_endname);
+  if (global_file_name_symbols)
+    fprintf (asm_out_file, ".global %s\n", annobin_current_endname);
+  fprintf (asm_out_file, ".type %s, STT_NOTYPE\n", annobin_current_endname);
+  fprintf (asm_out_file, ".size %s, 0\n", annobin_current_endname);
   fprintf (asm_out_file, "\t.popsection\n");
 
   if (! annobin_enable_dynamic_notes)
