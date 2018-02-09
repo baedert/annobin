@@ -240,7 +240,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-dist_bin_SCRIPTS = built-by.sh check-abi.sh hardened.sh
+dist_bin_SCRIPTS = built-by.sh check-abi.sh hardened.sh run-on-binaries-in.sh
 all: all-am
 
 .SUFFIXES:

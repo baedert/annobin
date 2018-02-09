@@ -6,4 +6,4 @@
 
 ## Process this file with automake to produce Makefile.in.
 
-dist_bin_SCRIPTS = built-by.sh check-abi.sh hardened.sh
+dist_bin_SCRIPTS = built-by.sh check-abi.sh hardened.sh run-on-binaries-in.sh
