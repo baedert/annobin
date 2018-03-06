@@ -615,6 +615,33 @@ record_cf_protection_note (const char * start, const char * end, int type)
 }
 #endif
 
+static const char *
+function_asm_name (void)
+{
+  if (! current_function_decl)
+    return NULL;
+
+  tree name = DECL_ASSEMBLER_NAME (current_function_decl);
+
+  if (name == NULL)
+    return NULL;
+
+  const char * id = IDENTIFIER_POINTER (name);
+
+  if (id == NULL)
+    return NULL;
+
+  /* Functions annotated with the asm() function attribute will have
+     an asterisk prefix.  Skip it, so that we do not generate invalid
+     assembler symbol names.  */
+  if (*id == '*')
+    id ++;
+
+  if (*id == '0')
+    return NULL;
+
+  return id;
+}
 
 static void
 annobin_create_function_notes (void * gcc_data, void * user_data)
