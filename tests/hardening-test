@@ -20,7 +20,7 @@ OBJCOPY=objcopy
 
 PLUGIN=../plugin/.libs/annobin.so
 
-OPTS="-O2 -D_FORTIFY_SOURCE=2 -fPIC -Wall -fstack-protector-strong"
+OPTS="-O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong"
 
 $GCC -fplugin=$PLUGIN -c -g $OPTS  $srcdir/hello.c 
 
@@ -45,6 +45,11 @@ $GCC -fplugin=$PLUGIN \
 # without needing the notes produced by annobin, so that is why the test is
 # allowed to proceed.
 # FIXME: Remove the --skip= options once readelf and gcc have been updated.
+#
+# The --skip-pic and --skip-stack options are here because /usr/lib64/libc_nonshared.a(elf-init.oS)
+# is built with -fPIC and -fno-stack-protection.  /usr/lib64/Scrti.o is built
+# with -fpie which makes the pic test impossible.
+
 $srcdir/../scripts/hardened.sh  --readelf=$READELF \
   --skip=fort -k=operator --skip=clash --skip=cf -k=cet \
   hardening-test.exe

@@ -24,7 +24,7 @@
 #
 #   find . -type f -exec check-abi.sh {} \;
 
-version=3.1
+version=3.2
 
 help ()
 {
@@ -52,13 +52,15 @@ Usage: $prog {files|options}
 
   --ignore-unknown             Silently skip files of unknown type.
   --ignore-ABI                 Do not check ABI annotation.
-  --ignore-no-ABI              Check ABI information but do not complain if none is found.
+  --no-ignore-ABI              Check ABI information but do not complain if none is found.
   --ignore-enum                Do not check enum size annotation.
-  --ignore-no-enum             Check enum size information but do not complain if none is found.
+  --no-ignore-enum             Check enum size information but do not complain if none is found.
   --ignore-FORTIFY             Do not check FORTIFY SOURCE annotation.
-  --ignore-no-FORTIFY          Check FORTIFY SOURCE information but do not complain if none is found.
+  --no-ignore-FORTIFY          Check FORTIFY SOURCE information but do not complain if none is found.
   --ignore-stack-prot          Do not check stack protection annotation.
-  --ignore-no-stack-prot       Check stack protection information but do not complain if none is found.
+  --no-ignore-stack-prot       Check stack protection information but do not complain if none is found.
+  --ignore-gaps                Do not fail if there are gaps in the coverage.
+  --no-ignore-gaps             Fail if there are gaps in the coverage.
 
   --                           Stop accumulating options.
 
@@ -129,6 +131,7 @@ init ()
     ignore_fortify=0
     ignore_stack_prot=0
     ignore_unknown=0
+    ignore_gaps=0
     scanner=readelf
     tmpfile=/dev/shm/check.abi.delme
 }
@@ -204,27 +207,33 @@ parse_args ()
 	    --ignore-abi | --ignore-ABI)
 		ignore_abi=1;
 		;;
-	    --ignore-no-abi | --ignore-no-ABI)
+	    --no-ignore-abi | --no-ignore-ABI)
 		ignore_abi=2;
 		;;
 	    --ignore-enum)
 		ignore_enum=1;
 		;;
-	    --ignore-no-enum)
+	    --no-ignore-enum)
 		ignore_enum=2;
 		;;
 	    --ignore-fortify | --ignore-FORTIFY)
 		ignore_fortify=1;
 		;;
-	    --ignore-no-fortify | --ignore-no-FORTIFY)
+	    --no-ignore-fortify | --no-ignore-FORTIFY)
 		ignore_fortify=2;
 		;;
 	    --ignore-stack-prot)
 		ignore_stack_prot=1;
 		;;
-	    --ignore-no-stack-prot)
+	    --no-ignore-stack-prot)
 		ignore_stack_prot=2;
 		;;
+            --ignore-gaps)
+                ignore_gaps=1;
+                ;;
+            --no-ignore-gaps)
+                ignore_gaps=0;
+                ;;
 	    
 	    --)
 		shift
@@ -360,11 +369,14 @@ scan_file ()
 	fi
     fi
        
-    grep -q -e "Gap in build notes" $tmpfile
-    if [ $? == 0 ];
+    if [ $ignore_gaps -eq 0 ];
     then
-	report "$file: there are gaps in the build notes"
-	failed=1
+        grep -q -e "Gap in build notes" $tmpfile
+        if [ $? == 0 ];
+        then
+	    report "$file: there are gaps in the build notes"
+	    failed=1
+        fi
     fi       
 
     local -a abis

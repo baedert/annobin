@@ -69,4 +69,9 @@ $GCC -fplugin=$PLUGIN \
 # to fully parse the annobin notes and such a version is not in common
 # release (yet).
 # FIXME: Remove these options once readelf has been updated.
-$srcdir/../scripts/check-abi.sh --readelf=$READELF --inconsistencies --ignore-FORTIFY --ignore-stack-prot abi-test.exe
+#
+# The --ignore-gaps option is there because currently Scrti.o contains some
+# annobin notes, but crti.o dies not.  Thus *any* program built with normal
+# startup code will contain a gap.
+# FIXME: Add assembler support for generating notes.
+$srcdir/../scripts/check-abi.sh --readelf=$READELF --inconsistencies --ignore-FORTIFY --ignore-stack-prot --ignore-gaps abi-test.exe
