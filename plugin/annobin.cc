@@ -74,8 +74,8 @@ static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
-static unsigned char  annobin_version = 4; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 4");
+static unsigned char  annobin_version = 5; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 5");
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\
@@ -318,6 +318,13 @@ annobin_output_note (const char * name,
 	  else
 	    fprintf (asm_out_file, "\t.dc.l %s", (char *) desc1);
 
+	  /* We know that the annobin_current_filename symbol has been
+	     biased by 2 in order to avoid conflicting with the function
+	     name symbol for the first function in the file.  So reverse
+	     that bias here.  */
+	  if (desc1 == annobin_current_filename)
+	    fprintf (asm_out_file, "- 2");
+
 	  if (desc2)
 	    {
 	      fprintf (asm_out_file, "\n");
@@ -419,6 +426,8 @@ annobin_output_string_note (const char    string_type,
 
   annobin_output_static_note (buffer, len + 5, true, name_description,
 			      start, end, note_type);
+
+  free (buffer);
 }
 
 void
@@ -883,7 +892,17 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      is a problem with the GAS assembler, which does not allow such values to
      be set on symbols).  */
   fprintf (asm_out_file, ".type %s, STT_NOTYPE\n", annobin_current_filename);
-  fprintf (asm_out_file, "%s:\n", annobin_current_filename);
+
+  /* We set the address of the start symbol to be the current address plus two.
+     That way this symbol will not be confused for a file start/function start
+     symbol.  This is especially important on the PowerPC target as that
+     generates synthetic symbols for function entry points, but only if there
+     is no real symbol for that address.
+
+     There is special code in annobin_output_note() that undoes this bias when
+     the symbol's address is being used to compute a range for the notes.  */
+  fprintf (asm_out_file, "%s = . + 2\n", annobin_current_filename);
+
   /* We explicitly set the size of the symbol to 0 so that it will not
      confuse other tools (eg GDB, elfutils) which look for symbols that
      cover an address range.  */
@@ -1018,9 +1037,9 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
 
   /* FIXME: This assumes that functions are being placed into the .text section.  */
   fprintf (asm_out_file, "\t.pushsection .text\n");
-  fprintf (asm_out_file, "%s:\n", annobin_current_endname);
   if (global_file_name_symbols)
     fprintf (asm_out_file, ".global %s\n", annobin_current_endname);
+  fprintf (asm_out_file, "%s:\n", annobin_current_endname);
   fprintf (asm_out_file, ".type %s, STT_NOTYPE\n", annobin_current_endname);
   fprintf (asm_out_file, ".size %s, 0\n", annobin_current_endname);
   fprintf (asm_out_file, "\t.popsection\n");

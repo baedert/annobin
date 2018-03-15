@@ -1,4 +1,4 @@
-This is annobin.info, produced by makeinfo version 6.3 from
+This is annobin.info, produced by makeinfo version 6.4 from
 annobin.texi.
 
 This file documents the annobin plugin on the Fedora system.
@@ -216,12 +216,13 @@ below.
 * Menu:
 
 * The Version Encoding::  Encoding Versions
+* The PIC Encoding::      Encoding Position Independence
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
 * The CF Encoding::       Encoding Control Flow Protection
 * The CET Encoding::      Encoding Control Flow Enforcement Technology
 
 
-File: annobin.info,  Node: The Version Encoding,  Next: The GOW Encoding,  Up: Checking
+File: annobin.info,  Node: The Version Encoding,  Next: The PIC Encoding,  Up: Checking
 
 3.1 Encoding Protocol and Producer Versions
 ===========================================
@@ -231,9 +232,37 @@ used and the version of the tool used to generate the notes.  Typically
 these will both be 3.
 
 
-File: annobin.info,  Node: The GOW Encoding,  Next: The CF Encoding,  Prev: The Version Encoding,  Up: Checking
+File: annobin.info,  Node: The PIC Encoding,  Next: The GOW Encoding,  Prev: The Version Encoding,  Up: Checking
 
-3.2 Encoding Optimization and Debugging Levels
+3.2 Encoding Position Independence
+==================================
+
+The 'Position Independence Status' note encodes the setting of the
+'-fpic'/'-fpie' used when compiling the program.  The value of the note
+can be
+
+'0'
+     Static code, ie neither pic nor pie.
+
+'1'
+     Compiled with '-fpic'.
+
+'2'
+     Compiled with '-fPIC'.
+
+'3'
+     Compiled with '-fpie'.
+
+'4'
+     Compiled with '-fPIE'
+
+   If both 'pic' and 'pie' have been specified on the command line then
+'pie' takes the precedence in the encoding.
+
+
+File: annobin.info,  Node: The GOW Encoding,  Next: The CF Encoding,  Prev: The PIC Encoding,  Up: Checking
+
+3.3 Encoding Optimization and Debugging Levels
 ==============================================
 
 The 'GOW' note encodes the optimization level ('-O') and debugging level
@@ -278,7 +307,7 @@ they can be used in future extensions to the specification.
 
 File: annobin.info,  Node: The CF Encoding,  Next: The CET Encoding,  Prev: The GOW Encoding,  Up: Checking
 
-3.3 Encoding Control Flow Protection
+3.4 Encoding Control Flow Protection
 ====================================
 
 Records the setting of the '-cf-protection' option.  This is a bit mask
@@ -307,7 +336,7 @@ stored is biased by 1.
 
 File: annobin.info,  Node: The CET Encoding,  Prev: The CF Encoding,  Up: Checking
 
-3.4 Encoding Control Flow Enforcement Technology
+3.5 Encoding Control Flow Enforcement Technology
 ================================================
 
 Records the setting of the Control Flow Enforcement Technology options.
@@ -1251,15 +1280,16 @@ Node: Top706
 Node: Introduction1584
 Node: Invocation3686
 Node: Checking7683
-Node: The Version Encoding9970
-Node: The GOW Encoding10315
-Node: The CF Encoding11766
-Node: The CET Encoding12836
-Node: Using13604
-Node: Who Built Me14119
-Node: ABI Checking16897
-Node: Hardening Checks19025
-Node: Checking Archives22867
-Node: GNU FDL25305
+Node: The Version Encoding10027
+Node: The PIC Encoding10372
+Node: The GOW Encoding11001
+Node: The CF Encoding12448
+Node: The CET Encoding13518
+Node: Using14286
+Node: Who Built Me14801
+Node: ABI Checking17579
+Node: Hardening Checks19707
+Node: Checking Archives23549
+Node: GNU FDL25987
 
 End Tag Table

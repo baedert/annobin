@@ -1397,8 +1397,7 @@ Optional Packages:
                           both]
   --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
   --with-gcc-plugin-dir=DIR
-                          install the annobin plugin into the specified GCC
-                          plugin directory
+                          install ODB plugin into the GCC plugin directory
 
 Some influential environment variables:
   CC          C compiler command
@@ -10977,7 +10976,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 10980 "configure"
+#line 10979 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11083,7 +11082,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11086 "configure"
+#line 11085 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -16014,15 +16013,15 @@ if test x"$static_plugin" = xyes; then
   gcc_plugin_dir=no
 else
   if test x"$cross_compiling" = xyes; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install into the default GCC plugin dir" >&5
-$as_echo_n "checking whether to install into the default GCC plugin dir... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install into default GCC plugin dir" >&5
+$as_echo_n "checking whether to install into default GCC plugin dir... " >&6; }
     case $gcc_plugin_dir in
        yes)
          as_fn_error "GCC plugin directory must be specified explicitly when cross-compiling" "$LINENO" 5
          ;;
        test)
          # We cannot detect the plugin directory since there is no way to
-         # run host GCC.  So assume no.
+         # run host GCC. So assume no.
          #
          gcc_plugin_dir=no
          ;;
@@ -16055,15 +16054,15 @@ $as_echo "yes" >&6; }
 
     CPPFLAGS="$CPPFLAGS -I$dir/include"
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install the annobin plugin into the default GCC plugin directory" >&5
-$as_echo_n "checking whether to install the annobin plugin into the default GCC plugin directory... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install ODB plugin into default GCC plugin directory" >&5
+$as_echo_n "checking whether to install ODB plugin into default GCC plugin directory... " >&6; }
     case $gcc_plugin_dir in
        yes)
          gcc_plugin_dir=$dir
          ;;
        test)
-         # Only install into the GCC plugin dir if both GCC and ANNOBIN are
-         # installed into the same prefix.  Testing whether $libdir or
+         # Only install into the GCC plugin dir if both GCC and ODB are
+         # installed into the same prefix. Testing whether $libdir or
          # $libexecdir is a prefix of the GCC plugin dir is a good
          # approximation.
          #
@@ -16081,7 +16080,7 @@ $as_echo_n "checking whether to install the annobin plugin into the default GCC 
          fi
 
          # On some systems GCC is installed into $prefix/lib even though
-         # libdir is $prefix/lib64 and libexecdir is $prefix/libexec.  To
+         # libdir is $prefix/lib64 and libexecdir is $prefix/libexec. To
          # cover this special case, we will also test $prefix/lib.
          #
          e_libdir=`echo "$libdir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`

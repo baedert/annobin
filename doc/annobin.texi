@@ -267,6 +267,7 @@ explained below.
 
 @menu
 * The Version Encoding::  Encoding Versions
+* The PIC Encoding::      Encoding Position Independence
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
 * The CF Encoding::       Encoding Control Flow Protection
 * The CET Encoding::      Encoding Control Flow Enforcement Technology
@@ -277,7 +278,36 @@ explained below.
 @section Encoding Protocol and Producer Versions
 The @code{version} note encodes the version of the Watermark
 specification used and the version of the tool used to generate the
-notes.  Typically these will both be 3.
+notes.  Typically the protocol version will be 3 and the plugin
+version will be 5.
+
+@c -----------------------------------------------------------------
+@node The PIC Encoding
+@section Encoding Position Independence
+The @code{Position Independence Status} note encodes the setting of
+the @option{-fpic}/@option{-fpie} used when compiling the program.
+The value of the note can be
+
+@table @code
+@item 0
+Static code, ie neither pic nor pie.
+
+@item 1
+Compiled with @option{-fpic}.
+
+@item 2
+Compiled with @option{-fPIC}.
+
+@item 3
+Compiled with @option{-fpie}.
+
+@item 4
+Compiled with @option{-fPIE}
+
+@end table
+
+If both @option{pic} and @option{pie} have been specified on the
+command line then @option{pie} takes the precedence in the encoding.
 
 @c -----------------------------------------------------------------
 @node The GOW Encoding
