@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Copyright (c) 2017-2018 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+rm -f hello.o hello2.o hello3.o libhello.so function-section-test.exe
+
+GCC=gcc
+READELF=readelf
+OBJCOPY=objcopy
+
+PLUGIN=../plugin/.libs/annobin.so
+
+$GCC -fplugin=$PLUGIN \
+     -c \
+     -fPIC \
+     -Wall \
+     -O1 \
+     -fplugin-arg-annobin-function-verbose \
+     -ffunction-sections \
+ $srcdir/hello.c 
+
+$GCC -fplugin=$PLUGIN \
+     -O3 \
+     -c \
+     -fPIC \
+     -ffunction-sections \
+ $srcdir/hello2.c 
+
+$GCC -fplugin=$PLUGIN \
+     -O2 \
+     -c \
+     -fPIE \
+     -g3 \
+     -D_FORTIFY_SOURCE=2 \
+     -ffunction-sections \
+ $srcdir/hello3.c \
+
+$GCC -fplugin=$PLUGIN \
+    -O2 \
+    -fpic \
+    -ffunction-sections \
+    -shared \
+ $srcdir/hello_lib.c \
+     -o libhello.so
+
+$GCC -fplugin=$PLUGIN \
+     -L . -pie \
+     -Wl,-z,now,-z,relro \
+     -Wl,--gc-sections -Wl,--print-gc-sections \
+ hello.o hello2.o hello3.o -lhello -o function-sections-test.exe
+
+# FIXME - we should check that the notes were parsed correctly...
+$READELF --notes --wide function-sections-test.exe > /dev/null
