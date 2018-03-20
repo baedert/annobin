@@ -51,7 +51,10 @@ static unsigned long  stack_threshold = DEFAULT_THRESHOLD;
 /* Internal variable, used by target specific parts of the annobin plugin as well
    as this generic part.  True if the object file being generated is for a 64-bit
    target.  */
-bool           annobin_is_64bit = false;
+bool                  annobin_is_64bit = false;
+
+/* True if the creation of function specific notes should be reported.  */
+static bool           annobin_function_verbose = false;
 
 /* True if notes in the .note.gnu.property section should be produced.  */
 static bool           annobin_enable_dynamic_notes = true;
@@ -82,6 +85,7 @@ static const char *   help_string =  N_("Supported options:\n\
    help                   Print out this information\n\
    version                Print out the version of the plugin\n\
    verbose                Be talkative about what is going on\n\
+   function-verbose       Report the creation of function specific notes\n\
    [no-]dynamic-notes     Do [do not] create dynamic notes (default: do)\n\
    [no-]static-notes      Do [do not] create static notes (default: do)\n\
    [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
@@ -199,11 +203,14 @@ annobin_output_note (const char * name,
   if (asm_out_file == NULL)
     return;
 
-  if (type == FUNC
-      || type == OPEN)
+  if (annobin_function_verbose && type == FUNC)
     {
-      fprintf (asm_out_file, "\t.pushsection %s\n", GNU_BUILD_ATTRS_SECTION_NAME);    
+      if (desc_is_string)
+	annobin_inform (0, "create function specific note for: %s: %s", desc1, name_description);
     }
+
+  if (type == FUNC || type == OPEN)
+    fprintf (asm_out_file, "\t.pushsection %s\n", GNU_BUILD_ATTRS_SECTION_NAME);
 
   if (name == NULL)
     {
@@ -364,14 +371,11 @@ annobin_output_note (const char * name,
 	}
     }
 
-  if (type == FUNC
-      || type == OPEN)
-    {
-      fprintf (asm_out_file, "\t.popsection\n");
-      fflush (asm_out_file);
-    }
+  if (type == FUNC || type == OPEN)
+    fprintf (asm_out_file, "\t.popsection\n");
 
   fprintf (asm_out_file, "\n");
+  fflush (asm_out_file);
 
   ++ annobin_note_count;
 }
@@ -440,7 +444,7 @@ annobin_output_numeric_note (const char     numeric_type,
 {
   unsigned i;
   char buffer [32];
-  
+
   sprintf (buffer, "GA%c%c", NUMERIC, numeric_type);
 
   if (value == 0)
@@ -527,11 +531,23 @@ compute_GOWall_options (void)
   else
     val |= (debug_info_level << 4);
 
-  if (dwarf_version < 0 || dwarf_version > 7)
-    annobin_inform (0, "ICE: unknown dwarf version level %d\n", dwarf_version);
+  if (dwarf_version < 2)
+    {
+      /* Apparently it is possible for dwarf_version to be -1.  Not sure how
+	 this can happen, but handle it anyway.  Since DWARF prior to v2 is
+	 deprecated, we use 2 as the version level.  */
+      val |= (2 << 6);
+      annobin_inform (1, "dwarf version level %d recorded as 2\n", dwarf_version);
+    }
+  else if (dwarf_version > 7)
+    {
+      /* FIXME: We only have 3 bits to record the debug level...  */
+      val |= (7 << 6);
+      annobin_inform (1, "dwarf version level %d recorded as 7\n", dwarf_version);
+    }
   else
     val |= (dwarf_version << 6);
-  
+
   if (optimize > 3)
     val |= (3 << 9);
   else
@@ -663,7 +679,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   if (! annobin_enable_static_notes)
     return;
-  
+
   if (asm_out_file == NULL)
     return;
 
@@ -716,7 +732,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	aname = aname_end = NULL;
     }
 #endif
-  
+
 #ifdef flag_cf_protection
   if (global_cf_option != flag_cf_protection)
     {
@@ -729,7 +745,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	aname = aname_end = NULL;
     }
 #endif
-  
+
   if (global_pic_option != compute_pic_option ())
     {
       annobin_inform (1, "Recording change in PIC status for %s", cname);
@@ -782,10 +798,14 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   if (annobin_note_count > count)
     {
-      // /* FIXME: This assumes that the function is in the .text section...  */
-      // fprintf (asm_out_file, "\t.pushsection .text\n");
+      /* This push/pop is probably not necssary, but let's be paranoid.  */
+      if (DECL_SECTION_NAME (current_function_decl) != NULL)
+	fprintf (asm_out_file, "\t.pushsection %s\n", DECL_SECTION_NAME (current_function_decl));
+
       fprintf (asm_out_file, "%s:\n", saved_aname_end);
-      // fprintf (asm_out_file, "\t.popsection\n");
+
+      if (DECL_SECTION_NAME (current_function_decl) != NULL)
+	fprintf (asm_out_file, "\t.popsection\n");
     }
 
   free ((void *) saved_aname_end);
@@ -933,7 +953,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   /* Record optimization level, -W setting and -g setting  */
   record_GOW_settings (global_GOWall_options, false, NULL, NULL, NULL);
-     
+
   /* Record -fstack-protector option.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, global_stack_prot_option,
 			       "numeric: -fstack-protector status",
@@ -960,7 +980,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	{
 	  if (save_decoded_options[i].arg == NULL)
 	    continue;
-	    
+
 	  if (strncmp (save_decoded_options[i].arg, "_FORTIFY_SOURCE=", strlen ("_FORTIFY_SOURCE=")) == 0)
 	    {
 	      int level = atoi (save_decoded_options[i].arg + strlen ("_FORTIFY_SOURCE="));
@@ -1012,7 +1032,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   if (! glibcxx_assertions_recorded)
     record_glibcxx_assertions (false);
-  
+
   /* Record the PIC status.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
 			       "numeric: PIC", NULL, NULL, OPEN);
@@ -1051,7 +1071,7 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
     {
       annobin_inform (1, "Recording total static usage of %ld", annobin_total_static_stack_usage);
 
-      fprintf (asm_out_file, "\t.pushsection %s\n", GNU_BUILD_ATTRS_SECTION_NAME);    
+      fprintf (asm_out_file, "\t.pushsection %s\n", GNU_BUILD_ATTRS_SECTION_NAME);
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE, annobin_total_static_stack_usage,
 				   "numeric: stack-size", NULL, NULL, OPEN);
       fprintf (asm_out_file, "\t.popsection\n");
@@ -1088,6 +1108,9 @@ parse_args (unsigned argc, struct plugin_argument * argv)
       else if (strcmp (key, "verbose") == 0)
 	verbose_level ++;
 
+      else if (strcmp (key, "function-verbose") == 0)
+	annobin_function_verbose = true;
+
       else if (strcmp (key, "global-file-syms") == 0)
 	global_file_name_symbols = true;
       else if (strcmp (key, "no-global-file-syms") == 0)
@@ -1102,12 +1125,12 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	annobin_enable_dynamic_notes = true;
       else if (strcmp (key, "no-dynamic-notes") == 0)
 	annobin_enable_dynamic_notes = false;
-      
+
       else if (strcmp (key, "static-notes") == 0)
 	annobin_enable_static_notes = true;
       else if (strcmp (key, "no-static-notes") == 0)
 	annobin_enable_static_notes = false;
-      
+
       else if (strcmp (key, "stack-threshold") == 0)
 	{
 	  stack_threshold = strtoul (argv[argc].value, NULL, 0);

@@ -187,6 +187,11 @@ in addition to whatever else the plugin has been instructed to do.
 Report the actions that the plugin is taking.  If invoked for a second
 time on the command line the plugin will be very verbose.
 
+@item function-verbose
+Report the generation of function specific notes.  This indicates that
+the named function was compiled with different options from those that
+were globally enabled.
+
 @item no-dynamic-notes
 @itemx dynamic-notes
 Do not, or do, record information for the dynamic loader.  The default

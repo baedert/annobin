@@ -115,7 +115,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
       if ((unsigned long) ix86_isa_flags > max_x86_isa)
 	max_x86_isa = ix86_isa_flags;
     }
-  
+
 #ifdef flag_cet
   if (global_cet != flag_cet)
     fprintf (stderr, "1\n");
@@ -125,13 +125,13 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
     fprintf (stderr, "3\n");
   if (global_shstk != (ix86_isa_flags & OPTION_MASK_ISA_SHSTK))
     fprintf (stderr, "4\n");
-      
+
   if ((global_cet != flag_cet)
       || (global_set_switch != flag_cet_switch)
       || (global_ibt != (ix86_isa_flags2 & OPTION_MASK_ISA_IBT))
       || (global_shstk != (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)))
     {
-      annobin_inform (0, "CET values have changed from %d:%d:%lx:%lx to %d:%d:%lx:%lx",
+      annobin_inform (1, "CET values have changed from %d:%d:%lx:%lx to %d:%d:%lx:%lx",
 		      global_cet, global_set_switch, global_ibt, global_shstk,
 		      flag_cet, flag_cet_switch,
 		      (ix86_isa_flags2 & OPTION_MASK_ISA_IBT),
@@ -218,7 +218,7 @@ annobin_target_specific_loader_notes (void)
   if (annobin_is_64bit)
     {
       Elf64_32_loader_note note32;
-      
+
       note32.pr_datasz = sizeof (note32.pr_data);
       note32.pr_pad = 0;
 
@@ -232,7 +232,7 @@ annobin_target_specific_loader_notes (void)
 	  memcpy (ptr, & note64, sizeof note64);
 	  ptr += sizeof (note64);
 	}
-      
+
       note32.pr_type = GNU_PROPERTY_X86_ISA_1_USED;
       note32.pr_data = convert_gcc_isa_to_gnu_property_isa (max_x86_isa);
       memcpy (ptr, & note32, sizeof note32);

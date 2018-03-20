@@ -137,6 +137,11 @@ after the plugin itself is mentioned.  The options are:
      Report the actions that the plugin is taking.  If invoked for a
      second time on the command line the plugin will be very verbose.
 
+'function-verbose'
+     Report the generation of function specific notes.  This indicates
+     that the named function was compiled with different options from
+     those that were globally enabled.
+
 'no-dynamic-notes'
 'dynamic-notes'
      Do not, or do, record information for the dynamic loader.  The
@@ -229,7 +234,7 @@ File: annobin.info,  Node: The Version Encoding,  Next: The PIC Encoding,  Up: C
 
 The 'version' note encodes the version of the Watermark specification
 used and the version of the tool used to generate the notes.  Typically
-these will both be 3.
+the protocol version will be 3 and the plugin version will be 5.
 
 
 File: annobin.info,  Node: The PIC Encoding,  Next: The GOW Encoding,  Prev: The Version Encoding,  Up: Checking
@@ -1279,17 +1284,17 @@ Tag Table:
 Node: Top706
 Node: Introduction1584
 Node: Invocation3686
-Node: Checking7683
-Node: The Version Encoding10027
-Node: The PIC Encoding10372
-Node: The GOW Encoding11001
-Node: The CF Encoding12448
-Node: The CET Encoding13518
-Node: Using14286
-Node: Who Built Me14801
-Node: ABI Checking17579
-Node: Hardening Checks19707
-Node: Checking Archives23549
-Node: GNU FDL25987
+Node: Checking7883
+Node: The Version Encoding10227
+Node: The PIC Encoding10615
+Node: The GOW Encoding11244
+Node: The CF Encoding12691
+Node: The CET Encoding13761
+Node: Using14529
+Node: Who Built Me15044
+Node: ABI Checking17822
+Node: Hardening Checks19950
+Node: Checking Archives23792
+Node: GNU FDL26230
 
 End Tag Table

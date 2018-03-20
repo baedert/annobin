@@ -29,7 +29,7 @@ annobin_record_global_target_notes (void)
     annobin_inform (0, "ICE: Should be 64-bit target");
 
   saved_tls_size = rs6000_tls_size;
-  
+
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
 			       "numeric: ABI: TLS size", NULL, NULL, OPEN);
   annobin_inform (1, "Recording global TLS size of %d", saved_tls_size);
