@@ -823,7 +823,7 @@ check_for_bind_now ()
 
 check_for_relro ()
 {
-    # Look for the DT_BIND_NOW dynamic tag
+    # Look for the GNU_RELRO segment type
     eval hard='($(grep -e GNU_RELRO $tmpfile))'
 
     verbose "GNU_RELRO tags: ${hard[*]}"

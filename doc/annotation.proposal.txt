@@ -126,7 +126,7 @@ Some examples:
     GA*4\377\377\0            Attribute stack size with numeric value 0xffff
     GA*21\0                   Atrribute -fstack-protector.
     GA*24\0                   Atrribute -fstack-protector-explicit.
-    GA$12p1\0                 Supports spec version 2, created by plugin version 1.
+    GA$\0013p5\0              Supports spec version 3, created by plugin version 5.
     GA$5gcc v7.0\0            Attribute build tool "gcc v7.0"
 
   Multiple notes for the same attribute can exist, providing that they

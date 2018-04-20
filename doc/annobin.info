@@ -26,7 +26,7 @@ Annotating Binaries: How Was Your Program Built ?
 This manual describes the ANNOBIN plugin, and how you can use it to
 determine what security features were used when building your binary.
 
-   This manual is for 'annobin' (Annobin) version 3.2.
+   This manual is for 'annobin' (Annobin) version 5.1.
 
    This document is distributed under the terms of the GNU Free
 Documentation License version 1.3.  A copy of the license is included in
@@ -221,13 +221,15 @@ below.
 * Menu:
 
 * The Version Encoding::  Encoding Versions
+* The STACK Encoding::    Encoding Stack Protection
 * The PIC Encoding::      Encoding Position Independence
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
 * The CF Encoding::       Encoding Control Flow Protection
 * The CET Encoding::      Encoding Control Flow Enforcement Technology
+* The ENUM Encoding::     Encoding the Size of Enumerations
 
 
-File: annobin.info,  Node: The Version Encoding,  Next: The PIC Encoding,  Up: Checking
+File: annobin.info,  Node: The Version Encoding,  Next: The STACK Encoding,  Up: Checking
 
 3.1 Encoding Protocol and Producer Versions
 ===========================================
@@ -237,9 +239,34 @@ used and the version of the tool used to generate the notes.  Typically
 the protocol version will be 3 and the plugin version will be 5.
 
 
-File: annobin.info,  Node: The PIC Encoding,  Next: The GOW Encoding,  Prev: The Version Encoding,  Up: Checking
+File: annobin.info,  Node: The STACK Encoding,  Next: The PIC Encoding,  Prev: The Version Encoding,  Up: Checking
 
-3.2 Encoding Position Independence
+3.2 Encoding Stack Protections
+==============================
+
+The stack protection note (value 2) encodes the setting of the
+'-fstack-protector' option.  Possible values are:
+
+'0'
+     Not compiled with any setting of '-fstack-protector' (or the
+     setting is unknown).
+
+'1'
+     Compiled with just '-fstack-protector'.
+
+'2'
+     Compiled with '-fstack-protector-all'.
+
+'3'
+     Compiled with '-fstack-protector-strong'.
+
+'4'
+     Compiled with '-fstack-protector-explicit'.
+
+
+File: annobin.info,  Node: The PIC Encoding,  Next: The GOW Encoding,  Prev: The STACK Encoding,  Up: Checking
+
+3.3 Encoding Position Independence
 ==================================
 
 The 'Position Independence Status' note encodes the setting of the
@@ -267,7 +294,7 @@ can be
 
 File: annobin.info,  Node: The GOW Encoding,  Next: The CF Encoding,  Prev: The PIC Encoding,  Up: Checking
 
-3.3 Encoding Optimization and Debugging Levels
+3.4 Encoding Optimization and Debugging Levels
 ==============================================
 
 The 'GOW' note encodes the optimization level ('-O') and debugging level
@@ -312,7 +339,7 @@ they can be used in future extensions to the specification.
 
 File: annobin.info,  Node: The CF Encoding,  Next: The CET Encoding,  Prev: The GOW Encoding,  Up: Checking
 
-3.4 Encoding Control Flow Protection
+3.5 Encoding Control Flow Protection
 ====================================
 
 Records the setting of the '-cf-protection' option.  This is a bit mask
@@ -339,9 +366,9 @@ be confused with a NUL-byte to indicate the end of a string), the value
 stored is biased by 1.
 
 
-File: annobin.info,  Node: The CET Encoding,  Prev: The CF Encoding,  Up: Checking
+File: annobin.info,  Node: The CET Encoding,  Next: The ENUM Encoding,  Prev: The CF Encoding,  Up: Checking
 
-3.5 Encoding Control Flow Enforcement Technology
+3.6 Encoding Control Flow Enforcement Technology
 ================================================
 
 Records the setting of the Control Flow Enforcement Technology options.
@@ -363,6 +390,20 @@ of bytes that indicate various different flags:
 'byte 3'
      The setting of the '-mshstk' option.  This is either 1 (not set) or
      2 (set).
+
+
+File: annobin.info,  Node: The ENUM Encoding,  Prev: The CET Encoding,  Up: Checking
+
+3.7 Encoding the Size of Enumerations
+=====================================
+
+Record the value of the '-fshort-enums' option.  Possible values are:
+
+'true'
+     The '-fshort-enums' option has been enabled.
+
+'false'
+     The '-fshort-enums' option has not been enabled.
 
 
 File: annobin.info,  Node: Using,  Next: GNU FDL,  Prev: Checking,  Up: Top
@@ -387,21 +428,21 @@ File: annobin.info,  Node: Who Built Me,  Next: ABI Checking,  Up: Using
 ==========================
 
      built-by.sh
-       [--help]
-       [--version]
-       [--verbose]
-       [--quiet]
-       [--silent]
-       [--ignore]
-       [--readelf=path]
-       [--tmpdir=dir]
-       [--tool=NAME]
-       [--nottool=NAME]
-       [--before=DATE]
-       [--after=DATE]
-       [--minver=VERSION]
-       [--maxver=VERSION]
-       [--]
+       [-help]
+       [-version]
+       [-verbose]
+       [-quiet]
+       [-silent]
+       [-ignore]
+       [-readelf=PATH]
+       [-tmpdir=DIR]
+       [-tool=NAME]
+       [-nottool=NAME]
+       [-before=DATE]
+       [-after=DATE]
+       [-minver=VERSION]
+       [-maxver=VERSION]
+       [-]
        FILE...
 
    The 'built-by.sh' script reports the name and version of the tool
@@ -489,17 +530,17 @@ File: annobin.info,  Node: ABI Checking,  Next: Hardening Checks,  Prev: Who Bui
 ===========================
 
      check-abi.sh
-       [--help]
-       [--version]
-       [--verbose]
-       [--quiet]
-       [--silent]
-       [--inconsistencies]
-       [--ignore-unknown]
-       [--ignore-ABI|ENUM|FORTIFY|STACK-PROT]
-       [--readelf=path]
-       [--tmpdir=dir]
-       [--]
+       [-help]
+       [-version]
+       [-verbose]
+       [-quiet]
+       [-silent]
+       [-inconsistencies]
+       [-ignore-unknown]
+       [-ignore-ABI|ENUM|FORTIFY|STACK-PROT]
+       [-readelf=path]
+       [-tmpdir=dir]
+       [-]
        FILE...
 
    The 'check-abi.sh' script reports any potential ABI conflicts in the
@@ -574,20 +615,20 @@ File: annobin.info,  Node: Hardening Checks,  Next: Checking Archives,  Prev: AB
 ==========================
 
      hardened.sh
-       [--help]
-       [--version]
-       [--verbose]
-       [--quiet]
-       [--ignore-unknown]
-       [--silent]
-       [--vulnerable]
-       [--not-hardened]
-       [--all]
-       [--file-type=AUTO|LIB|EXEC|OBJ]
-       [--skip=OPT|STACK|FORT|NOW|RELRO|PIC|OPERATOR|CLASH|CF|CET]
-       [--readelf=path]
-       [--tmpdir=dir]
-       [--]
+       [-help]
+       [-version]
+       [-verbose]
+       [-quiet]
+       [-ignore-unknown]
+       [-silent]
+       [-vulnerable]
+       [-not-hardened]
+       [-all]
+       [-file-type=AUTO|LIB|EXEC|OBJ]
+       [-skip=OPT|STACK|FORT|NOW|RELRO|PIC|OPERATOR|CLASH|CF|CET]
+       [-readelf=path]
+       [-tmpdir=dir]
+       [-]
        FILE...
 
    The 'hardened.sh' script reports on the hardening status of the
@@ -715,16 +756,16 @@ File: annobin.info,  Node: Checking Archives,  Prev: Hardening Checks,  Up: Usin
 ====================================
 
      run-on-binaries-in.sh
-       [--help]
-       [--version]
-       [--verbose]
-       [--quiet]
-       [--ignore]
-       [--prefix='text']
-       [--tmpdir=dir]
-       [--files-from=file]
-       [--skip-list=file]
-       [--]
+       [-help]
+       [-version]
+       [-verbose]
+       [-quiet]
+       [-ignore]
+       [-prefix='text']
+       [-tmpdir=dir]
+       [-files-from=file]
+       [-skip-list=file]
+       [-]
        program
        [program-options]
        FILE...
@@ -1285,16 +1326,18 @@ Node: Top706
 Node: Introduction1584
 Node: Invocation3686
 Node: Checking7883
-Node: The Version Encoding10227
-Node: The PIC Encoding10615
-Node: The GOW Encoding11244
-Node: The CF Encoding12691
-Node: The CET Encoding13761
-Node: Using14529
-Node: Who Built Me15044
-Node: ABI Checking17822
-Node: Hardening Checks19950
-Node: Checking Archives23792
-Node: GNU FDL26230
+Node: The Version Encoding10339
+Node: The STACK Encoding10729
+Node: The PIC Encoding11326
+Node: The GOW Encoding11953
+Node: The CF Encoding13400
+Node: The CET Encoding14470
+Node: The ENUM Encoding15264
+Node: Using15621
+Node: Who Built Me16136
+Node: ABI Checking18899
+Node: Hardening Checks21016
+Node: Checking Archives24844
+Node: GNU FDL27272
 
 End Tag Table

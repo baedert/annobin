@@ -70,9 +70,9 @@ static int            global_cf_option = -1;
 #endif
 static unsigned int   annobin_note_count = 0;
 static unsigned int   global_GOWall_options = 0;
-static int            global_stack_prot_option = -1;
-static int            global_pic_option = -1;
-static int            global_short_enums = -1;
+static int            global_stack_prot_option = 0;
+static int            global_pic_option = 0;
+static int            global_short_enums = 0;
 static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
 static char *         annobin_current_filename = NULL;
@@ -707,7 +707,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       aname = aname_end = NULL;
     }
 
-  if (global_stack_prot_option != flag_stack_protect)
+  if (global_stack_prot_option != flag_stack_protect && flag_stack_protect != -1)
     {
       annobin_inform (1, "Recording change in stack protection status for %s (from %d to %d)",
 		      cname, global_stack_prot_option, flag_stack_protect);
@@ -764,7 +764,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	aname = aname_end = NULL;
     }
 
-  if (global_short_enums != flag_short_enums)
+  if (global_short_enums != flag_short_enums && flag_short_enums != -1)
     {
       annobin_inform (1, "Recording change in enum size for %s", cname);
       annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, flag_short_enums,
@@ -921,7 +921,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
      There is special code in annobin_output_note() that undoes this bias when
      the symbol's address is being used to compute a range for the notes.  */
-  fprintf (asm_out_file, "%s = . + 2\n", annobin_current_filename);
+  fprintf (asm_out_file, "\t.equiv %s, . + 2\n", annobin_current_filename);
 
   /* We explicitly set the size of the symbol to 0 so that it will not
      confuse other tools (eg GDB, elfutils) which look for symbols that
@@ -955,7 +955,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   record_GOW_settings (global_GOWall_options, false, NULL, NULL, NULL);
 
   /* Record -fstack-protector option.  */
-  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, global_stack_prot_option,
+  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
+			       /* See BZ 1563141 for an example where global_stack_protection can be -1.  */
+			       global_stack_prot_option >=0 ? global_stack_prot_option : 0,
 			       "numeric: -fstack-protector status",
 			       NULL, NULL, OPEN);
 
@@ -1038,8 +1040,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 			       "numeric: PIC", NULL, NULL, OPEN);
 
   /* Record enum size.  */
-  annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums,
-			    global_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
+  annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums != 0,
+			    global_short_enums != 0 ? "bool: short-enums: on" : "bool: short-enums: off",
 			    NULL, NULL, OPEN);
 
   /* Record target specific notes.  */

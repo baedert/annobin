@@ -5,9 +5,9 @@
 @setchapternewpage odd
 
 @c man begin INCLUDE
-@set VERSION 3.2
+@set VERSION 5.1
 @set VERSION_PACKAGE (Annobin) 
-@set UPDATED February 2018
+@set UPDATED March 2018
 @c man end
 
 @ifnottex
@@ -70,6 +70,8 @@ Copyright @copyright{} 2018 Red Hat
 @node Top
 @top Annotating Binaries: How Was Your Program Built ?
 
+@c man annobin title Annobin - annotating binary files.
+
 This manual describes the @sc{annobin} plugin, and how you can use it
 to determine what security features were used when building your binary.
 
@@ -95,6 +97,8 @@ in the section entitled ``GNU Free Documentation License''.
 @c -----------------------------------------------------------------
 @node Introduction
 @chapter What is Binary Annotation ?
+
+@c man begin DESCRIPTION annobin
 
 Binary Annotation is a method for recording information about an
 application inside the application itself.  It is an implementation of
@@ -133,10 +137,13 @@ scripts that use @code{readelf} in this way to check various features
 of an application, such as its conformation to the hardening
 requirements, or possible ABI violations.
 
+@c man end
 
 @c -----------------------------------------------------------------
 @node Invocation
 @chapter How to add Binary Annotations to your application.
+
+@c man begin DESCRIPTION annobin
 
 Normally the option to enable the recording of binary annotation notes
 is enabled automatically by the build system, so no user intervention
@@ -168,6 +175,9 @@ The plugin also accepts a small selection of command line arguments,
 all accessed by passing @option{-fplugin-arg-annobin-<option>} on the
 gcc command line.  These options must be placed on the gcc command
 line after the plugin itself is mentioned.  The options are:
+
+@c man end
+@c man begin OPTIONS annobin
 
 @table @code
 @item disable
@@ -231,10 +241,13 @@ by default, and if enabled can be disabled again via the
 @option{no-global-file-syms} option.
 
 @end table
+@c man end
 
 @c -----------------------------------------------------------------
 @node Checking
 @chapter How to examine the information stored in the binary.
+
+@c man begin DESCRIPTION annobin
 
 The information is stored in the ELF Note format in a special section
 called @code{.gnu.build.attributes}.  The @code{readelf} program from
@@ -266,16 +279,20 @@ the Watermark specification, but it basically consists of the letters
 @samp{G} and @samp{A} followed by an encoding character (one of
 @samp{*$!+}) and then a type character and finally the value.
 
+@c man end
+
 Most of the notes have a reasonably self explanatory name and value.
 The exception are the @code{version} and @code{GOW} notes, which are
 explained below.
 
 @menu
 * The Version Encoding::  Encoding Versions
+* The STACK Encoding::    Encoding Stack Protection
 * The PIC Encoding::      Encoding Position Independence
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
 * The CF Encoding::       Encoding Control Flow Protection
 * The CET Encoding::      Encoding Control Flow Enforcement Technology
+* The ENUM Encoding::     Encoding the Size of Enumerations
 @end menu
 
 @c -----------------------------------------------------------------
@@ -285,6 +302,30 @@ The @code{version} note encodes the version of the Watermark
 specification used and the version of the tool used to generate the
 notes.  Typically the protocol version will be 3 and the plugin
 version will be 5.
+
+@c -----------------------------------------------------------------
+@node The STACK Encoding
+@section Encoding Stack Protections
+The stack protection note (value 2) encodes the setting of the
+@option{-fstack-protector} option.  Possible values are:
+
+@table @code
+@item 0
+Not compiled with any setting of @option{-fstack-protector} (or the
+setting is unknown).
+
+@item 1
+Compiled with just @option{-fstack-protector}.
+
+@item 2
+Compiled with @option{-fstack-protector-all}.
+
+@item 3
+Compiled with @option{-fstack-protector-strong}.
+
+@item 4
+Compiled with @option{-fstack-protector-explicit}.
+@end table
 
 @c -----------------------------------------------------------------
 @node The PIC Encoding
@@ -418,6 +459,20 @@ set) or 2 (set).
 @end table
 
 @c -----------------------------------------------------------------
+@node The ENUM Encoding
+@section Encoding the Size of Enumerations
+Record the value of the @option{-fshort-enums} option.  Possible
+values are:
+
+@table @code
+@item true
+The @option{-fshort-enums} option has been enabled.
+
+@item false
+The @option{-fshort-enums} option has not been enabled.
+@end table
+
+@c -----------------------------------------------------------------
 @node Using
 @chapter How to use the information stored in the binary.
 
@@ -435,25 +490,31 @@ demonstrate how the binary information can be used.  The scripts are:
 @node Who Built Me
 @section The built-by.sh script
 
+@c man title built-by Who Built Me
+
 @smallexample
+@c man begin SYNOPSIS built-by
 built-by.sh
-  [@option{--help}]
-  [@option{--version}]
-  [@option{--verbose}]
-  [@option{--quiet}]
-  [@option{--silent}]
-  [@option{--ignore}]
-  [@option{--readelf=}@file{path}]
-  [@option{--tmpdir=}@file{dir}]
-  [@option{--tool=}@var{name}]
-  [@option{--nottool=}@var{name}]
-  [@option{--before=}@var{date}]
-  [@option{--after=}@var{date}]
-  [@option{--minver=}@var{version}]
-  [@option{--maxver=}@var{version}]
-  [@option{--}]
+  [@b{--help}]
+  [@b{--version}]
+  [@b{--verbose}]
+  [@b{--quiet}]
+  [@b{--silent}]
+  [@b{--ignore}]
+  [@b{--readelf=}@var{path}]
+  [@b{--tmpdir=}@var{dir}]
+  [@b{--tool=}@var{name}]
+  [@b{--nottool=}@var{name}]
+  [@b{--before=}@var{date}]
+  [@b{--after=}@var{date}]
+  [@b{--minver=}@var{version}]
+  [@b{--maxver=}@var{version}]
+  [@b{--}]
   @var{file}@dots{}
+@c man end
 @end smallexample
+
+@c man begin DESCRIPTION built-by
 
 The @file{built-by.sh} script reports the name and version of the tool
 used to build the specified file(s).  This script also demonstrates
@@ -535,26 +596,33 @@ run on files whose names starts with a dash.
 
 @end table
 
+@c man end
 
 @c -----------------------------------------------------------------
 @node ABI Checking
 @section The check-abi.sh script
 
+@c man title check-abi ABI Checking
+
 @smallexample
+@c man begin SYNOPSIS check-abi
 check-abi.sh
-  [@option{--help}]
-  [@option{--version}]
-  [@option{--verbose}]
-  [@option{--quiet}]
-  [@option{--silent}]
-  [@option{--inconsistencies}]
-  [@option{--ignore-unknown}]
-  [@option{--ignore-}@var{ABI|enum|FORTIFY|stack-prot}]
-  [@option{--readelf=}@file{path}]
-  [@option{--tmpdir=}@file{dir}]
-  [@option{--}]
+  [@b{--help}]
+  [@b{--version}]
+  [@b{--verbose}]
+  [@b{--quiet}]
+  [@b{--silent}]
+  [@b{--inconsistencies}]
+  [@b{--ignore-unknown}]
+  [@b{--ignore-}@var{ABI|enum|FORTIFY|stack-prot}]
+  [@b{--readelf=}@file{path}]
+  [@b{--tmpdir=}@file{dir}]
+  [@b{--}]
   @var{file}@dots{}
+@c man end
 @end smallexample
+
+@c man begin DESCRIPTION check-abi
 
 The @file{check-abi.sh} script reports any potential ABI conflicts in
 the files specified.  This includes the use of the
@@ -626,28 +694,36 @@ run on files whose names starts with a dash.
 
 @end table
 
+@c man end
+
 @c -----------------------------------------------------------------
 @node Hardening Checks
 @section The hardened.sh script
 
+@c man title hardened  Hardening Checks
+
 @smallexample
+@c man begin SYNOPSIS hardened
 hardened.sh
-  [@option{--help}]
-  [@option{--version}]
-  [@option{--verbose}]
-  [@option{--quiet}]
-  [@option{--ignore-unknown}]
-  [@option{--silent}]
-  [@option{--vulnerable}]
-  [@option{--not-hardened}]
-  [@option{--all}]
-  [@option{--file-type=}@var{auto|lib|exec|obj}]
-  [@option{--skip=}@var{opt|stack|fort|now|relro|pic|operator|clash|cf|cet}]
-  [@option{--readelf=}@file{path}]
-  [@option{--tmpdir=}@file{dir}]
-  [@option{--}]
+  [@b{--help}]
+  [@b{--version}]
+  [@b{--verbose}]
+  [@b{--quiet}]
+  [@b{--ignore-unknown}]
+  [@b{--silent}]
+  [@b{--vulnerable}]
+  [@b{--not-hardened}]
+  [@b{--all}]
+  [@b{--file-type=}@var{auto|lib|exec|obj}]
+  [@b{--skip=}@var{opt|stack|fort|now|relro|pic|operator|clash|cf|cet}]
+  [@b{--readelf=}@file{path}]
+  [@b{--tmpdir=}@file{dir}]
+  [@b{--}]
   @var{file}@dots{}
+@c man end
 @end smallexample
+
+@c man begin DESCRIPTION hardened
 
 The @file{hardened.sh} script reports on the hardening status of the
 specified file(s).  In particular it checks that the whole file was
@@ -774,26 +850,34 @@ run on files whose names starts with a dash.
 
 @end table
 
+@c man end
+
 @c -----------------------------------------------------------------
 @node Checking Archives
 @section The run-on-binaries-in.sh script
 
+@c man title run-on-binries  Checking Archives
+
 @smallexample
+@c man begin SYNOPSIS run-on-binaries
 run-on-binaries-in.sh
-  [@option{--help}]
-  [@option{--version}]
-  [@option{--verbose}]
-  [@option{--quiet}]
-  [@option{--ignore}]
-  [@option{--prefix=}@samp{text}]
-  [@option{--tmpdir=}@file{dir}]
-  [@option{--files-from=}@file{file}]
-  [@option{--skip-list=}@file{file}]
-  [@option{--}]
+  [@b{--help}]
+  [@b{--version}]
+  [@b{--verbose}]
+  [@b{--quiet}]
+  [@b{--ignore}]
+  [@b{--prefix=}@samp{text}]
+  [@b{--tmpdir=}@file{dir}]
+  [@b{--files-from=}@file{file}]
+  [@b{--skip-list=}@file{file}]
+  [@b{--}]
   @file{program}
-  [@option{program-options}]
+  [@b{program-options}]
   @var{file}@dots{}
+@c man end
 @end smallexample
+
+@c man begin DESCRIPTION run-on-binaries
 
 The @file{run-on-binaries-in.sh} script allows other scripts, or
 programs, to be run on the executable files contained inside archives.
@@ -865,6 +949,8 @@ Stops processing of command line options.  This allows the script to
 be run with a program whoes name starts with a dash.
 
 @end table
+
+@c man end
 
 @c -----------------------------------------------------------------
 @node GNU FDL
