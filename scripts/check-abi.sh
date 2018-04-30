@@ -368,7 +368,9 @@ scan_file ()
 	    return
 	fi
     fi
-       
+
+    verbose "NOTES: `cat $tmpfile`"
+
     if [ $ignore_gaps -eq 0 ];
     then
         grep -q -e "Gap in build notes" $tmpfile

@@ -65,13 +65,17 @@ $GCC -fplugin=$PLUGIN \
 # $OBJCOPY --merge-notes abi-test.exe abi-test-merged.exe
 
 # The --ignore-FORTIFY and --ignore-stack-prot options are here to skip the
-# checks that fail because they require a version of readelf that knows how
-# to fully parse the annobin notes and such a version is not in common
-# release (yet).
-# FIXME: Remove these options once readelf has been updated.
+# checks that fail because the startup and end files (Scrti.o, crtn.o) are
+# built without these safeguards, whereas the test files use them.  Similarly
+# the --ignore-ABI option is because these two files are compiled with different
+# ABI settings from normal code.
 #
 # The --ignore-gaps option is there because currently Scrti.o contains some
 # annobin notes, but crti.o dies not.  Thus *any* program built with normal
 # startup code will contain a gap.
-# FIXME: Add assembler support for generating notes.
-$srcdir/../scripts/check-abi.sh --readelf=$READELF --inconsistencies --ignore-FORTIFY --ignore-stack-prot --ignore-gaps abi-test.exe
+# FIXME: Remove once we have the assembler generating notes.
+$srcdir/../scripts/check-abi.sh --readelf=$READELF --inconsistencies \
+				--ignore-FORTIFY --ignore-stack-prot \
+				--ignore-gaps --ignore-ABI \
+				abi-test.exe
+

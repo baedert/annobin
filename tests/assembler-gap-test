@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Copyright (c) 2018 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+
+# Test building an assembler source file without creating a gap in the notes.
+
+rm -f hello.o gap.o hello3.o assembler-gap-test.exe assembler-gas-test.out
+
+GAS=as
+# GAS=/work/builds/binutils/current/x86_64-pc-linux-gnu/gas/as-new 
+GCC=gcc
+READELF=readelf
+
+PLUGIN=../plugin/.libs/annobin.so
+
+$GCC -fplugin=$PLUGIN -c $srcdir/hello.c 
+
+$GAS --generate-missing-build-notes=yes $srcdir/gap.S -o gap.o
+# $GAS --generate-missing-build-notes=no $srcdir/gap.S -o gap.o
+
+$GCC -fplugin=$PLUGIN -c $srcdir/hello3.c
+
+$GCC hello.o gap.o hello3.o -o assembler-gap-test.exe -Wl,--defsym,big_stack=0
+
+# FIXME - we should check that the notes were parsed correctly...
+$READELF --notes --wide assembler-gap-test.exe > /dev/null 2> assembler-gap-test.out
+
+# FAIL if there was a gap in the notes...
+if [ -s assembler-gap-test.out ];
+then
+    exit 1
+fi
+

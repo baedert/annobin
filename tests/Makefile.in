@@ -211,7 +211,14 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-TESTS = compile-test hardening-test hardening-fail-test abi-test missing-notes-test function-sections-test
+TESTS = compile-test \
+      hardening-test \
+      hardening-fail-test \
+      abi-test \
+      missing-notes-test \
+      function-sections-test \
+      assembler-gap-test
+
 XFAIL_TESTS = hardening-fail-test
 all: all-am
 

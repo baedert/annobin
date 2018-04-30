@@ -12,11 +12,10 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so compile-test.exe
+rm -f hello.o hello2.o hello3.o libhello.so missing-notes-test.exe
 
 GCC=gcc
 READELF=readelf
-OBJCOPY=objcopy
 
 PLUGIN=../plugin/.libs/annobin.so
 

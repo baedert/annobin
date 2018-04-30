@@ -141,10 +141,10 @@ Some examples:
   supported by the notes.  The next pair of characters indicate who
   produced the notes and which version of this producer has been
   used.  A 'p' character indicates a compiler plugin.  An 'l'
-  character indicates the linker.  Other characters may be defined in
-  the future.  Multiple producers can contribute to the notes.  Their
-  identifying pair of characters should be appended to the version
-  note.
+  character indicates the linker.  An 'a' character indicates the
+  assembler.  Other characters may be defined in the future.  Multiple
+  producers can contribute to the notes.  Their identifying pair of
+  characters should be appended to the version note.
 
   The description field for the version note should not be empty.
   This note serves as the base address for other open notes that
