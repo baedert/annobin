@@ -712,14 +712,14 @@ check_for_pie_or_pic ()
 	else
 	    if [[ $filetype = lib || ( $filetype = auto && $file == *.so ) ]] ;
 	    then
-		if [[ "x${hard[0]}" -eq "xPIC" || "x${hard[0]}" -eq "xpic" ]] ;
+		if [[ "${hard[0]}" = "PIC" || "${hard[0]}" = "pic" ]] ;
 		then
 		    pass "compiled with -f${hard[0]}"
 		else
 		    fail "compiled with -f${hard[0]}"
 		fi
 	    else
-		if [[ "x${hard[0]}" -eq "xPIE" || "x${hard[0]}" -eq "xpie" ]] ;
+		if [[ "${hard[0]}" = "PIE" || "${hard[0]}" = "pie" ]] ;
 		then
 		    pass "compiled with -f${hard[0]}"
 		else

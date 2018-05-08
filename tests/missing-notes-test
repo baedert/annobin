@@ -27,6 +27,7 @@ $GCC -fplugin=$PLUGIN \
 
 $GCC -O3 \
      -c \
+     -g \
      -fPIC \
  $srcdir/hello2.c 
 

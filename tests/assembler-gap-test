@@ -31,7 +31,7 @@ $GAS --generate-missing-build-notes=yes $srcdir/gap.S -o gap.o
 
 $GCC -fplugin=$PLUGIN -c $srcdir/hello3.c
 
-$GCC hello.o gap.o hello3.o -o assembler-gap-test.exe -Wl,--defsym,big_stack=0
+$GCC -nostartfiles hello.o gap.o hello3.o -o assembler-gap-test.exe -Wl,--defsym,big_stack=0
 
 # FIXME - we should check that the notes were parsed correctly...
 $READELF --notes --wide assembler-gap-test.exe > /dev/null 2> assembler-gap-test.out
@@ -39,6 +39,7 @@ $READELF --notes --wide assembler-gap-test.exe > /dev/null 2> assembler-gap-test
 # FAIL if there was a gap in the notes...
 if [ -s assembler-gap-test.out ];
 then
+    echo "GAP found in notes"
     exit 1
 fi
 
