@@ -260,7 +260,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 plugin_LTLIBRARIES = annobin.la
-AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)' -DOLD_GAS=1
+AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
 annobin_la_SOURCES = annobin.cc
 EXTRA_annobin_la_SOURCES = aarch64.annobin.cc dummy.annobin.cc powerpc.annobin.cc x86_64.annobin.cc

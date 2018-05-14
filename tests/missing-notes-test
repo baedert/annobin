@@ -20,24 +20,24 @@ READELF=readelf
 PLUGIN=../plugin/.libs/annobin.so
 
 $GCC -fplugin=$PLUGIN \
-     -c \
+     -c -g \
      -fPIC \
      -fno-stack-protector \
  $srcdir/hello.c 
 
 $GCC -O3 \
-     -c \
+     -c -g \
      -g \
      -fPIC \
  $srcdir/hello2.c 
 
 $GCC -fplugin=$PLUGIN \
-     -c \
+     -c -g \
      -fPIC \
  $srcdir/hello3.c \
 
 $GCC -fplugin=$PLUGIN \
-    -fPIC \
+    -fPIC -g \
     -shared \
  $srcdir/hello_lib.c \
      -o libhello.so

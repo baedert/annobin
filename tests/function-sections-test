@@ -12,7 +12,9 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so function-section-test.exe
+rm -f hello.o hello2.o hello3.o libhello.so function-sections-test.exe unused_code.o
+
+set +v
 
 GCC=gcc
 READELF=readelf
@@ -24,7 +26,6 @@ $GCC -fplugin=$PLUGIN \
      -fPIC \
      -Wall \
      -O1 \
-     -fplugin-arg-annobin-function-verbose \
      -ffunction-sections \
  $srcdir/hello.c 
 
@@ -38,25 +39,19 @@ $GCC -fplugin=$PLUGIN \
 $GCC -fplugin=$PLUGIN \
      -O2 \
      -c \
-     -fPIE \
-     -g3 \
-     -D_FORTIFY_SOURCE=2 \
+     -fpic \
+     --save-temps \
      -ffunction-sections \
- $srcdir/hello3.c \
+ $srcdir/unused_code.c \
+     -o unused_code.o
 
 $GCC -fplugin=$PLUGIN \
-    -O2 \
-    -fpic \
-    -ffunction-sections \
-    -shared \
- $srcdir/hello_lib.c \
-     -o libhello.so
-
-$GCC -fplugin=$PLUGIN \
-     -L . -pie \
+     -L . \
+     -pie \
      -Wl,-z,now,-z,relro \
      -Wl,--gc-sections -Wl,--print-gc-sections \
- hello.o hello2.o hello3.o -lhello -o function-sections-test.exe
+     -Wl,-Map,fred.map \
+ hello.o hello2.o unused_code.o -o function-sections-test.exe
 
 # FIXME - we should check that the notes were parsed correctly...
 $READELF --notes --wide function-sections-test.exe > /dev/null

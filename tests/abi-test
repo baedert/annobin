@@ -52,7 +52,6 @@ $GCC -fplugin=$PLUGIN \
     -O2 \
     -fpic \
     -fstack-protector \
-    -fplugin-arg-annobin-version \
     -shared \
   $srcdir/hello_lib.c \
      -o libhello.so

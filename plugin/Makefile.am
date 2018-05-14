@@ -5,7 +5,7 @@ plugindir = @plugindir@
 
 plugin_LTLIBRARIES = annobin.la
 
-AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)' -DOLD_GAS=1
+AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
 
 

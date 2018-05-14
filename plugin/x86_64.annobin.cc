@@ -270,5 +270,7 @@ annobin_target_specific_loader_notes (void)
 
   annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
 		       false, NT_GNU_PROPERTY_TYPE_0);
+
+  fprintf (asm_out_file, "\t.popsection\n");
   fflush (asm_out_file);
 }
