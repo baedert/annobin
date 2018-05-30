@@ -52,5 +52,5 @@ $GCC -fplugin=$PLUGIN \
 
 $srcdir/../scripts/hardened.sh  --readelf=$READELF \
   --skip=fort -k=operator --skip=clash --skip=cf -k=cet \
-  --skip=pic --skip=stack \
+  --skip=pic --skip=stack --skip=realign \
   hardening-test.exe
