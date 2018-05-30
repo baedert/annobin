@@ -29,7 +29,7 @@
 #    * Allow arguments to command line options to be separated from the
 #      the option name by a space.  Eg: --readelf foobar
 
-version=3.1
+version=3.2
 
 help ()
 {
@@ -61,6 +61,11 @@ Plus for RHEL-8:
 
    -D_GLIBCXX_ASSERTIONS
    -fstack-clash-protection
+
+Plus for x86 binaries:
+   -mstackrealign
+
+Plus for x86_64 binaries:
    -fcf-protection=full
    -mcet
 
@@ -94,7 +99,8 @@ Usage: $prog {files|options}
   -k=clash    --skip=clash     Skip check for stack clash protection.
   -k=cf       --skip=cf        Skip check for control flow protection.
   -k=cet      --skip-cet       Skip check for control flow enforcement technology.
- [These options stack]
+  -k=realign  --skip-realign   Skip check for stack realignment.
+ [These options accumulate]
   
   -i        --ignore-unknown   Silently skip any file that is not an ELF binary.
 
@@ -205,6 +211,7 @@ init ()
     skip_clash=0
     skip_cf=0
     skip_cet=0
+    skip_realign=0
     
     ignore_unknown=0
     scanner=readelf
@@ -327,6 +334,9 @@ parse_args ()
 		    cet)
 			skip_cet=1;
 			;;
+		    realign)
+			skip_realign=1;
+			;;
 		    *)
 			report "unknown argument to $optname: $sk"
 			;;
@@ -417,6 +427,8 @@ scan_files ()
 scan_file ()
 {
     local file
+    local is_x86_64
+    local is_i686
 
     # Paranoia checks - the user should never encounter these.
     if test "x$1" = "x" ;
@@ -468,7 +480,9 @@ scan_file ()
 	return
     fi
 
-    file $file | grep --silent -e ELF
+    file $file > $tmpfile
+
+    grep --silent -e ELF $tmpfile
     if [ $? != 0 ];
     then
 	if [ $ignore_unknown -eq 0 ];
@@ -477,6 +491,22 @@ scan_file ()
 	    failed=1
 	fi
 	return
+    fi
+
+    grep --silent -e x86-64 $tmpfile
+    if [ $? != 0 ];
+    then
+	is_x86_64=0;
+    else
+	is_x86_64=1;
+    fi
+
+    grep --silent -e 80386 $tmpfile
+    if [ $? != 0 ];
+    then
+	is_i686=0;
+    else
+	is_i686=1;
     fi
 
     $scanner --wide --notes --debug-dump=info --dynamic --segments $file > $tmpfile 2>&1
@@ -552,15 +582,25 @@ scan_file ()
 	check_stack_clash
     fi
 
-    if [ $skip_cf -eq 0 ];
+    if [ $is_i686 -ne 0 ];
     then
-	check_control_flow_protection
+	if [ $skip_realign -eq 0 ];
+	then
+	    check_stack_realign
+	fi
     fi
 
-    # FIXME: This check should only be applied to x86_64 binaries...
-    if [ $skip_cet -eq 0 ];
+    if [ $is_x86_64 -ne 0 ];
     then
-	check_control_flow_enforcement_technology
+	if [ $skip_cf -eq 0 ];
+	then
+	    check_control_flow_protection
+	fi
+
+	if [ $skip_cet -eq 0 ];
+	then
+	    check_control_flow_enforcement_technology
+	fi
     fi
 
     # If we found a vulnerable file then consider the check to have failed.
@@ -809,7 +849,7 @@ check_optimization_level ()
 check_for_bind_now ()
 {
     # Look for the DT_BIND_NOW dynamic tag
-    eval hard='($(grep -e BIND_NOW $tmpfile))'
+    eval hard='($(grep -e NOW $tmpfile))'
 
     verbose "BIND_NOW tags: ${hard[*]}"
 
@@ -959,6 +999,34 @@ check_control_flow_enforcement_technology ()
 		    # FIXME: Tell the user exactly which bits were not enabled.
 		    fail "compiled with CET disabled"
 		fi
+	    fi
+	fi
+    fi
+}
+
+check_stack_realign ()
+{
+    # Turn:
+    #   GA+stack_realign:true          0x00000000	OPEN	    Applies to region from 0 to 0x3a
+    # into:
+    #   true
+    eval 'hard=($(grep -e "stack_realign" $tmpfile | cut -f 2 -d ":" | cut -f 1 -d " " | sort -u))'
+
+    verbose "Stack Realign Info: ${hard[*]}"
+
+    if [ ${#hard[*]} -lt 1 ];
+    then
+	maybe "does not record stack realignment setting"
+    else
+	if [ ${#hard[*]} -gt 1 ];
+	then
+	    fail "some parts built without stack realignment enabled"
+	else
+	    if [ "x${hard[0]}" == "xtrue" ];
+	    then
+		pass "compiled with stack realignment enabled"
+	    else
+		fail "compiled with stack realignment disabled"
 	    fi
 	fi
     fi

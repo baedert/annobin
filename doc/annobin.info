@@ -26,7 +26,7 @@ Annotating Binaries: How Was Your Program Built ?
 This manual describes the ANNOBIN plugin, and how you can use it to
 determine what security features were used when building your binary.
 
-   This manual is for 'annobin' (Annobin) version 5.1.
+   This manual is for 'annobin' (Annobin) version 5.9.
 
    This document is distributed under the terms of the GNU Free
 Documentation License version 1.3.  A copy of the license is included in
@@ -625,7 +625,7 @@ File: annobin.info,  Node: Hardening Checks,  Next: Checking Archives,  Prev: AB
        [-not-hardened]
        [-all]
        [-file-type=AUTO|LIB|EXEC|OBJ]
-       [-skip=OPT|STACK|FORT|NOW|RELRO|PIC|OPERATOR|CLASH|CF|CET]
+       [-skip=OPT|STACK|FORT|NOW|RELRO|PIC|OPERATOR|CLASH|CF|CET|REALIGN]
        [-readelf=path]
        [-tmpdir=dir]
        [-]
@@ -736,10 +736,16 @@ compiled with '-O2' or higher and the '-fstack-protector-strong',
           Disables checks for stack clash protection.
 
      'cf'
-          Disables checks for control flow protections.
+          Disables checks for control flow protection.  Note - these
+          checks are only run on x86_64 binaries.
 
      'cet'
-          Disables checks for control flow enforcement.
+          Disables checks for control flow enforcement.  Note - these
+          checks are only run on x86_64 binaries.
+
+     'realign'
+          Disable checks for stack realignment.  Note - these checks are
+          only run on i686 binaries.
 
 '--readelf=path'
 '-r=path'
@@ -1337,7 +1343,7 @@ Node: Using15621
 Node: Who Built Me16136
 Node: ABI Checking18899
 Node: Hardening Checks21016
-Node: Checking Archives24844
-Node: GNU FDL27272
+Node: Checking Archives25105
+Node: GNU FDL27533
 
 End Tag Table

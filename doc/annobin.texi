@@ -5,9 +5,9 @@
 @setchapternewpage odd
 
 @c man begin INCLUDE
-@set VERSION 5.1
+@set VERSION 5.9
 @set VERSION_PACKAGE (Annobin) 
-@set UPDATED March 2018
+@set UPDATED May 2018
 @c man end
 
 @ifnottex
@@ -715,7 +715,7 @@ hardened.sh
   [@b{--not-hardened}]
   [@b{--all}]
   [@b{--file-type=}@var{auto|lib|exec|obj}]
-  [@b{--skip=}@var{opt|stack|fort|now|relro|pic|operator|clash|cf|cet}]
+  [@b{--skip=}@var{opt|stack|fort|now|relro|pic|operator|clash|cf|cet|realign}]
   [@b{--readelf=}@file{path}]
   [@b{--tmpdir=}@file{dir}]
   [@b{--}]
@@ -834,10 +834,16 @@ Disables checks for @samp{-D_GLIBCXX_ASSERTIONS}.
 Disables checks for stack clash protection.
 
 @item cf
-Disables checks for control flow protections.
+Disables checks for control flow protection.
+Note - these checks are only run on x86_64 binaries.
 
 @item cet
 Disables checks for control flow enforcement.
+Note - these checks are only run on x86_64 binaries.
+
+@item realign
+Disable checks for stack realignment.
+Note - these checks are only run on i686 binaries.
 @end table
 
 @item --readelf=@file{path}

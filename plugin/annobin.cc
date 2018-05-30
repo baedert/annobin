@@ -77,8 +77,8 @@ static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
-static unsigned char  annobin_version = 5; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 5");
+static unsigned char  annobin_version = 6; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 6");
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\

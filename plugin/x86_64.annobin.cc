@@ -36,9 +36,10 @@
 #define GNU_PROPERTY_X86_ISA_1_AVX512DQ      (1U << 16)
 #define GNU_PROPERTY_X86_ISA_1_AVX512BW      (1U << 17)
 
-static unsigned long global_x86_isa = 0;
-static unsigned long min_x86_isa = 0;
-static unsigned long max_x86_isa = 0;
+static unsigned long  global_x86_isa = 0;
+static unsigned long  min_x86_isa = 0;
+static unsigned long  max_x86_isa = 0;
+static int            global_stack_realign = 0;
 
 #ifdef flag_cet
 static int                     global_cet = -1;
@@ -89,6 +90,16 @@ annobin_record_global_target_notes (void)
 			       "numeric: ABI", NULL, NULL, OPEN);
   annobin_inform (1, "Record global isa of %lx", global_x86_isa);
 
+  {
+    global_stack_realign = ix86_force_align_arg_pointer;
+
+    char buffer [128];
+    unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
+    annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
+				NULL, NULL, OPEN);
+    annobin_inform (1, "Record global stack realign setting of %s", global_stack_realign ? "false" : "true");
+  }
+			       
 #ifdef flag_cet
   global_cet = flag_cet;
   global_set_switch = flag_cet_switch;
@@ -114,6 +125,16 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 	min_x86_isa = ix86_isa_flags;
       if ((unsigned long) ix86_isa_flags > max_x86_isa)
 	max_x86_isa = ix86_isa_flags;
+    }
+
+  if (ix86_force_align_arg_pointer != global_stack_realign)
+    {
+      char buffer [128];
+      unsigned len = sprintf (buffer, "GA%cstack_realign", ix86_force_align_arg_pointer ? BOOL_T : BOOL_F);
+      annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
+				  aname, aname_end, FUNC);
+      annobin_inform (1, "Record function specific stack realign setting of %s for %s",
+		      ix86_force_align_arg_pointer ? "false" : "true", aname);
     }
 
 #ifdef flag_cet
