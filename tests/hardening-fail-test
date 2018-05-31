@@ -63,5 +63,5 @@ $GCC -fplugin=$PLUGIN \
 
 # $OBJCOPY --merge-notes hardening-fail-test.exe hardening-fail-test-merged.exe
 
-$srcdir/../scripts/hardened.sh  --readelf=$READELF --all hardening-fail-test.exe
+$srcdir/../scripts/hardened  --readelf=$READELF --all hardening-fail-test.exe
 

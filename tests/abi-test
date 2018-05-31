@@ -73,7 +73,7 @@ $GCC -fplugin=$PLUGIN \
 # annobin notes, but crti.o dies not.  Thus *any* program built with normal
 # startup code will contain a gap.
 # FIXME: Remove once we have the assembler generating notes.
-$srcdir/../scripts/check-abi.sh --readelf=$READELF --inconsistencies \
+$srcdir/../scripts/check-abi  --readelf=$READELF --inconsistencies \
 				--ignore-FORTIFY --ignore-stack-prot \
 				--ignore-gaps --ignore-ABI \
 				abi-test.exe

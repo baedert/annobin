@@ -129,7 +129,7 @@
 .\" ========================================================================
 .\"
 .IX Title "CHECK-ABI 1"
-.TH CHECK-ABI 1 "2018-04-20" "annobin-1" "RPM Development Tools"
+.TH CHECK-ABI 1 "2018-05-31" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -138,7 +138,7 @@
 check\-abi \- ABI Checking
 .SH "SYNOPSIS"
 .IX Header "SYNOPSIS"
-check\-abi.sh
+check-abi
   [\fB\-\-help\fR]
   [\fB\-\-version\fR]
   [\fB\-\-verbose\fR]
@@ -153,7 +153,7 @@ check\-abi.sh
   \fIfile\fR...
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
-The \fIcheck\-abi.sh\fR script reports any potential \s-1ABI\s0 conflicts in
+The \fIcheck-abi\fR script reports any potential \s-1ABI\s0 conflicts in
 the files specified.  This includes the use of the
 \&\fB\-fshort\-enums\fR option, the \fB\-fstack\-protector\fR option
 and the \fB\-D_FORTIFY_SOURCE\fR option.  All of these can affect

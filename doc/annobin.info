@@ -416,18 +416,18 @@ the binary information can be used.  The scripts are:
 
 * Menu:
 
-* Who Built Me::       The built-by.sh script
-* ABI Checking::       The check-abi.sh script
-* Hardening Checks::   The hardened.sh script
-* Checking Archives::  The run-on-binaries-in.sh script
+* Who Built Me::       The built-by script
+* ABI Checking::       The check-abi script
+* Hardening Checks::   The hardened script
+* Checking Archives::  The run-on-binaries-in script
 
 
 File: annobin.info,  Node: Who Built Me,  Next: ABI Checking,  Up: Using
 
-4.1 The built-by.sh script
-==========================
+4.1 The built-by script
+=======================
 
-     built-by.sh
+     built-by
        [-help]
        [-version]
        [-verbose]
@@ -445,8 +445,8 @@ File: annobin.info,  Node: Who Built Me,  Next: ABI Checking,  Up: Using
        [-]
        FILE...
 
-   The 'built-by.sh' script reports the name and version of the tool
-used to build the specified file(s).  This script also demonstrates how
+   The 'built-by' script reports the name and version of the tool used
+to build the specified file(s).  This script also demonstrates how
 information can be extracted from other other locations in the file, not
 just the binary annotation notes.
 
@@ -526,10 +526,10 @@ version of a tool that was built between a range of dates.
 
 File: annobin.info,  Node: ABI Checking,  Next: Hardening Checks,  Prev: Who Built Me,  Up: Using
 
-4.2 The check-abi.sh script
-===========================
+4.2 The check-abi script
+========================
 
-     check-abi.sh
+     check-abi
        [-help]
        [-version]
        [-verbose]
@@ -543,7 +543,7 @@ File: annobin.info,  Node: ABI Checking,  Next: Hardening Checks,  Prev: Who Bui
        [-]
        FILE...
 
-   The 'check-abi.sh' script reports any potential ABI conflicts in the
+   The 'check-abi' script reports any potential ABI conflicts in the
 files specified.  This includes the use of the '-fshort-enums' option,
 the '-fstack-protector' option and the '-D_FORTIFY_SOURCE' option.  All
 of these can affect passing data between functions and hence should be
@@ -611,10 +611,10 @@ used uniformly throughout the binary.
 
 File: annobin.info,  Node: Hardening Checks,  Next: Checking Archives,  Prev: ABI Checking,  Up: Using
 
-4.3 The hardened.sh script
-==========================
+4.3 The hardened script
+=======================
 
-     hardened.sh
+     hardened
        [-help]
        [-version]
        [-verbose]
@@ -631,7 +631,7 @@ File: annobin.info,  Node: Hardening Checks,  Next: Checking Archives,  Prev: AB
        [-]
        FILE...
 
-   The 'hardened.sh' script reports on the hardening status of the
+   The 'hardened' script reports on the hardening status of the
 specified file(s).  In particular it checks that the whole file was
 compiled with '-O2' or higher and the '-fstack-protector-strong',
 '-D_FORTIFY_SOURCE=2', '-Wl,-z,now', '-Wl,-z,relro', '-fPIE',
@@ -758,10 +758,10 @@ compiled with '-O2' or higher and the '-fstack-protector-strong',
 
 File: annobin.info,  Node: Checking Archives,  Prev: Hardening Checks,  Up: Using
 
-4.4 The run-on-binaries-in.sh script
-====================================
+4.4 The run-on-binaries-in script
+=================================
 
-     run-on-binaries-in.sh
+     run-on-binaries-in
        [-help]
        [-version]
        [-verbose]
@@ -776,14 +776,14 @@ File: annobin.info,  Node: Checking Archives,  Prev: Hardening Checks,  Up: Usin
        [program-options]
        FILE...
 
-   The 'run-on-binaries-in.sh' script allows other scripts, or programs,
-to be run on the executable files contained inside archives.  This
-includes 'rpm' files, 'tar' and 'ar' files and compressed files.
+   The 'run-on-binaries-in' script allows other scripts, or programs, to
+be run on the executable files contained inside archives.  This includes
+'rpm' files, 'tar' and 'ar' files and compressed files.
 
    The script does not recurse into directories, but this can be handled
 by the 'find' command, like this:
 
-       find . -type f -exec run-on-binaries-in.sh <script-to-run> {} \;
+       find . -type f -exec run-on-binaries-in <script-to-run> {} \;
 
    The script accepts the following command line options:
 
@@ -1340,10 +1340,10 @@ Node: The CF Encoding13400
 Node: The CET Encoding14470
 Node: The ENUM Encoding15264
 Node: Using15621
-Node: Who Built Me16136
-Node: ABI Checking18899
-Node: Hardening Checks21016
-Node: Checking Archives25105
-Node: GNU FDL27533
+Node: Who Built Me16124
+Node: ABI Checking18875
+Node: Hardening Checks20980
+Node: Checking Archives25057
+Node: GNU FDL27470
 
 End Tag Table

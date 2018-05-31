@@ -129,7 +129,7 @@
 .\" ========================================================================
 .\"
 .IX Title "RUN-ON-BINARIES 1"
-.TH RUN-ON-BINARIES 1 "2018-04-20" "annobin-1" "RPM Development Tools"
+.TH RUN-ON-BINARIES 1 "2018-05-31" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -138,7 +138,7 @@
 annobin \- Annobin
 .SH "SYNOPSIS"
 .IX Header "SYNOPSIS"
-run\-on\-binaries\-in.sh
+run-on-binaries-in
   [\fB\-\-help\fR]
   [\fB\-\-version\fR]
   [\fB\-\-verbose\fR]
@@ -154,7 +154,7 @@ run\-on\-binaries\-in.sh
   \fIfile\fR...
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
-The \fIrun\-on\-binaries\-in.sh\fR script allows other scripts, or
+The \fIrun-on-binaries-in\fR script allows other scripts, or
 programs, to be run on the executable files contained inside archives.
 This includes \fBrpm\fR files, \fBtar\fR and \fBar\fR files and
 compressed files.
@@ -163,7 +163,7 @@ The script does not recurse into directories, but this can be handled
 by the \f(CW\*(C`find\*(C'\fR command, like this:
 .PP
 .Vb 1
-\&          find . \-type f \-exec run\-on\-binaries\-in.sh <script\-to\-run> {} \e;
+\&          find . \-type f \-exec run\-on\-binaries\-in <script\-to\-run> {} \e;
 .Ve
 .PP
 The script accepts the following command line options:

@@ -17,13 +17,13 @@
 
 
 # Usage:
-#   hardened.sh [switches] file(s)
+#   hardened [switches] file(s)
 #
 # This script does not handle directories.  This is deliberate.
 # It is intended that if recursion is needed then it will be
 # invoked from find, like this:
 #
-#   find . -type f -exec hardened.sh {} \;
+#   find . -type f -exec hardened {} \;
 
 # To Do:
 #    * Allow arguments to command line options to be separated from the

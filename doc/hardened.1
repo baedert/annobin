@@ -129,7 +129,7 @@
 .\" ========================================================================
 .\"
 .IX Title "HARDENED 1"
-.TH HARDENED 1 "2018-05-30" "annobin-1" "RPM Development Tools"
+.TH HARDENED 1 "2018-05-31" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -138,7 +138,7 @@
 hardened \- Hardening Checks
 .SH "SYNOPSIS"
 .IX Header "SYNOPSIS"
-hardened.sh
+hardened
   [\fB\-\-help\fR]
   [\fB\-\-version\fR]
   [\fB\-\-verbose\fR]
@@ -156,7 +156,7 @@ hardened.sh
   \fIfile\fR...
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
-The \fIhardened.sh\fR script reports on the hardening status of the
+The \fIhardened\fR script reports on the hardening status of the
 specified file(s).  In particular it checks that the whole file was
 compiled with \fB\-O2\fR or higher and the
 \&\fB\-fstack\-protector\-strong\fR, \fB\-D_FORTIFY_SOURCE=2\fR,

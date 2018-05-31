@@ -22,7 +22,7 @@
 # It is intended that if recursion is needed then it will be
 # invoked from find, like this:
 #
-#   find . -name "*.rpm" -exec run-on-binaries-in.sh <script-to-run> {} \;
+#   find . -name "*.rpm" -exec run-on-binaries-in <script-to-run> {} \;
 
 
 version=1.0
@@ -56,14 +56,14 @@ Usage: $prog {options} program {options-for-the-program} files(s)
 
 Examples:
 
-  $prog hardened.sh foo.rpm
-                              Runs the hardened.sh script on the executable
+  $prog hardened foo.rpm
+                              Runs the hardened script on the executable
                               files inside foo.rpm.
 
-  $prog check-abi.sh -v fred.tar.xz
-                              Runs the check-abi.sh script on the decompressed
+  $prog check-abi -v fred.tar.xz
+                              Runs the check-abi script on the decompressed
                               contents of the fred.tar.xz archive, passing the
-                              -v option to check-abi.sh as it does so.      
+                              -v option to check-abi as it does so.      
 
   $prog -V -f=list.txt readelf -a
                               Runs the readelf program, with the -a option on

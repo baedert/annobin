@@ -22,7 +22,7 @@
 # It is intended that if recursion is needed then it will be
 # invoked from find, like this:
 #
-#   find . -type f -exec built-by.sh {} \;
+#   find . -type f -exec built-by {} \;
 
 version=3.1
 

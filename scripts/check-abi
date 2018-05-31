@@ -16,13 +16,13 @@
 # GNU General Public License for more details.
 #
 # Usage:
-#   check-abi.sh [switches] file(s)
+#   check-abi [switches] file(s)
 #
 # This script does not handle directories.  This is deliberate.
 # It is intended that if recursion is needed then it will be
 # invoked from find, like this:
 #
-#   find . -type f -exec check-abi.sh {} \;
+#   find . -type f -exec check-abi {} \;
 
 version=3.2
 

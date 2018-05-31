@@ -480,21 +480,21 @@ The @command{annobin} package includes some example scripts that
 demonstrate how the binary information can be used.  The scripts are:
 
 @menu
-* Who Built Me::       The built-by.sh script
-* ABI Checking::       The check-abi.sh script
-* Hardening Checks::   The hardened.sh script
-* Checking Archives::  The run-on-binaries-in.sh script
+* Who Built Me::       The built-by script
+* ABI Checking::       The check-abi script
+* Hardening Checks::   The hardened script
+* Checking Archives::  The run-on-binaries-in script
 @end menu
 
 @c -----------------------------------------------------------------
 @node Who Built Me
-@section The built-by.sh script
+@section The built-by script
 
 @c man title built-by Who Built Me
 
 @smallexample
 @c man begin SYNOPSIS built-by
-built-by.sh
+built-by
   [@b{--help}]
   [@b{--version}]
   [@b{--verbose}]
@@ -516,7 +516,7 @@ built-by.sh
 
 @c man begin DESCRIPTION built-by
 
-The @file{built-by.sh} script reports the name and version of the tool
+The @file{built-by} script reports the name and version of the tool
 used to build the specified file(s).  This script also demonstrates
 how information can be extracted from other other locations in the
 file, not just the binary annotation notes.
@@ -600,13 +600,13 @@ run on files whose names starts with a dash.
 
 @c -----------------------------------------------------------------
 @node ABI Checking
-@section The check-abi.sh script
+@section The check-abi script
 
 @c man title check-abi ABI Checking
 
 @smallexample
 @c man begin SYNOPSIS check-abi
-check-abi.sh
+check-abi
   [@b{--help}]
   [@b{--version}]
   [@b{--verbose}]
@@ -624,7 +624,7 @@ check-abi.sh
 
 @c man begin DESCRIPTION check-abi
 
-The @file{check-abi.sh} script reports any potential ABI conflicts in
+The @file{check-abi} script reports any potential ABI conflicts in
 the files specified.  This includes the use of the
 @option{-fshort-enums} option, the @option{-fstack-protector} option
 and the @option{-D_FORTIFY_SOURCE} option.  All of these can affect
@@ -698,13 +698,13 @@ run on files whose names starts with a dash.
 
 @c -----------------------------------------------------------------
 @node Hardening Checks
-@section The hardened.sh script
+@section The hardened script
 
 @c man title hardened  Hardening Checks
 
 @smallexample
 @c man begin SYNOPSIS hardened
-hardened.sh
+hardened
   [@b{--help}]
   [@b{--version}]
   [@b{--verbose}]
@@ -725,7 +725,7 @@ hardened.sh
 
 @c man begin DESCRIPTION hardened
 
-The @file{hardened.sh} script reports on the hardening status of the
+The @file{hardened} script reports on the hardening status of the
 specified file(s).  In particular it checks that the whole file was
 compiled with @option{-O2} or higher and the
 @option{-fstack-protector-strong}, @option{-D_FORTIFY_SOURCE=2},
@@ -860,13 +860,13 @@ run on files whose names starts with a dash.
 
 @c -----------------------------------------------------------------
 @node Checking Archives
-@section The run-on-binaries-in.sh script
+@section The run-on-binaries-in script
 
 @c man title run-on-binries  Checking Archives
 
 @smallexample
 @c man begin SYNOPSIS run-on-binaries
-run-on-binaries-in.sh
+run-on-binaries-in
   [@b{--help}]
   [@b{--version}]
   [@b{--verbose}]
@@ -885,7 +885,7 @@ run-on-binaries-in.sh
 
 @c man begin DESCRIPTION run-on-binaries
 
-The @file{run-on-binaries-in.sh} script allows other scripts, or
+The @file{run-on-binaries-in} script allows other scripts, or
 programs, to be run on the executable files contained inside archives.
 This includes @samp{rpm} files, @samp{tar} and @samp{ar} files and
 compressed files.
@@ -894,7 +894,7 @@ The script does not recurse into directories, but this can be handled
 by the @code{find} command, like this:
 
 @smallexample
-  find . -type f -exec run-on-binaries-in.sh <script-to-run> @{@} \;
+  find . -type f -exec run-on-binaries-in <script-to-run> @{@} \;
 @end smallexample
 
 The script accepts the following command line options:
