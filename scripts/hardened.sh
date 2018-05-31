@@ -57,7 +57,7 @@ Plus for executables (although on RHEL6 these should be omitted due to a kernel 
    -fPIE
    -Wl,-pie
 
-Plus for RHEL-8:
+Plus for Fedora rawhide:
 
    -D_GLIBCXX_ASSERTIONS
    -fstack-clash-protection
