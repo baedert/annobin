@@ -959,13 +959,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   fprintf (asm_out_file, "\t.popsection\n");
 
   /* Create the static notes section.  */
-#ifdef OLD_GAS
-  /* GAS prior to version 2.27 did not support setting section flags via a numeric value.  */
-  fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n",
-	   GNU_BUILD_ATTRS_SECTION_NAME);
-#else
+#if 0
+  /* The SHF_GNU_BUILD_NOTE section flag has not been officially accepted yet.  */
   fprintf (asm_out_file, "\t.pushsection %s, \"%#x\", %%note\n",
 	   GNU_BUILD_ATTRS_SECTION_NAME, SHF_GNU_BUILD_NOTE);
+#else
+  fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n",
+	   GNU_BUILD_ATTRS_SECTION_NAME);
 #endif
   fprintf (asm_out_file, "\t.balign 4\n");
 
