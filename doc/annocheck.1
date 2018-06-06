@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .SH "NAME"
-annocheck \- Analyzing an application's compilation.
+annocheck \- Analysing an application's compilation.
 .SH "SYNOPSIS"
 .IX Header "SYNOPSIS"
 annocheck
@@ -149,7 +149,7 @@ annocheck
   \fIfile\fR...
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
-The \fBannocheck\fR program can analyze programs and report
+The \fBannocheck\fR program can analyse programs and report
 information about them.  It is designed to be modular, with a set of
 self-contained tools providing the checking functionality.
 Currently the following tools are implemented:
@@ -190,7 +190,7 @@ information.
 .ie n .IP """\-\-version""" 4
 .el .IP "\f(CW\-\-version\fR" 4
 .IX Item "--version"
-Report the verion of the tool and then exit.
+Report the version of the tool and then exit.
 .PP
 This tool checks that the specified files were compiled with the
 required security hardening options, as outlined in the elf-policy
@@ -216,7 +216,7 @@ execute permission bits set.
 .ie n .IP """No text relocations""" 4
 .el .IP "\f(CWNo text relocations\fR" 4
 .IX Item "No text relocations"
-The should be no relocations agains executable code.
+The should be no relocations against executable code.
 .ie n .IP """Correct runpaths""" 4
 .el .IP "\f(CWCorrect runpaths\fR" 4
 .IX Item "Correct runpaths"
@@ -272,6 +272,10 @@ Enable the tool if it was previously disabled.
 .el .IP "\f(CW\-\-disable\-hardened\fR" 4
 .IX Item "--disable-hardened"
 Disable the tool.
+.ie n .IP """\-\-ignore\-gaps""" 4
+.el .IP "\f(CW\-\-ignore\-gaps\fR" 4
+.IX Item "--ignore-gaps"
+Ignore gaps in the annobin data.
 .PP
 The \fIbuilt-by\fR tool is disabled by default, but it can be enabled
 by the command line option \fB\-\-enable\-builtby\fR.  The tool
@@ -291,14 +295,14 @@ be returned.
 .ie n .IP """\-\-tool=\fIname\fP""" 4
 .el .IP "\f(CW\-\-tool=\f(CIname\f(CW\fR" 4
 .IX Item "--tool=name"
-This option can be used to restict the output to only those files
+This option can be used to restrict the output to only those files
 which were built by a specific tool.  This can be useful when scanning
 a directory full of files searching for those built by a particular
 compiler.
 .ie n .IP """\-\-nottool=\fINAME\fP""" 4
 .el .IP "\f(CW\-\-nottool=\f(CINAME\f(CW\fR" 4
 .IX Item "--nottool=NAME"
-This option can be used to restict the output to only those files
+This option can be used to restrict the output to only those files
 which were not built by a specific tool.  This can be useful when
 scanning a directory full of files searching for those that were not
 built by a particular compiler.

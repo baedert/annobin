@@ -38,7 +38,7 @@ the section entitled "GNU Free Documentation License".
 * Introduction::    What is Binary Annotation ?
 * Invocation::      How to add Binary Annotations to your application.
 * Examining::       How to examine the information stored in the binary.
-* Annocheck::       Analyzing your applications's compilation.
+* Annocheck::       Analysing your application's compilation.
 * Legacy Scripts::  Other ways to use the information stored in the binary.
 * GNU FDL::         GNU Free Documentation License
 
@@ -62,7 +62,7 @@ was compiled with the '-O2' option except for one special function which
 was compiled with '-O0' instead.
 
    The range information is useful because it allows third parties to
-examine the binary and find out if its construction was consistent.  Ie
+examine the binary and find out if its construction was consistent.  IE
 that there are no gaps in the recorded information, and no special cases
 where a required feature was not active.
 
@@ -227,7 +227,6 @@ the table below.
 * The PIC Encoding::      Encoding Position Independence
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
 * The CF Encoding::       Encoding Control Flow Protection
-* The CET Encoding::      Encoding Control Flow Enforcement Technology
 * The ENUM Encoding::     Encoding the Size of Enumerations
 
 
@@ -339,7 +338,7 @@ stored as a bit field with the bits having the following meanings:
 they can be used in future extensions to the specification.
 
 
-File: annobin.info,  Node: The CF Encoding,  Next: The CET Encoding,  Prev: The GOW Encoding,  Up: Examining
+File: annobin.info,  Node: The CF Encoding,  Next: The ENUM Encoding,  Prev: The GOW Encoding,  Up: Examining
 
 3.5 Encoding Control Flow Protection
 ====================================
@@ -368,35 +367,9 @@ be confused with a NUL-byte to indicate the end of a string), the value
 stored is biased by 1.
 
 
-File: annobin.info,  Node: The CET Encoding,  Next: The ENUM Encoding,  Prev: The CF Encoding,  Up: Examining
+File: annobin.info,  Node: The ENUM Encoding,  Prev: The CF Encoding,  Up: Examining
 
-3.6 Encoding Control Flow Enforcement Technology
-================================================
-
-Records the setting of the Control Flow Enforcement Technology options.
-(These are specific to the x86_64 port of gcc).  The value is a sequence
-of bytes that indicate various different flags:
-
-'byte 0'
-     The setting of the '-mcet' option.  This is either 1 (not set) or 2
-     (set).
-
-'byte 1'
-     The setting of the '-mcet-switch' option.  This is either 1 (not
-     set) or 2 (set).
-
-'byte 2'
-     The setting of the '-mibt' option.  This is either 1 (not set) or 2
-     (set).
-
-'byte 3'
-     The setting of the '-mshstk' option.  This is either 1 (not set) or
-     2 (set).
-
-
-File: annobin.info,  Node: The ENUM Encoding,  Prev: The CET Encoding,  Up: Examining
-
-3.7 Encoding the Size of Enumerations
+3.6 Encoding the Size of Enumerations
 =====================================
 
 Record the value of the '-fshort-enums' option.  Possible values are:
@@ -410,7 +383,7 @@ Record the value of the '-fshort-enums' option.  Possible values are:
 
 File: annobin.info,  Node: Annocheck,  Next: Legacy Scripts,  Prev: Examining,  Up: Top
 
-4 Analyzing an application's compilation.
+4 Analysing an application's compilation.
 *****************************************
 
      annocheck
@@ -423,7 +396,7 @@ File: annobin.info,  Node: Annocheck,  Next: Legacy Scripts,  Prev: Examining,  
        [-prefix=TEXT]
        FILE...
 
-   The 'annocheck' program can analyze programs and report information
+   The 'annocheck' program can analyse programs and report information
 about them.  It is designed to be modular, with a set of self-contained
 tools providing the checking functionality.  Currently the following
 tools are implemented:
@@ -462,7 +435,7 @@ regardless of which tools are enabled.
      information.
 
 '--version'
-     Report the verion of the tool and then exit.
+     Report the version of the tool and then exit.
 
 
 File: annobin.info,  Node: Hardened,  Next: Built-By,  Up: Annocheck
@@ -489,7 +462,7 @@ document.  Currently the tool checks for these features:
      execute permission bits set.
 
 'No text relocations'
-     The should be no relocations agains executable code.
+     The should be no relocations against executable code.
 
 'Correct runpaths'
      The runpath information used to locate shared libraries at runtime
@@ -533,6 +506,9 @@ document.  Currently the tool checks for these features:
 '--disable-hardened'
      Disable the tool.
 
+'--ignore-gaps'
+     Ignore gaps in the annobin data.
+
 
 File: annobin.info,  Node: Built-By,  Prev: Hardened,  Up: Annocheck
 
@@ -554,13 +530,13 @@ behaviour:
      results will be returned.
 
 '--tool=NAME'
-     This option can be used to restict the output to only those files
+     This option can be used to restrict the output to only those files
      which were built by a specific tool.  This can be useful when
      scanning a directory full of files searching for those built by a
      particular compiler.
 
 '--nottool=NAME'
-     This option can be used to restict the output to only those files
+     This option can be used to restrict the output to only those files
      which were not built by a specific tool.  This can be useful when
      scanning a directory full of files searching for those that were
      not built by a particular compiler.
@@ -575,7 +551,7 @@ The 'annobin' package includes some example scripts that demonstrate how
 the binary information can be used.
 
    _NOTE_: These scripts are now redundant, their functionality having
-been sussumed into the 'annocheck' program.  However they are still
+been subsumed into the 'annocheck' program.  However they are still
 useful as examples of how the annobin data can be consumed, so they are
 still included in the annobin sources.
 
@@ -1496,24 +1472,23 @@ their use in free software.
 
 Tag Table:
 Node: Top698
-Node: Introduction1675
-Node: Invocation3758
-Node: Examining7994
-Node: The Version Encoding10467
-Node: The STACK Encoding10858
-Node: The PIC Encoding11456
-Node: The GOW Encoding12084
-Node: The CF Encoding13532
-Node: The CET Encoding14603
-Node: The ENUM Encoding15398
-Node: Annocheck15756
-Node: Hardened17413
-Node: Built-By19554
-Node: Legacy Scripts20804
-Node: Who Built Me21571
-Node: ABI Checking24331
-Node: Hardening Checks26445
-Node: Checking Archives30531
-Node: GNU FDL32953
+Node: Introduction1674
+Node: Invocation3757
+Node: Examining7993
+Node: The Version Encoding10395
+Node: The STACK Encoding10786
+Node: The PIC Encoding11384
+Node: The GOW Encoding12012
+Node: The CF Encoding13460
+Node: The ENUM Encoding14532
+Node: Annocheck14889
+Node: Hardened16547
+Node: Built-By18744
+Node: Legacy Scripts19996
+Node: Who Built Me20763
+Node: ABI Checking23523
+Node: Hardening Checks25637
+Node: Checking Archives29723
+Node: GNU FDL32145
 
 End Tag Table

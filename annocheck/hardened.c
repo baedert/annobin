@@ -20,6 +20,8 @@
 /* Set by the constructor.  */
 static bool disabled = false;
 
+static bool ignore_gaps = false;
+
 /* These are initialised on a per-input-file basis by start().  */
 static bool i686_found;
 static bool x86_found;
@@ -259,12 +261,15 @@ walk_notes (eu_checksec_data *     data,
 
 	      fake_note.start = note_data->prev_end + 1;
 	      fake_note.end   = start;
-	      
-	      /* Note - we ignore gaps at the start and end of the file.  These are
-		 going to be from the crt code which does not need to be chacked.  */
-	      einfo (VERBOSE, "%s: GAP:  (%s) in annobin notes",
-		     data->filename, get_component_name (data, sec, & fake_note, true, prefer_func_name));
-	      gap_detected = true;
+
+	      if (! ignore_gaps)
+		{
+		  /* Note - we ignore gaps at the start and end of the file.  These are
+		     going to be from the crt code which does not need to be chacked.  */
+		  einfo (VERBOSE, "%s: GAP:  (%s ?) in annobin notes",
+			 data->filename, get_component_name (data, sec, & fake_note, true, prefer_func_name));
+		  gap_detected = true;
+		}
 	    }
 
 	  note_data->prev_end = end;
@@ -1015,7 +1020,9 @@ usage (void)
   einfo (INFO, "  Add a machine readable output mode");
   einfo (INFO, "This tool is enabled by default.  This can be changed by:");
   einfo (INFO, "  --disable-hardened  Disables the hardening checker");
-  einfo (INFO, "  --enable-hardened   Reenables the hardening checker");  
+  einfo (INFO, "  --enable-hardened   Reenables the hardening checker");
+  einfo (INFO, "The following option can be used to disable some checks:");
+  einfo (INFO, "  --ignore-gaps       Ignores gaps in the annobin data");
 }
 
 static bool
@@ -1030,6 +1037,12 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
   if (streq (arg, "--disable-hardened"))
     {
       disabled = true;
+      return true;
+    }
+
+  if (streq (arg, "--ignore-gaps"))
+    {
+      ignore_gaps = true;
       return true;
     }
 

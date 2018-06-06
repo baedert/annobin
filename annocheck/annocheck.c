@@ -487,7 +487,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	  seg.phdr = gelf_getphdr (elf, cnt, & mem);
 	  seg.number = cnt;
 
-	  einfo (VERBOSE2, "%s: considering segment %lu", filename, cnt);
+	  einfo (VERBOSE2, "%s: considering segment %lu", filename, (unsigned long) cnt);
 
 	  for (checker = first_seg_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next_seg)
 	    {
@@ -506,7 +506,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 		  ret &= checker->check_seg (& data, & seg);
 		}
 	      else
-		einfo (VERBOSE2, "is not interested in segment %lu", cnt);
+		einfo (VERBOSE2, "is not interested in segment %lu", (unsigned long) cnt);
 
 	      pop_component ();
 	    }
@@ -828,7 +828,7 @@ find_symbol_addr_using_dwarf (eu_checksec_data * data, Dwarf * dwarf, Dwarf_Die 
       Dwarf_Line * line;
       size_t       indx = 1;
 
-      einfo (VERBOSE2, "Scanning %ld lines in the DWARF line table", nlines);
+      einfo (VERBOSE2, "Scanning %ld lines in the DWARF line table", (unsigned long) nlines);
       while ((line = dwarf_onesrcline (lines, indx)) != NULL)
 	{
 	  Dwarf_Addr addr;

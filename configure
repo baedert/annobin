@@ -15987,7 +15987,7 @@ case ${target} in
   powerpc*-*-*)
     target_plugin="powerpc.annobin.lo"
     ;;
-  x86_64-*-*)
+  *86-*-* | x86_64-*-*)
     target_plugin="x86_64.annobin.lo"
     ;;
   *)

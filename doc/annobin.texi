@@ -91,7 +91,7 @@ in the section entitled ``GNU Free Documentation License''.
 * Introduction::    What is Binary Annotation ?
 * Invocation::      How to add Binary Annotations to your application.
 * Examining::       How to examine the information stored in the binary.
-* Annocheck::       Analyzing your applications's compilation.
+* Annocheck::       Analysing your application's compilation.
 * Legacy Scripts::  Other ways to use the information stored in the binary.
 * GNU FDL::         GNU Free Documentation License
 @end menu
@@ -118,7 +118,7 @@ one special function which was compiled with @option{-O0} instead.
 
 The range information is useful because it allows third parties to
 examine the binary and find out if its construction was consistent.
-Ie that there are no gaps in the recorded information, and no special
+IE that there are no gaps in the recorded information, and no special
 cases where a required feature was not active.
 
 The system works by adding a special section to the application
@@ -294,7 +294,6 @@ included in the table below.
 * The PIC Encoding::      Encoding Position Independence
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
 * The CF Encoding::       Encoding Control Flow Protection
-* The CET Encoding::      Encoding Control Flow Enforcement Technology
 * The ENUM Encoding::     Encoding the Size of Enumerations
 @end menu
 
@@ -437,31 +436,6 @@ be confused with a NUL-byte to indicate the end of a string), the
 value stored is biased by 1.
 
 @c -----------------------------------------------------------------
-@node The CET Encoding
-@section Encoding Control Flow Enforcement Technology
-Records the setting of the Control Flow Enforcement Technology
-options.  (These are specific to the x86_64 port of gcc).  The value
-is a sequence of bytes that indicate various different flags:
-
-@table @code
-@item byte 0
-The setting of the @option{-mcet} option.  This is either 1 (not set)
-or 2 (set).
-
-@item byte 1
-The setting of the @option{-mcet-switch} option.  This is either 1
-(not set) or 2 (set).
-
-@item byte 2
-The setting of the @option{-mibt} option.  This is either 1 (not set)
-or 2 (set).
-
-@item byte 3
-The setting of the @option{-mshstk} option.  This is either 1 (not
-set) or 2 (set).
-@end table
-
-@c -----------------------------------------------------------------
 @node The ENUM Encoding
 @section Encoding the Size of Enumerations
 Record the value of the @option{-fshort-enums} option.  Possible
@@ -477,9 +451,9 @@ The @option{-fshort-enums} option has not been enabled.
 
 @c -----------------------------------------------------------------
 @node Annocheck
-@chapter Analyzing an application's compilation.
+@chapter Analysing an application's compilation.
 
-@c man title annocheck Analyzing an application's compilation.
+@c man title annocheck Analysing an application's compilation.
 
 @smallexample
 @c man begin SYNOPSIS annocheck
@@ -497,7 +471,7 @@ annocheck
 
 @c man begin DESCRIPTION annocheck
 
-The @command{annocheck} program can analyze programs and report
+The @command{annocheck} program can analyse programs and report
 information about them.  It is designed to be modular, with a set of
 self-contained tools providing the checking functionality.
 Currently the following tools are implemented:
@@ -538,7 +512,7 @@ Produce informational messages whilst working.  Repeat for more
 information.
 
 @item --version
-Report the verion of the tool and then exit.
+Report the version of the tool and then exit.
 
 @end table
 
@@ -570,7 +544,7 @@ No program segment should have all three of the read, write and
 execute permission bits set.
 
 @item No text relocations
-The should be no relocations agains executable code.
+The should be no relocations against executable code.
 
 @item Correct runpaths
 The runpath information used to locate shared libraries at runtime
@@ -618,6 +592,9 @@ Enable the tool if it was previously disabled.
 
 @item --disable-hardened
 Disable the tool.
+
+@item --ignore-gaps
+Ignore gaps in the annobin data.
 @end table
 
 @c man end
@@ -646,13 +623,13 @@ the @option{--all} option is enabled then all successful results will
 be returned.
 
 @item --tool=@var{name}
-This option can be used to restict the output to only those files
+This option can be used to restrict the output to only those files
 which were built by a specific tool.  This can be useful when scanning
 a directory full of files searching for those built by a particular
 compiler.
 
 @item --nottool=@var{NAME}
-This option can be used to restict the output to only those files
+This option can be used to restrict the output to only those files
 which were not built by a specific tool.  This can be useful when
 scanning a directory full of files searching for those that were not
 built by a particular compiler.
@@ -669,7 +646,7 @@ The @command{annobin} package includes some example scripts that
 demonstrate how the binary information can be used.
 
 @emph{NOTE}: These scripts are now redundant, their functionality
-having been sussumed into the @command{annocheck} program.  However
+having been subsumed into the @command{annocheck} program.  However
 they are still useful as examples of how the annobin data can be
 consumed, so they are still included in the annobin sources.
 
