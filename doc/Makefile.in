@@ -266,7 +266,7 @@ info_TEXINFOS = annobin.texi
 annobin_TEXINFOS = fdl.texi
 
 # Man page creation.
-man_MANS = annobin.1 built-by.1 check-abi.1 hardened.1 run-on-binaries.1
+man_MANS = annobin.1 built-by.1 check-abi.1 hardened.1 run-on-binaries.1 annocheck.1
 MANCONF = -Dman
 TEXI2POD = perl $(srcdir)/texi2pod.pl $(AM_MAKEINFOFLAGS)
 POD2MAN = pod2man --center="RPM Development Tools" --release="annobin-1" --section=1
@@ -750,6 +750,13 @@ annobin.1:	$(srcdir)/$(info_TEXINFOS)
 	-($(POD2MAN) annobin.pod | sed -e '/^.if n .na/d' > $@.T$$$$ && \
 		mv -f $@.T$$$$ $@) || (rm -f $@.T$$$$ && exit 1)
 	rm -f annobin.pod
+
+annocheck.1:	$(srcdir)/$(info_TEXINFOS)
+	touch $@
+	-$(TEXI2POD) $(MANCONF) -Dannocheck < $(srcdir)/$(info_TEXINFOS) > annocheck.pod
+	-($(POD2MAN) annocheck.pod | sed -e '/^.if n .na/d' > $@.T$$$$ && \
+		mv -f $@.T$$$$ $@) || (rm -f $@.T$$$$ && exit 1)
+	rm -f annocheck.pod
 
 built-by.1:	$(srcdir)/$(info_TEXINFOS)
 	touch $@

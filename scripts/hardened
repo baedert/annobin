@@ -25,11 +25,7 @@
 #
 #   find . -type f -exec hardened {} \;
 
-# To Do:
-#    * Allow arguments to command line options to be separated from the
-#      the option name by a space.  Eg: --readelf foobar
-
-version=3.2
+version=3.3
 
 help ()
 {
@@ -110,6 +106,11 @@ Usage: $prog {files|options}
   --                           Stop accumulating options.  Any text that follows this
                                option is assumed to be a file name, even if it starts
                                with a dash.
+The exit code indicates the status:
+  0: No FAIl or MAYBE results found
+  1: The file could not be parsed or at least one FAIL result found
+  2: Some MAYBE results, but no FAIL results
+  3: Some other kind of failure
 __EOM__
   exec 1>&4   # Copy stdout fd back from temporary save fd, #4
 }
@@ -126,7 +127,12 @@ main ()
     then
 	exit 1
     else
-	exit 0
+	if [ $maybe -ne 0 ];
+	then
+	    exit 2
+	else
+	    exit 0
+	fi
     fi
 }
 
@@ -148,7 +154,7 @@ report ()
 ICE ()
 {
     report "Internal error: " ${1+"$@"}
-    exit 1
+    exit 3
 }
 
 verbose ()
@@ -165,8 +171,7 @@ maybe ()
     then
 	report "$file: MAYBE:" ${1+"$@"}
     fi
-
-    vulnerable=1
+    maybe=1
 }
 
 fail ()
@@ -175,8 +180,7 @@ fail ()
     then
 	report "$file: FAIL:" ${1+"$@"}
     fi
-
-    vulnerable=1
+    failed=1
 }
 
 pass ()
@@ -196,6 +200,7 @@ init ()
     num_files=0;
 
     failed=0
+    maybe=0
     report=1 # Quad-state, 0=> report nothing, 1=> report known vulnerable, 2=> report not proven hardened, 3=> report all
     verb=0
     quiet=0
@@ -454,8 +459,7 @@ scan_file ()
     then
 	if [ $ignore_unknown -eq 0 ];
 	then
-	    report "$file: file not found"
-	    failed=1
+	    fail "file not found"
 	fi
 	return
     fi
@@ -464,8 +468,7 @@ scan_file ()
     then
 	if [ $ignore_unknown -eq 0 ];
 	then
-	    report "$file: not an ordinary file"
-	    failed=1
+	    fail "not an ordinary file"
 	fi
 	return
     fi
@@ -474,8 +477,7 @@ scan_file ()
     then
 	if [ $ignore_unknown -eq 0 ];
 	then
-	    report "$file: not readable"
-	    failed=1
+	    fail "not readable"
 	fi
 	return
     fi
@@ -487,8 +489,7 @@ scan_file ()
     then
 	if [ $ignore_unknown -eq 0 ];
 	then
-	    report "$file: not an ELF format file"
-	    failed=1
+	    fail "not an ELF format file"
 	fi
 	return
     fi
@@ -512,8 +513,7 @@ scan_file ()
     $scanner --wide --notes --debug-dump=info --dynamic --segments $file > $tmpfile 2>&1
     if [ $? != 0 ];
     then
-	report "scanner '$scanner' failed - see $tmpfile"
-	failed=1
+	fail "scanner '$scanner' failed - see $tmpfile"
 	# Leave the tmpfile intact so that it can be examined by the user.
 	return
     fi
@@ -536,7 +536,6 @@ scan_file ()
     fi       
 
     local -a hard
-    local vulnerable=0
 
     if [ $skip_opt -eq 0 ];
     then
@@ -603,12 +602,6 @@ scan_file ()
 	fi
     fi
 
-    # If we found a vulnerable file then consider the check to have failed.
-    if [ $vulnerable -gt 0 ];
-    then
-	failed=1
-    fi
-    
     rm -f $tmpfile
 }
 

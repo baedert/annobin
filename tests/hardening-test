@@ -20,20 +20,20 @@ OBJCOPY=objcopy
 
 PLUGIN=../plugin/.libs/annobin.so
 
-OPTS="-O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong"
+OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 
-$GCC -fplugin=$PLUGIN -c -g $OPTS  $srcdir/hello.c 
+$GCC -fplugin=$PLUGIN -g $OPTS  $srcdir/hello_hard.c 
 
-$GCC -fplugin=$PLUGIN -O3 -c $OPTS $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN -O3 $OPTS $srcdir/hello2.c 
 
-$GCC -fplugin=$PLUGIN -c -g3 $OPTS $srcdir/hello3.c
+$GCC -fplugin=$PLUGIN -g3 $OPTS $srcdir/hello3.c
 
 $GCC -fplugin=$PLUGIN $OPTS -shared $srcdir/hello_lib.c -o libhello.so
 
 $GCC -fplugin=$PLUGIN \
      -L . -pie \
      -Wl,-z,now,-z,relro \
- hello.o hello2.o hello3.o -lhello -o hardening-test.exe
+ hello_hard.o hello2.o hello3.o -lhello -o hardening-test.exe
 
 # $OBJCOPY --merge-notes hardening-test.exe hardening-test-merged.exe
 
@@ -50,7 +50,10 @@ $GCC -fplugin=$PLUGIN \
 # is built with -fPIC and -fno-stack-protection.  /usr/lib64/Scrti.o is built
 # with -fpie which makes the pic test impossible.
 
-$srcdir/../scripts/hardened  --readelf=$READELF \
-  --skip=fort -k=operator --skip=clash --skip=cf -k=cet \
-  --skip=pic --skip=stack --skip=realign \
-  hardening-test.exe
+# $srcdir/../scripts/hardened  --readelf=$READELF \
+#   --skip=fort -k=operator --skip=clash --skip=cf -k=cet \
+#   --skip=pic --skip=stack --skip=realign \
+#   hardening-test.exe
+
+../annocheck/annocheck hardening-test.exe
+

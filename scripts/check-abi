@@ -24,7 +24,7 @@
 #
 #   find . -type f -exec check-abi {} \;
 
-version=3.2
+version=3.3
 
 help ()
 {
@@ -64,6 +64,11 @@ Usage: $prog {files|options}
 
   --                           Stop accumulating options.
 
+The exit code indicates the status:
+  0: No FAIl or MAYBE results found
+  1: The file could not be parsed or at least one FAIL result found
+  2: Some MAYBE results, but no FAIL results
+  3: Some other kind of failure
 __EOM__
   exec 1>&4   # Copy stdout fd back from temporary save fd, #4
 }
@@ -80,7 +85,12 @@ main ()
     then
 	exit 1
     else
-	exit 0
+	if [ $maybe -ne 0 ];
+	then
+	    exit 2
+	else
+	    exit 0
+	fi
     fi
 }
 
@@ -102,7 +112,7 @@ report ()
 fail ()
 {
     report "Internal error: " ${1+"$@"}
-    exit 1
+    exit 3
 }
 
 verbose ()
@@ -122,6 +132,7 @@ init ()
     num_files=0;
 
     failed=0
+    maybe=0
     silent=0
     verb=0
     quiet=0
@@ -400,7 +411,8 @@ scan_file ()
 	then
 	    if [[ $ignore_abi -eq 0 && $inconsistencies -eq 0 ]];
 	    then
-		report "$file: does not have an ABI note"
+		report "$file: MAYBE: does not have an ABI note"
+		maybe=1
 	    fi
 	else
 	    if [ ${#abis[*]} -gt 1 ];
@@ -418,7 +430,7 @@ scan_file ()
 		    if test "${abis[i]}" != "${abis[i-1]}" ;
 		    then
 			# FIXME: Add code to differentiate between functions which have changed ABI and files ?
-			report "$file: differing ABI values detected: ${abis[i]} vs ${abis[i-1]}"
+			report "$file: FAIL: differing ABI values detected: ${abis[i]} vs ${abis[i-1]}"
 			failed=1
 			mismatch=1
 		    fi
@@ -452,7 +464,8 @@ scan_file ()
 	then
 	    if [[ $ignore_enum -eq 0 && $inconsistencies -eq 0 ]];
 	    then
-		report "$file: does not record enum size"
+		report "$file: MAYBE: does not record enum size"
+		maybe=1
 	    fi
 	else
 	    if [ ${#abis[*]} -gt 1 ];
@@ -468,7 +481,7 @@ scan_file ()
 		do
 		    if test "${abis[i]}" != "${abis[i-1]}" ;
 		    then
-			report "$file: differing -fshort-enums detected: ${abis[i]} vs ${abis[i-1]}"
+			report "$file: FAIL: differing -fshort-enums detected: ${abis[i]} vs ${abis[i-1]}"
 			failed=1
 			mismatch=1
 		    fi
@@ -500,7 +513,8 @@ scan_file ()
 	then
 	    if [[ $ignore_fortify -eq 0 && $inconsistencies -eq 0 ]];
 	    then
-		report "$file: does not record _FORTIFY_SOURCE level"
+		report "$file: MAYBE: does not record _FORTIFY_SOURCE level"
+		maybe=1
 	    fi
 	else
 	    if [ ${#abis[*]} -gt 1 ];
@@ -516,7 +530,7 @@ scan_file ()
 		do
 		    if test "${abis[i]}" != "${abis[i-1]}" ;
 		    then
-			report "$file: differing FORTIFY SOURCE levels: ${abis[i]} vs ${abis[i-1]}"
+			report "$file: FAIL: differing FORTIFY SOURCE levels: ${abis[i]} vs ${abis[i-1]}"
 			failed=1;
 			mismatch=1;
 		    fi
@@ -546,7 +560,8 @@ scan_file ()
 	then
 	    if [[ $ignore_stack_prot -eq 0 && $inconsistencies -eq 0 ]];
 	    then
-		report "$file: does not record -fstack-protect status"
+		report "$file: MAYBE: does not record -fstack-protect status"
+		maybe=1
 	    fi
 	else
 	    if [ ${#abis[*]} -eq 1 ];
@@ -564,7 +579,7 @@ scan_file ()
 		do
 		    if test "${abis[i]}" != "${abis[i-1]}" ;
 		    then
-			report "$file: differing stack protection levels: ${abis[i]} vs ${abis[i-1]}"
+			report "$file: FAIL: differing stack protection levels: ${abis[i]} vs ${abis[i-1]}"
 			failed=1;
 			mismatch=1;
 		    fi

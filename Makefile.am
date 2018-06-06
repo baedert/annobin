@@ -6,6 +6,6 @@
 
 ## Process this file with automake to produce Makefile.in.
 
-SUBDIRS = plugin scripts doc tests
+SUBDIRS = plugin scripts doc tests annocheck
 dist_doc_DATA = LICENSE COPYING3
 ACLOCAL_AMFLAGS = -I config

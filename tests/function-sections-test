@@ -44,6 +44,12 @@ $GCC -fplugin=$PLUGIN \
      -ffunction-sections \
  $srcdir/unused_code.c \
      -o unused_code.o
+if [ $? != 0 ];
+then
+    echo "$GCC does not support gexplicit stack protection.  Skipping test."
+    exit 0
+fi
+
 
 $GCC -fplugin=$PLUGIN \
      -L . \

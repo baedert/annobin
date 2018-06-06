@@ -25,7 +25,6 @@ READELF=readelf
 PLUGIN=../plugin/.libs/annobin.so
 
 $GAS --generate-missing-build-notes=yes $srcdir/gap.S -o gap.o
-# $GAS --generate-missing-build-notes=no $srcdir/gap.S -o gap.o
 if [ $? != 0 ];
 then
     echo "Assembler does not support generating build notes.  Skipping test."

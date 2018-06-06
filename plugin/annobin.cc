@@ -391,6 +391,10 @@ annobin_output_note (const char * name,
   ++ annobin_note_count;
 }
 
+/* Fills in the DESC1, DESC2 and DESCSZ parameters for a call to annobin_output_note.  */
+#define DESC_PARAMETERS(DESC1, DESC2) \
+  DESC1, DESC2, (DESC1) == NULL ? 0 : (DESC2 == NULL) ? (annobin_is_64bit ? 8 : 4) : (annobin_is_64bit ? 16 : 8)
+
 void
 annobin_output_static_note (const char * buffer,
 			    unsigned     buffer_len,
@@ -401,9 +405,7 @@ annobin_output_static_note (const char * buffer,
 			    unsigned     note_type)
 {
   annobin_output_note (buffer, buffer_len, name_is_string, name_description,
-		       start, end,
-		       start == NULL ? 0 : (annobin_is_64bit ? (end == NULL ? 8 : 16) : (end == NULL ? 4: 8)),
-		       true, note_type);
+		       DESC_PARAMETERS (start, end), true, note_type);
 }
 
 void
@@ -610,8 +612,7 @@ record_GOW_settings (unsigned int gow, bool local, const char * cname, const cha
     {
       annobin_inform (1, "Record a change in -g/-O/-Wall status for %s", cname);
       annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			   aname, aname_end, annobin_is_64bit ? 16 : 8, true,
-			   FUNC);
+			   DESC_PARAMETERS (aname, aname_end), true, FUNC);
     }
   else
     {
@@ -848,7 +849,7 @@ record_glibcxx_assertions (bool on)
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS", on ? BOOL_T : BOOL_F);
 
-  annobin_output_note (buffer, len + 1, false, "_GLIBCXX_ASSERTIONS defined",
+  annobin_output_note (buffer, len + 1, false, on ? "_GLIBCXX_ASSERTIONS defined" : "_GLIBCXX_ASSERTIONS not defined",
 		       NULL, NULL, 0, false, OPEN);
   annobin_inform (1, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
 }
@@ -1000,9 +1001,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   record_cf_protection_note (NULL, NULL, OPEN);
 #endif
 
-  /* Look for -D _FORTIFY_SOURCE=<n> on the original gcc command line.
-     Scan backwards so that we record the last version of the option,
-     should multiple versions be set.  */
+  /* Look for -D _FORTIFY_SOURCE=<n> and -D_GLIBCXX_ASSERTIONS on the
+     original gcc command line.  Scan backwards so that we record the
+     last version of the option, should multiple versions be set.  */
   bool fortify_level_recorded = false;
   bool glibcxx_assertions_recorded = false;
 
@@ -1012,6 +1013,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	{
 	  if (save_decoded_options[i].arg == NULL)
 	    continue;
+
+	  annobin_inform (2, "decoded arg %s", save_decoded_options[i].arg);
 
 	  if (strncmp (save_decoded_options[i].arg, "_FORTIFY_SOURCE=", strlen ("_FORTIFY_SOURCE=")) == 0)
 	    {

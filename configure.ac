@@ -3,7 +3,7 @@
 # license   : GNU GPL v3; see accompanying LICENSE file.
 
 AC_PREREQ(2.64)
-AC_INIT([Binary Annotations], 3.1,,[annobin-plugin])
+AC_INIT([Binary Annotations], 6.1,,[annobin-plugin])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_SRCDIR([plugin/annobin.h])
 
@@ -121,6 +121,6 @@ AC_SUBST(target_noncanonical)
 AC_TYPE_INT64_T
 AC_TYPE_UINT64_T
 AC_HEADER_SYS_WAIT
-AC_CONFIG_FILES(scripts/Makefile plugin/Makefile doc/Makefile Makefile tests/Makefile)
+AC_CONFIG_FILES(scripts/Makefile plugin/Makefile doc/Makefile Makefile tests/Makefile annocheck/Makefile)
 AC_CONFIG_HEADERS(plugin/config.h)
 AC_OUTPUT
