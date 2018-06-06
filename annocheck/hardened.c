@@ -336,7 +336,7 @@ walk_notes (eu_checksec_data *     data,
 	      /* FIXME: This assumes that the tool string looks like: "gcc 7.x.x......"  */
 	      unsigned long version = strtoul (gcc + 4, NULL, 10);
 
-	      einfo (VERBOSE, "%s: (%s) built-by gcc version %u",
+	      einfo (VERBOSE2, "%s: (%s) built-by gcc version %lu",
 		     data->filename,
 		     get_component_name (data, sec, note_data, false, prefer_func_name),
 		     version);
@@ -374,7 +374,8 @@ walk_notes (eu_checksec_data *     data,
 
       /* We know that __libc_csu_init cannot be compiled with stack protection
 	 enabled because it is part of glibc's start up code.  So do not complain.  */
-      if (streq (get_component_name (data, sec, note_data, false, false), "__libc_csu_init"))
+      if (value == 0
+	  && streq (get_component_name (data, sec, note_data, false, false), "__libc_csu_init"))
 	break;
       
       switch (value)
@@ -1020,8 +1021,6 @@ usage (void)
 static bool
 process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
-  const char * parameter;
-
   if (streq (arg, "--enable-hardened"))
     {
       disabled = false;

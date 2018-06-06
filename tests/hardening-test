@@ -20,9 +20,19 @@ OBJCOPY=objcopy
 
 PLUGIN=../plugin/.libs/annobin.so
 
-OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
+OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection -fcf-protection"
 
 $GCC -fplugin=$PLUGIN -g $OPTS  $srcdir/hello_hard.c 
+if [ $? != 0 ];
+then
+    echo "Compiler might not support -fcf-protection, retrying without it"
+    OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
+    $GCC -fplugin=$PLUGIN -g $OPTS  $srcdir/hello_hard.c 
+    if [ $? != 0 ];
+    then
+	exit 0
+    fi
+fi
 
 $GCC -fplugin=$PLUGIN -O3 $OPTS $srcdir/hello2.c 
 
@@ -30,7 +40,7 @@ $GCC -fplugin=$PLUGIN -g3 $OPTS $srcdir/hello3.c
 
 $GCC -fplugin=$PLUGIN $OPTS -shared $srcdir/hello_lib.c -o libhello.so
 
-$GCC -fplugin=$PLUGIN \
+$GCC -fplugin=$PLUGIN -nostartfiles -e 0 \
      -L . -pie \
      -Wl,-z,now,-z,relro \
  hello_hard.o hello2.o hello3.o -lhello -o hardening-test.exe

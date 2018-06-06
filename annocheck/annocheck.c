@@ -559,7 +559,7 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
       build_id_len --;
       while (build_id_len --)
 	n += sprintf (n, "%02x", *d++);
-      n += sprintf (n, suffix);
+      n += sprintf (n, "%s", suffix);
 
       einfo (VERBOSE, "%s: Look for build-id based debug info file: %s",
 	     data->filename, debugfile);

@@ -35,7 +35,7 @@ $GCC -fplugin=$PLUGIN -c $srcdir/hello.c
 
 $GCC -fplugin=$PLUGIN -c $srcdir/hello3.c
 
-$GCC -nostartfiles hello.o gap.o hello3.o -o assembler-gap-test.exe -Wl,--defsym,big_stack=0
+$GCC -nostartfiles -e 0 hello.o gap.o hello3.o -o assembler-gap-test.exe -Wl,--defsym,big_stack=0
 
 # FIXME - we should check that the notes were parsed correctly...
 $READELF --notes --wide assembler-gap-test.exe > /dev/null 2> assembler-gap-test.out
