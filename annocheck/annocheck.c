@@ -86,17 +86,14 @@ einfo (einfo_type type, const char * format, ...)
       break;
     case VERBOSE2:
     case VERBOSE:
-      //pref = "Verbose";
       file   = stdout;
       res    = true;
       break;
     case INFO:
-      //pref = "Info";
       file   = stdout;
       res    = true;
       break;
     case PARTIAL:
-      // pref = "";
       file   = stdout;
       res    = true;
       break;
