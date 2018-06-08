@@ -473,11 +473,11 @@ run_checkers (const char * filename, int fd, Elf * elf)
 
   if (first_seg_checker != NULL)
     {
-      size_t phnum;
+      size_t phnum, cnt;
 
       elf_getphdrnum (elf, & phnum);
 
-      for (size_t cnt = 0; cnt < phnum; ++cnt)
+      for (cnt = 0; cnt < phnum; ++cnt)
 	{
 	  GElf_Phdr   mem;
 	  eu_checksec_segment seg;
