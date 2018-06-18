@@ -20,6 +20,7 @@
 /* Set by the constructor.  */
 static bool disabled = false;
 
+/* Can be changed by a command line option.  */
 static bool ignore_gaps = false;
 
 /* These are initialised on a per-input-file basis by start().  */
@@ -27,60 +28,111 @@ static bool i686_found;
 static bool x86_found;
 static bool arm_found;
 static bool debuginfo_file;
-
-static bool bind_now_found;
-static bool dynamic_segment_found;
-static bool gnu_relro_found;
 static bool et_exec_found;
-static bool gnu_stack_found;
-static bool rwx_seg_found;
-static bool textrel_found;
-static bool bad_run_path_found;
-static bool gap_detected;
-static bool thread_cancellation;
-static bool writable_got_relocations;
-static int  stack_realign;
-static int  pic_level;
-static int  stack_protection;
-static int  fortify_level;
-static int  final_fortify_level;
-static int  optimization_level;
-static int  glibcxx_assertions;
-static int  stack_clash_protection;
-static int  cf_protection;
 static int  num_fails;
 static int  num_maybes;
 static int  gcc_version;
+static bool gap_detected;
 
-#define UNKNOWN -1
-#define YES      1
-#define NO       0
-#define BOTH    -2
+/* Possible results for a test.
+   RESULT_UNKNOWN is special because it is also used when parsing a note
+   value.  That is why it is negative.
+   Also RESULT_PASS is the last entry because when there are multiple
+   possible results for a test we store the lowest result in the result value.  */
+enum test_result
+{
+  RESULT_ICE = -2,
+  RESULT_UNKNOWN = -1,
+  RESULT_FAIL,
+  RESULT_MAYBE,
+  RESULT_PASS
+};
+
+typedef struct test
+{
+  bool	            enabled;
+  enum test_result  result;
+  const char *      name;
+  void (*           show_result)(eu_checksec_data *, enum test_result);
+} test;
+
+enum test_index
+{
+  TEST_BIND_NOW,
+  TEST_CF_PROTECTION,
+  TEST_DYNAMIC_SEGMENT,
+  TEST_FORTIFY,
+  TEST_GLIBCXX_ASSERTIONS,
+  TEST_GNU_RELRO,
+  TEST_GNU_STACK,
+  TEST_OPTIMIZATION,
+  TEST_PIC,
+  TEST_RUN_PATH,
+  TEST_RWX_SEG,
+  TEST_STACK_CLASH,
+  TEST_STACK_PROT,
+  TEST_STACK_REALIGN,
+  TEST_TEXTREL,
+  TEST_THREADS,
+  TEST_WRITEABLE_GOT,
+  
+  TEST_MAX
+};
+
+static void show_bind_now_result (eu_checksec_data *, enum test_result);
+static void show_cf_protection_result (eu_checksec_data *, enum test_result);
+static void show_dynamic_segment_result (eu_checksec_data *, enum test_result);
+static void show_fortify_result (eu_checksec_data *, enum test_result);
+static void show_glibcxx_assertions_result (eu_checksec_data *, enum test_result);
+static void show_gnu_relro_result (eu_checksec_data *, enum test_result);
+static void show_gnu_stack_result (eu_checksec_data *, enum test_result);
+static void show_optimization_result (eu_checksec_data *, enum test_result);
+static void show_pic_result (eu_checksec_data *, enum test_result);
+static void show_run_path_result (eu_checksec_data *, enum test_result);
+static void show_rwx_seg_result (eu_checksec_data *, enum test_result);
+static void show_stack_clash_result (eu_checksec_data *, enum test_result);
+static void show_stack_prot_result (eu_checksec_data *, enum test_result);
+static void show_stack_realign_result (eu_checksec_data *, enum test_result);
+static void show_textrel_result (eu_checksec_data *, enum test_result);
+static void show_threads_result (eu_checksec_data *, enum test_result);
+static void show_writeable_got_result (eu_checksec_data *, enum test_result);
+
+/* Array of tests to run.  Default to enabling them all.
+   The result field is initialised in the start() function.  */
+static test tests [TEST_MAX] =
+{
+  [TEST_BIND_NOW]           = { true, 0, "bind-now", show_bind_now_result },
+  [TEST_CF_PROTECTION]      = { true, 0, "cf-protection", show_cf_protection_result },
+  [TEST_DYNAMIC_SEGMENT]    = { true, 0, "dynamic-segment", show_dynamic_segment_result },
+  [TEST_FORTIFY]            = { true, 0, "textrel", show_fortify_result },
+  [TEST_GLIBCXX_ASSERTIONS] = { true, 0, "glibcxx-assertions", show_glibcxx_assertions_result },
+  [TEST_GNU_RELRO]          = { true, 0, "gnu-relro", show_gnu_relro_result },
+  [TEST_GNU_STACK]          = { true, 0, "gnu-stack", show_gnu_stack_result },
+  [TEST_OPTIMIZATION]       = { true, 0, "optimization", show_optimization_result },
+  [TEST_PIC]                = { true, 0, "pic", show_pic_result },
+  [TEST_RUN_PATH]           = { true, 0, "run-path", show_run_path_result },
+  [TEST_RWX_SEG]            = { true, 0, "rwx-seg", show_rwx_seg_result },
+  [TEST_STACK_CLASH]        = { true, 0, "textrel", show_stack_clash_result },
+  [TEST_STACK_PROT]         = { true, 0, "stack-prot", show_stack_prot_result },
+  [TEST_STACK_REALIGN]      = { true, 0, "stack-realign", show_stack_realign_result },
+  [TEST_TEXTREL]            = { true, 0, "textrel", show_textrel_result },
+  [TEST_THREADS]            = { true, 0, "threads", show_threads_result },
+  [TEST_WRITEABLE_GOT]      = { true, 0, "writeable-got", show_writeable_got_result },
+};
+
 
 static void
 start (eu_checksec_data * data)
 {
-  debuginfo_file = false;
-  bind_now_found = false;
-  dynamic_segment_found = false;
-  gnu_relro_found = false;
-  gnu_stack_found = false;
-  rwx_seg_found = false;
-  textrel_found = false;
-  bad_run_path_found = false;
-  gap_detected = false;
-  thread_cancellation = true;
-  writable_got_relocations = false;
+  /* (Re) Set the results for the tests.  */
+  int i;
+  for (i = 0; i < TEST_MAX; i++)
+    tests [i].result = RESULT_UNKNOWN;
 
-  pic_level = UNKNOWN;
-  cf_protection = UNKNOWN;
-  stack_clash_protection = UNKNOWN;
-  stack_protection = UNKNOWN;
-  final_fortify_level = fortify_level = UNKNOWN;
-  optimization_level = UNKNOWN;
-  glibcxx_assertions = UNKNOWN;
-  stack_realign = UNKNOWN;
-  gcc_version = UNKNOWN;
+  /* Initialise other per-file variables.  */
+  debuginfo_file = false;
+  gap_detected = false;
+  gcc_version = RESULT_UNKNOWN;
 
   num_fails = 0;
   num_maybes = 0;
@@ -130,8 +182,12 @@ interesting_sec (eu_checksec_data *     data,
       
   /* If the file has a stack section then check its permissions.  */
   if (streq (sec->secname, ".stack"))
-    if ((sec->shdr.sh_flags & (SHF_WRITE | SHF_EXECINSTR)) == SHF_WRITE)
-      gnu_stack_found = true;
+    {
+      if ((sec->shdr.sh_flags & (SHF_WRITE | SHF_EXECINSTR)) == SHF_WRITE)
+	tests[TEST_GNU_STACK].result = RESULT_PASS;
+      else
+	tests[TEST_GNU_STACK].result = RESULT_FAIL;
+    }
 
   /* Note the permissions on GOT/PLT relocation sections.  */
   if (streq  (sec->secname, ".rel.got")
@@ -140,7 +196,7 @@ interesting_sec (eu_checksec_data *     data,
       || streq  (sec->secname, ".rela.plt"))
     {
       if (sec->shdr.sh_flags & SHF_WRITE)
-	writable_got_relocations = true;
+	tests[TEST_WRITEABLE_GOT].result = RESULT_FAIL;
     }
 
   return sec->shdr.sh_type == SHT_DYNAMIC
@@ -294,7 +350,7 @@ walk_notes (eu_checksec_data *     data,
     pos += strlen (namedata + pos) + 1;
 
   const char *  string = namedata + pos;
-  uint          value = UNKNOWN;
+  uint          value = RESULT_UNKNOWN;
 
   switch (attr_type)
     { 
@@ -330,7 +386,7 @@ walk_notes (eu_checksec_data *     data,
   switch (* attr)
     {
     case GNU_BUILD_ATTRIBUTE_TOOL:
-      if (value != UNKNOWN)
+      if (value != RESULT_UNKNOWN)
 	einfo (VERBOSE, "ICE: The tool note should have a string attribute");
       else
 	{
@@ -346,7 +402,7 @@ walk_notes (eu_checksec_data *     data,
 		     get_component_name (data, sec, note_data, false, prefer_func_name),
 		     version);
 
-	      if (gcc_version == UNKNOWN)
+	      if (gcc_version == RESULT_UNKNOWN)
 		gcc_version = version;
 	      else if (gcc_version != version)
 		{
@@ -360,21 +416,39 @@ walk_notes (eu_checksec_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_PIC:
-      if (value == UNKNOWN)
-	return false;
-      if (pic_level == UNKNOWN)
-	pic_level = value;
-      else if (pic_level != value)
+      /* Convert the pic value into a pass/fail result.  */
+      switch (value)
 	{
-	  einfo (VERBOSE, "%s: mayb: (%s): Compiled with a different -fPIC/-fPIE setting",
-		 data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
-	  /* Remember the lowest PIC level.  */
-	  pic_level = value < pic_level ? value : pic_level;
+	case RESULT_UNKNOWN:
+	  return false;
+	case 0:
+	  value = RESULT_FAIL;
+	  break;
+	case 1:
+	case 2:
+	  /* Compiled wth -fpic not -fpie.  */
+	  value = et_exec_found ? RESULT_FAIL : RESULT_PASS;
+	  if (et_exec_found)
+	    einfo (VERBOSE, "%s: Warning: executable compiled with -fPIC rather than -fPIE",
+		   data->filename);
+	  break;
+	case 3:
+	case 4:
+	  value = RESULT_PASS;
+	  break;
+	default:
+	  value = RESULT_ICE;
+	  break;
 	}
+
+      if (tests[TEST_PIC].result == RESULT_UNKNOWN)
+	tests[TEST_PIC].result = value;
+      else if (value < tests[TEST_PIC].result)
+	tests[TEST_PIC].result = value;
       break;
 
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
-      if (value == UNKNOWN)
+      if (value == RESULT_UNKNOWN)
 	return false;
 
       /* We know that __libc_csu_init cannot be compiled with stack protection
@@ -382,122 +456,119 @@ walk_notes (eu_checksec_data *     data,
       if (value == 0
 	  && streq (get_component_name (data, sec, note_data, false, false), "__libc_csu_init"))
 	break;
-      
+
       switch (value)
 	{
 	case 0: /* NONE */
 	  einfo (VERBOSE, "%s: fail: (%s): No stack protection enabled",
 		 data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
+	  value = RESULT_FAIL;
 	  break;
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
 	case 4: /* EXPLICIT */
 	  einfo (VERBOSE, "%s: fail: (%s): Insufficient stack protection: %s",
 		 data->filename, get_component_name (data, sec, note_data, false, prefer_func_name),
 		 stack_prot_type (value));
+	  value = RESULT_FAIL;
 	  break;
 	case 2: /* ALL */
 	case 3: /* STRONG */
+	  value = RESULT_PASS;
 	  break;
 	default:
 	  einfo (VERBOSE, "ICE: Unexpected stack protection level of %d", value);
+	  value = RESULT_ICE;
 	  return false;
 	}
 
-      if (stack_protection == UNKNOWN)
-	stack_protection = value;
-      else if (stack_protection == BOTH)
-	;
-      else if (stack_protection != value)
-	{
-	  if ((value == 2 && stack_protection == 3)
-	      || (value == 3 && stack_protection == 2))
-	    ;
-	  else
-	    /* No need for a warning - the switch above will have handled that.  */
-	    stack_protection = BOTH;
-	}
+      if (tests[TEST_STACK_PROT].result == RESULT_UNKNOWN)
+	tests[TEST_STACK_PROT].result  = value;
+      else if (value < tests[TEST_STACK_PROT].result)
+	tests[TEST_STACK_PROT].result = value;
+
       break;
 
     case 'c':
       if (streq (attr, "cf_protection"))
 	{
-	  if (value == UNKNOWN)
-	    return false;
-
 	  switch (value)
 	    {
-	    default:
-	      einfo (INFO, "%s: ICE:  Unexpected value for cf-protection: %d", data->filename, value);
-	      break;
+	    case RESULT_UNKNOWN:
+	      return false;
 	    case 4:
 	    case 8:
-	      if (cf_protection != BOTH)
-		cf_protection = YES;
+	      value = RESULT_PASS;
 	      break;
 	    case 2:
 	    case 6:
 	      if (x86_found)
 		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
 		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
-	      cf_protection = BOTH;
+	      value = RESULT_FAIL;
 	      break;
 	    case 3:
 	    case 7:
 	      if (x86_found)
 		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=return",
 		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
-	      cf_protection = BOTH;
+	      value = RESULT_FAIL;
 	      break;
 	    case 5:
 	    case 1:
 	      if (x86_found)
 		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fcf-protection",
 		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
-	      cf_protection = BOTH;
+	      value = RESULT_FAIL;
+	      break;
+	    default:
+	      einfo (INFO, "%s: ICE:  Unexpected value for cf-protection: %d", data->filename, value);
+	      value = RESULT_ICE;
 	      break;
 	    }
+
+	  if (tests[TEST_CF_PROTECTION].result == RESULT_UNKNOWN)
+	    tests[TEST_CF_PROTECTION].result = value;
+	  else if (value < tests[TEST_CF_PROTECTION].result)
+	    tests[TEST_CF_PROTECTION].result = value;
 	}
 
     case 'F':
       if (streq (attr, "FORTIFY"))
 	{
-	  if (value == UNKNOWN)
-	    return false;
-	  else if (fortify_level == UNKNOWN)
-	    final_fortify_level = fortify_level = value;
-	  else if (fortify_level != value)
+	  switch (value)
 	    {
-	      /* A change in the FORTIFY level has been detected!  */
-	      switch (fortify_level)
-		{
-		case 0:
-		case 2:
-		  einfo (VERBOSE, "%s: fail: (%s): Change in _FORTIFY_SOURCE level from %d to %d",
-			 data->filename, 
-			 get_component_name (data, sec, note_data, false, prefer_func_name),
-			 fortify_level, value);
-		  break;
-		default:
-		  einfo (VERBOSE, "ICE: Unexpected FORTIFY level of %d", fortify_level);
-		  break;
-		}
-
-	      fortify_level = value;
-	      final_fortify_level = BOTH;
-	    }
+	    case RESULT_UNKNOWN: return false;
+	    case 0:
+	    case 1:
+	      einfo (VERBOSE, "%s: fail: (%s): Insufficient value for -D_FORTIFY_SOURCE: %d",
+		     data->filename, 
+		     get_component_name (data, sec, note_data, false, prefer_func_name),
+		     value);
+	      value = RESULT_FAIL;
+	      break;
+	    case 2:
+	      value = RESULT_PASS;
+	      break;
+	    default:
+	      einfo (VERBOSE, "ICE: Unexpected FORTIFY level of %d", value);
+	      value = RESULT_ICE;
+	      break;
+	    }	      
+	      
+	  if (tests[TEST_FORTIFY].result == RESULT_UNKNOWN)
+	    tests[TEST_FORTIFY].result = value;
+	  else if (value < tests[TEST_FORTIFY].result)
+	    tests[TEST_FORTIFY].result = value;
 	}
       break;
 
     case 'G':
       if (streq (attr, "GOW"))
 	{
-	  if (value == UNKNOWN)
+	  if (value == RESULT_UNKNOWN)
 	    return false;
 
 	  value = (value >> 9) & 3;
-
-	  if (optimization_level == UNKNOWN)
-	    optimization_level = value;
 
 	  if (value == 0 || value == 1)
 	    {
@@ -505,8 +576,15 @@ walk_notes (eu_checksec_data *     data,
 		     data->filename, 
 		     get_component_name (data, sec, note_data, false, prefer_func_name),
 		     value);
-	      optimization_level = value;
+	      value = RESULT_FAIL;
 	    }
+	  else /* value == 2 || value == 3 */
+	    value = RESULT_PASS;
+
+	  if (tests[TEST_OPTIMIZATION].result == RESULT_UNKNOWN)
+	    tests[TEST_OPTIMIZATION].result = value;
+	  else if (value < tests[TEST_OPTIMIZATION].result)
+	    tests[TEST_OPTIMIZATION].result = value;
 	}
       else if (streq (attr, "GLIBCXX_ASSERTIONS"))
 	{
@@ -515,19 +593,20 @@ walk_notes (eu_checksec_data *     data,
 	    case 0:
 	      einfo (VERBOSE, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
 		     data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
-	      if (glibcxx_assertions == UNKNOWN)
-		glibcxx_assertions = NO;
-	      else if (glibcxx_assertions == YES)
-		glibcxx_assertions = BOTH;
+	      value = RESULT_FAIL;
 	      break;
 	    case 1:
-	      if (glibcxx_assertions == UNKNOWN)
-		glibcxx_assertions = YES;
+	      value = RESULT_PASS;
 	      break;
 	    default:
 	      einfo (VERBOSE, "ICE: Unexpected GLIBCXX_ASSERTIONS value: %d", value);
 	      return false;
 	    }
+
+	  if (tests[TEST_GLIBCXX_ASSERTIONS].result == RESULT_UNKNOWN)
+	    tests[TEST_GLIBCXX_ASSERTIONS].result = value;
+	  else if (value < tests[TEST_GLIBCXX_ASSERTIONS].result)
+	    tests[TEST_GLIBCXX_ASSERTIONS].result = value;
 	}
       break;
 
@@ -540,29 +619,37 @@ walk_notes (eu_checksec_data *     data,
 	      if (! arm_found)
 		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fstack-clash-protection",
 		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
-	      stack_clash_protection = NO;
+	      tests[TEST_STACK_CLASH].result = RESULT_FAIL;
 	      break;
 	    case 1:
-	      if (stack_clash_protection == UNKNOWN)
-		stack_clash_protection = YES;
+	      if (tests[TEST_STACK_CLASH].result == RESULT_UNKNOWN)
+		tests[TEST_STACK_CLASH].result = RESULT_PASS;
 	      break;
 	    default:
 	      if (! arm_found)
 		einfo (VERBOSE, "ICE: Unexpected stack-clash value: %d", value);
+	      tests[TEST_STACK_CLASH].result = RESULT_ICE;
 	      return false;
 	    }
 	}
       else if (streq (attr, "stack_realign"))
 	{
-	  if (stack_realign == UNKNOWN)
-	    stack_realign = value;
-	  else if (stack_realign != value)
+	  switch (value)
 	    {
-	      if (value == NO)
+	    case RESULT_UNKNOWN: return false;
+	    case 0:
 		einfo (VERBOSE, "%s: fail: (%s): Stack realignment not enabled",
 		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
-	      stack_realign = BOTH;
+		value = RESULT_FAIL;
+		break;
+	    case 1:
+	      value = RESULT_PASS;
 	    }
+
+	  if (tests[TEST_STACK_REALIGN].result == RESULT_UNKNOWN)
+	    tests[TEST_STACK_REALIGN].result = value;
+	  else if (value < tests[TEST_STACK_REALIGN].result)
+	    tests[TEST_STACK_REALIGN].result = value;
 	}
       break;
       
@@ -599,7 +686,7 @@ check_string_section (eu_checksec_data *    data,
      This is not as accurate as checking for a function symbol with this name,
      but it is a lot faster.  */
   if (strstr ((const char *) sec->data->d_buf, "__pthread_register_cancel"))
-    thread_cancellation = NO;
+    tests[TEST_THREADS].result = RESULT_FAIL;
 
   return true;
 }
@@ -636,20 +723,18 @@ check_dynamic_section (eu_checksec_data *    data,
 	break;
 
       if (dyn->d_tag == DT_BIND_NOW)
-	bind_now_found = true;
+	tests[TEST_BIND_NOW].result = RESULT_PASS;
 
-      if (dyn->d_tag == DT_FLAGS)
-	{
-	  if (dyn->d_un.d_val & DF_BIND_NOW)
-	    bind_now_found = true;
-	}
+      else if (dyn->d_tag == DT_FLAGS
+	       && dyn->d_un.d_val & DF_BIND_NOW)
+	tests[TEST_BIND_NOW].result = RESULT_PASS;
 
       if (dyn->d_tag == DT_TEXTREL)
-	textrel_found = true;
+	tests[TEST_TEXTREL].result = RESULT_FAIL;
 
       if (dyn->d_tag == DT_RPATH || dyn->d_tag == DT_RUNPATH)
 	if (not_rooted_at_usr (elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val)))
-	  bad_run_path_found = true;
+	  tests[TEST_RUN_PATH].result = RESULT_FAIL;
     }
 
   return true;
@@ -682,15 +767,15 @@ interesting_seg (eu_checksec_data *    data,
   switch (seg->phdr->p_type)
     {
     case PT_GNU_RELRO:
-      gnu_relro_found = true;
+      tests[TEST_GNU_RELRO].result = RESULT_PASS;
       break;
 
     case PT_GNU_STACK:
-      gnu_stack_found = true;
+      tests[TEST_GNU_STACK].result = RESULT_PASS;
       break;
 
     case PT_DYNAMIC:
-      dynamic_segment_found = true;
+      tests[TEST_DYNAMIC_SEGMENT].result = RESULT_PASS;
       break;
 
     default:
@@ -701,7 +786,7 @@ interesting_seg (eu_checksec_data *    data,
     {
       einfo (VERBOSE, "%s: fail: seg %d has Read, Write and eXecute flags\n",
 	     data->filename, seg->number);
-      rwx_seg_found = true;
+      tests[TEST_RWX_SEG].result = RESULT_FAIL;
     }
 
   return false;
@@ -733,6 +818,230 @@ ice (eu_checksec_data * data, const char * message)
   einfo (INFO, "%s: internal error: %s", data->filename, message);
 }
 
+static void
+show_bind_now_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_PASS: pass (data, "Linked with -Wl,-z,now"); break;
+    case RESULT_UNKNOWN: fail (data, "Not linked with -Wl,-z,now"); break;
+    default: ice (data, "running bind now test"); break;
+    }
+}
+
+static void
+show_dynamic_segment_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_PASS: pass (data, "Dynamic segment is present"); break;
+    case RESULT_UNKNOWN: maybe (data, "Dynamic segment is absent"); break;
+    default: ice (data, "running dynamic segment test"); break;
+    }
+}
+
+static void
+show_gnu_relro_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_PASS: pass (data, "Linked with -Wl,-z,relro"); break;
+    case RESULT_UNKNOWN: fail (data, "Not linked with -Wl,-z,relro"); break;
+    default: ice (data, "running gnu relro test"); break;
+    }
+}
+
+static void
+show_gnu_stack_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_PASS: pass (data, "Stack not executable"); break;
+    case RESULT_UNKNOWN: fail (data, "Executable stack found ?"); break;
+    default: ice (data, "running gnu stack test"); break;
+    }
+}
+
+static void
+show_rwx_seg_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_FAIL: fail (data, "RWX segment found"); break;
+    case RESULT_UNKNOWN: pass (data, "No RWX segments found"); break;
+    default: ice (data, "running RWX segment test"); break;
+    }
+}
+
+static void
+show_pic_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_UNKNOWN: maybe (data, "PIC/PIE setting not recorded"); break;
+    case RESULT_FAIL:    fail (data, "Compiled without any PIC option"); break;
+    case RESULT_PASS:    pass (data, "Compiled with PIC/PIE"); break;
+    default:             ice (data, "Unknown PIC level"); break;
+    }
+}
+
+static void
+show_stack_prot_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_UNKNOWN: fail (data, "Stack protection status is not recorded");  break;
+    case RESULT_PASS:    pass (data, "Strong stack protection is enabled"); break;
+    case RESULT_FAIL:    fail (data, "Stack protection is insufficient"); break;
+    default:             ice (data, "stack protection has an unknown value"); break;
+    }
+}
+
+static void
+show_stack_clash_result (eu_checksec_data * data, enum test_result result)
+{
+  /* The ARM does not have stack clash protection support.  */
+  if (arm_found)
+    return;
+
+  switch (result)
+    {
+    case RESULT_UNKNOWN:
+      if (gcc_version >= 7)
+	maybe (data, "-fstack-clash-protection not recorded");
+      break;
+    case RESULT_FAIL:
+      fail (data, "-fstack-clash-protection not used");
+      break;
+    case RESULT_PASS:
+      pass (data, "Compiled with -fstack-clash-protection");
+      break;
+    default:
+      ice (data, "stack-clash notes are incorrect");
+      break;
+    }
+}
+
+static void
+show_textrel_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_FAIL: fail (data, "Text relocations found"); break;
+    case RESULT_UNKNOWN: pass (data, "No text relocations found"); break;
+    default: ice (data, "running textrel test"); break; break;
+    }
+}
+
+static void
+show_fortify_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_UNKNOWN: fail (data, "-D_FORTIFY_SOURCE level not recorded"); break;
+    case RESULT_PASS:    pass (data, "-D_FORTIFY_SOURCE=2 specified"); break;
+    case RESULT_FAIL:    fail (data, "-D_FORTIFY_SOURCE level too small"); break;
+    default:             ice (data, "running fortify test");
+      break;
+    }
+}
+
+static void
+show_cf_protection_result (eu_checksec_data * data, enum test_result result)
+{
+  if (! x86_found)
+    return;
+
+  switch (result)
+    {
+    case RESULT_UNKNOWN:
+      if (gcc_version >= 8)
+	maybe (data, "-fcf-protection not recorded");
+      break;
+    case RESULT_FAIL:
+      fail (data, "-fcf-protection not enabled");
+      break;      
+    case RESULT_PASS:
+      pass (data, "Compiled with -fcf-protection=full");
+      break;
+    default:
+      ice (data, "cf_protection notes are incorrect");
+      break;
+    }
+}
+
+static void
+show_glibcxx_assertions_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_UNKNOWN: maybe (data, "-D_GLIBCXX_ASSERTIONS not recorded"); break;
+    case RESULT_FAIL:    fail (data, "-D_GLIBCXX_ASSERTIONS not used"); break;
+    case RESULT_PASS:    pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS"); break;
+    default:             ice (data, "glibcxx_assertion notes incorrect"); break;
+    }
+}
+
+static void
+show_stack_realign_result (eu_checksec_data * data, enum test_result result)
+{
+  if (!i686_found)
+    return;
+
+  switch (result)
+    {
+    case RESULT_UNKNOWN: maybe (data, "-mstackrealign not recorded"); break;
+    case RESULT_FAIL:    fail (data, "Compiled without -mstackrealign"); break;
+    case RESULT_PASS:    pass (data, "Compiled wit -mstackrealign"); break;
+    default:             ice (data, "-mstackrealign notes are incorrect"); break;
+    }
+}
+
+static void
+show_run_path_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_FAIL:    fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr"); break;
+    case RESULT_UNKNOWN: pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr"); break;
+    default:             ice (data, "running run path test"); break;
+    }
+}
+
+static void
+show_threads_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_FAIL:    fail (data, "Thread cancellation not hardened.  (Compiled without -fexceptions)"); break;
+    case RESULT_UNKNOWN: pass (data, "No thread cancellation problems"); break;
+    default:             ice (data, "running thread cancellation test"); break;
+    }
+}
+
+static void
+show_writeable_got_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_FAIL:    fail (data, "Relocations for the GOT/PLT sections are writeable"); break;
+    case RESULT_UNKNOWN: pass (data, "GOT/PLT relocations are read only"); break;
+    default:             ice (data, "running writeable got test"); break;
+    }
+}
+
+static void
+show_optimization_result (eu_checksec_data * data, enum test_result result)
+{
+  switch (result)
+    {
+    case RESULT_UNKNOWN: fail (data, "Optimization level not recorded"); break;
+    case RESULT_FAIL:    fail (data, "Insufficient compiler optimization"); break;
+    case RESULT_PASS:    pass (data, "Sufficient compiler optimization used"); break;
+    default:             ice (data, "running optimization test"); break;
+    }
+}
+
 static bool
 finish (eu_checksec_data * data)
 {
@@ -747,234 +1056,13 @@ finish (eu_checksec_data * data)
 	maybe (data, "Gaps were detected in the annobin coverage");
     }
 
-  if (bind_now_found)
-    pass (data, "Linked with -Wl,-z,now");
-  else
-    fail (data, "Not linked with -Wl,-z,now");
-
-  if (dynamic_segment_found)
-    pass (data, "Dynamic segment is present");
-  else
-    maybe (data, "Dynamic segment is absent");
-
-  if (writable_got_relocations)
-    fail (data, "Relocations for the GOT/PLT sections are writeable");
-  else
-    pass (data, "GOT/PLT relocations are read only");
-
-  if (gnu_relro_found)
-    pass (data, "Linked with -Wl,-z,relro");
-  else
-    fail (data, "Not linked with -Wl,-z,relro");
-
-  if (gnu_stack_found)
-    pass (data, "Stack not executable");
-  else
-    fail (data, "Executable stack found ?");
-
-  if (rwx_seg_found)
-    fail (data, "RWX segment found");
-  else
-    pass (data, "No RWX segments found");
-
-  if (textrel_found)
-    fail (data, "Text relocations found");
-  else
-    pass (data, "No text relocations found");
-
-  if (bad_run_path_found)
-    fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
-  else
-    pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr");
-
-  if (thread_cancellation)
-    pass (data, "No thread cancellation problems");
-  else
-    fail (data, "Thread cancellation not hardened.  (Compiled without -fexceptions)");
-
-  /* Check PIC/PIE.  */
-  switch (pic_level)
+  int i;
+  for (i = 0; i < TEST_MAX; i++)
     {
-    case UNKNOWN:
-      maybe (data, "PIC/PIE setting not recorded");
-      break;
-    case 0:
-      fail (data, "Compiled without any PIC option");
-      break;
-    case 1:
-    case 2:
-      if (et_exec_found)
-	fail (data, "Compiled with PIC rather than PIE");
-      else
-	pass (data, "Compiled with PIC");
-      break;
-    case 3:
-    case 4:
-      pass (data, "Compiled with PIE");
-      break;
-    default:
-      ice (data, "Unknown PIC level");
-      break;
-    }
-
-  switch (stack_protection)
-    {
-    case BOTH:
-      if (! BE_VERBOSE)
-	fail (data, "Conflicting stack protection settings.  Run with -v to list");
-      else
-	fail (data, "Conflicting stack protection settings.");
-      break;
-    case UNKNOWN:
-      fail (data, "Stack protection status is not recorded");
-      break;
-    case 2:
-    case 3:
-      pass (data, "Strong stack protection is enabled");
-      break;
-    case NO: 
-      fail (data, "Stack protection has not been enabled");
-      break;
-    case 1:
-    case 4:
-      fail (data, "Stack protection is not strong enough");
-      break;
-    default:
-      maybe (data, "stack protection has an unknown value");
-      break;
-    }
-
-  if (! arm_found)
-    {
-      switch (stack_clash_protection)
+      if (tests[i].enabled)
 	{
-	case UNKNOWN:
-	  if (gcc_version >= 7)
-	    maybe (data, "-fstack-clash-protection not recorded");
-	  break;
-	case NO:
-	  fail (data, "-fstack-clash-protection not used");
-	  break;
-	case YES:
-	  pass (data, "Compiled with -fstack-clash-protection");
-	  break;
-	default:
-	  ice (data, "stack-clash notes are incorrect");
-	  break;
-	}
-    }
-
-  switch (final_fortify_level)
-    {
-    case BOTH:
-      if (! BE_VERBOSE)
-	fail (data, "Conflicting -D_FORTIFY_SOURCE levels.  Run with -v to list");
-      else
-	fail (data, "Conflicting -D_FORTIFY_SOURCE levels");
-      break;
-    case UNKNOWN:
-      fail (data, "-D_FORTIFY_SOURCE level not recorded");
-      break;
-    case 2:
-      pass (data, "-D_FORTIFY_SOURCE=2 specified");
-      break;
-    case 0:
-    case 1:
-      fail (data, "-D_FORTIFY_SOURCE level too small");
-      break;
-    default:
-      maybe (data, "-D_FORTIFY_SOURCE level unexpectedly large");
-      break;
-    }
-
-  switch (optimization_level)
-    {
-    case UNKNOWN:
-      fail (data, "Optimization level not recorded");
-      break;
-    case 3:
-    case 2:
-      pass (data, "Sufficient compiler optimization used");
-      break;
-    case 0:
-    case 1:
-      fail (data, "Insufficient compiler optimization");
-      break;
-    default:
-      maybe (data, "Optimization level unexpectedly large");
-      break;
-    }
-
-  switch (glibcxx_assertions)
-    {
-    case BOTH:
-      if (! BE_VERBOSE)
-	fail (data, "Some components not compiled with -D_GLIBCXX_ASSERTONS.  Run with -v to list");
-      else
-	fail (data, "Some components not compiled with -D_GLIBCXX_ASSERTONS");
-      break;
-    case UNKNOWN:
-      maybe (data, "-D_GLIBCXX_ASSERTIONS not recorded");
-      break;
-    case NO:
-      fail (data, "-D_GLIBCXX_ASSERTIONS not used");
-      break;
-    case YES:
-      pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
-      break;
-    default:
-      ice (data, "glibcxx_assertion notes incorrect");
-      break;
-    }  
-
-  if (x86_found)
-    {
-      switch (cf_protection)
-	{
-	case UNKNOWN:
-	  if (gcc_version >= 8)
-	    maybe (data, "-fcf-protection not recorded");
-	  break;
-	case BOTH:
-	  if (! BE_VERBOSE)
-	    fail (data, "Some components compiled without -fcf-protection.  Run with -v to list");
-	  else
-	    fail (data, "Some components compiled without -fcf-protection");
-	  break;
-	case NO:
-	  fail (data, "-fcf-protection not enabled");
-	  break;      
-	case YES:
-	  pass (data, "Compiled with -fcf-protection=full");
-	  break;
-	default:
-	  ice (data, "cf_protection notes are incorrect");
-	  break;
-	}
-    }
-
-  if (i686_found)
-    {
-      switch (stack_realign)
-	{
-	case UNKNOWN:
-	  maybe (data, "-mstackrealign not recorded");
-	  break;
-	case BOTH:
-	  if (! BE_VERBOSE)
-	    fail (data, "-mstackrealign only partially used.  Run with -v to list");
-	  else
-	    fail (data, "-mstackrealign only partially used.");
-	  break;
-	case NO:
-	  fail (data, "Compiled without -mstackrealign");
-	  break;
-	case YES:
-	  pass (data, "Compiled wit -mstackrealign");
-	  break;
-	default:
-	  ice (data, "-mstackrealign notes are incorrect");
-	  break;
+	  tests[i].show_result (data, tests[i].result);
+	  einfo (VERBOSE2, " Use --skip-%s to disable this test", tests[i].name);
 	}
     }
 
@@ -985,7 +1073,7 @@ finish (eu_checksec_data * data)
     }
   else if (num_fails > 0)
     return false;
-  else /* FIXME: Add an option to ignore MAYBE results... */
+  else /* FIXME: Add an option to ignore MAYBE results ? */
     return false;
 }
 
@@ -1023,11 +1111,33 @@ usage (void)
   einfo (INFO, "  --enable-hardened   Reenables the hardening checker");
   einfo (INFO, "The following option can be used to disable some checks:");
   einfo (INFO, "  --ignore-gaps       Ignores gaps in the annobin data");
+
+  einfo (INFO, "Individual tests can be disabled with the following options:");
+  int i;
+  for (i = 0; i < TEST_MAX; i++)
+    einfo (INFO, "  --skip-%s", tests[i].name);
 }
 
 static bool
 process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
+  if (strneq (arg, "--skip-", 7))
+    {
+      arg += 7;
+
+      int i;
+      for (i = 0; i < TEST_MAX; i++)
+	{
+	  if (streq (arg, tests[i].name))
+	    {
+	      tests[i].enabled = false;
+	      return true;
+	    }
+	}
+
+      return false;
+    }
+
   if (streq (arg, "--enable-hardened"))
     {
       disabled = false;

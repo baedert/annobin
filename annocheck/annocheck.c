@@ -63,7 +63,6 @@ bool
 einfo (einfo_type type, const char * format, ...)
 {
   FILE *        file;
-  const char *  do_newline = "";
   const char *  pref = NULL;
   va_list       args;
   bool          res = false;
@@ -113,7 +112,13 @@ einfo (einfo_type type, const char * format, ...)
   if (type != PARTIAL)
     fprintf (file, "%s: ", component);
 
-  if (format[strlen (format) - 1] != '\n')
+  const char *  do_newline;
+  const char    c = format[strlen (format) - 1];
+  if (c == '\n')
+    do_newline = "";
+  else if (c == '.' || c == ':')
+    do_newline = "\n";
+  else
     do_newline = ".\n";
 
   if (pref)
@@ -1151,12 +1156,18 @@ process_file (const char * filename)
 
   Elf * elf = elf_begin (fd, ELF_C_READ, NULL);
   if (elf == NULL)
-    return einfo (WARN, "Unable to parse %s - maybe it is not an ELF file ?", filename);
+    {
+      close (fd);
+      return einfo (WARN, "Unable to parse %s - maybe it is not an ELF file ?", filename);
+    }
 
   bool ret = process_elf (filename, fd, elf);
 
   if (elf_end (elf))
-    return einfo (WARN, "Failed to close ELF file: %s", filename);
+    {
+      close (fd);
+      return einfo (WARN, "Failed to close ELF file: %s", filename);
+    }
 
   if (close (fd))
     return einfo (SYS_WARN, "Unable to close: %s", filename);

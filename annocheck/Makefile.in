@@ -80,10 +80,13 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_annocheck_OBJECTS = annocheck.$(OBJEXT) hardened.$(OBJEXT) \
-	built-by.$(OBJEXT)
+am_annocheck_OBJECTS = annocheck-annocheck.$(OBJEXT) \
+	annocheck-hardened.$(OBJEXT) annocheck-built-by.$(OBJEXT)
 annocheck_OBJECTS = $(am_annocheck_OBJECTS)
 annocheck_DEPENDENCIES =
+annocheck_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(annocheck_CFLAGS) \
+	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/plugin
 depcomp =
 am__depfiles_maybe =
@@ -238,6 +241,7 @@ AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
 annocheck_SOURCES = annocheck.c hardened.c built-by.c annocheck.h
 annocheck_LDADD = -lelf -ldw -lrpm -lrpmio -liberty
+annocheck_CFLAGS = -O2 -ansi -g
 all: all-am
 
 .SUFFIXES:
@@ -320,7 +324,7 @@ clean-binPROGRAMS:
 	rm -f $$list
 annocheck$(EXEEXT): $(annocheck_OBJECTS) $(annocheck_DEPENDENCIES) $(EXTRA_annocheck_DEPENDENCIES) 
 	@rm -f annocheck$(EXEEXT)
-	$(LINK) $(annocheck_OBJECTS) $(annocheck_LDADD) $(LIBS)
+	$(annocheck_LINK) $(annocheck_OBJECTS) $(annocheck_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -336,6 +340,24 @@ distclean-compile:
 
 .c.lo:
 	$(LTCOMPILE) -c -o $@ $<
+
+annocheck-annocheck.o: annocheck.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-annocheck.o `test -f 'annocheck.c' || echo '$(srcdir)/'`annocheck.c
+
+annocheck-annocheck.obj: annocheck.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-annocheck.obj `if test -f 'annocheck.c'; then $(CYGPATH_W) 'annocheck.c'; else $(CYGPATH_W) '$(srcdir)/annocheck.c'; fi`
+
+annocheck-hardened.o: hardened.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-hardened.o `test -f 'hardened.c' || echo '$(srcdir)/'`hardened.c
+
+annocheck-hardened.obj: hardened.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-hardened.obj `if test -f 'hardened.c'; then $(CYGPATH_W) 'hardened.c'; else $(CYGPATH_W) '$(srcdir)/hardened.c'; fi`
+
+annocheck-built-by.o: built-by.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-built-by.o `test -f 'built-by.c' || echo '$(srcdir)/'`built-by.c
+
+annocheck-built-by.obj: built-by.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-built-by.obj `if test -f 'built-by.c'; then $(CYGPATH_W) 'built-by.c'; else $(CYGPATH_W) '$(srcdir)/built-by.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
