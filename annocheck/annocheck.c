@@ -1140,14 +1140,18 @@ process_file (const char * filename)
     return process_rpm_file (filename);
     
   FD_t rpm_fd;
-  rpmts ts = 0;
-  Header hdr;
-  if ((rpm_fd = Fopen (filename, "r")) != NULL
-      && rpmReadPackageFile (ts, rpm_fd, filename, & hdr) == RPMRC_OK)
+  if ((rpm_fd = Fopen (filename, "r")) != NULL)
     {
-      bool res = process_rpm_file (filename);
+      rpmts  ts = 0;
+      Header hdr;
+      bool   res = false;
+
+      if (rpmReadPackageFile (ts, rpm_fd, filename, & hdr) == RPMRC_OK)
+	res = process_rpm_file (filename);
+
       Fclose (rpm_fd);
-      return res;
+      if (res)
+	return true;
     }
 
   /* Otherwise open it and try to process it as an ELF file.  */
@@ -1159,7 +1163,7 @@ process_file (const char * filename)
   if (elf == NULL)
     {
       close (fd);
-      return einfo (WARN, "Unable to parse %s - maybe it is not an ELF file ?", filename);
+      return einfo (WARN, "Unable to parse %s - maybe it is not an RPM or ELF file ?", filename);
     }
 
   bool ret = process_elf (filename, fd, elf);
