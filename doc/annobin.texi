@@ -522,69 +522,128 @@ Report the version of the tool and then exit.
 @node Hardened
 @section The security checker.
 
+@smallexample
+@c man begin SYNOPSIS annocheck
+
+annocheck
+  [@b{--skip-bind-now}]
+  [@b{--skip-cf-protection}]
+  [@b{--skip-dynamic-segment}]
+  [@b{--skip-fortify}]
+  [@b{--skip-glibcxx-assertions}]
+  [@b{--skip-gnu-relro}]
+  [@b{--skip-gnu-stack}]
+  [@b{--skip-optimization}]
+  [@b{--skip-pic}]
+  [@b{--skip-run-path}]
+  [@b{--skip-rwx-seg}]
+  [@b{--skip-stack-clash}]
+  [@b{--skip-stack-prot}]
+  [@b{--skip-stack-realign}]
+  [@b{--skip-textrel}]
+  [@b{--skip-threads}]
+  [@b{--skip-writeable-got}]
+  [@b{--ignore-gaps}]
+  [@b{--disable-hardened}]
+  [@b{--enable-hardened}]
+  @var{file}@dots{}
+@c man end
+@end smallexample
+
 @c man begin DESCRIPTION annocheck
-This tool checks that the specified files were compiled with the
-required security hardening options, as outlined in the elf-policy
-document.  Currently the tool checks for these features:
+The @code{hardened} tool checks that the specified files were compiled
+with the required security hardening options, as outlined in the
+elf-policy document.  It runs a series of tests checking compilation
+options and link time options.  These tests are outlined below, along
+with the command line option that can be used to disable each test.
 
 @table @code
 
 @item BIND_NOW
-Lazy binding must have been enabled via the linker option @option{-z
-now}.
+Lazy binding must not have been enabled via the linker option
+@option{-z now}.
+Disabled by @option{--skip-bind-now}.
 
 @item Non executable stack
 The program must not have a stack in an executable region of memory.
+Disabled by @option{--skip-gnu-stack}.
 
 @item Safe GOT relocations
 The relocations for the GOT table must be read only.
+Disabled by @option{--skip-writeable-got}.
 
 @item No WX segments.
 No program segment should have all three of the read, write and
 execute permission bits set.
+Disabled by @option{--skip-rwx-seg}.
 
 @item No text relocations
 The should be no relocations against executable code.
+Disabled by @option{--skip-textrel}.
 
 @item Correct runpaths
 The runpath information used to locate shared libraries at runtime
 must only include directories rooted at @var{/usr}.
+Disabled by @option{--skip-run-path}.
 
 @item Missing annobin data
 The program must have been compiled with annobin notes enabled.
+Disabled by @option{--ignore-gaps}.
 
 @item Strong stack protection
-The program must have been compiled with the @option
-{-fstack-protector-strong} option enabled, and with
+The program must have been compiled with the
+@option{-fstack-protector-strong} option enabled, and with
 @option{-D_FORTIFY_SOURCE=2} specified.  It must also have been
 compiled at at least optimization level 2.
+Disabled by @option{--skip-stack-prot}.
 
 @item Dynamic data present
 Dynamic executables must have a dynamic segment.
+Disabled by @option{--skip-dynamic-segment}.
 
 @item Position Independent compilation
 Shared libraries must have been compiled with @option{-fPIE} and
 dynamic executables must have been compiled with @option{-fPIC}.
+Disabled by @option{--skip-pic}.
 
 @item Safe exceptions
 Program which use exception handling must have been compiled with
 @option{-fexceptions} enabled and with @option{-D_GLIBCXX_ASSERTIONS}
 specified.
+Disabled by @option{--skip-threads} and/or @option{--skip-glibcxx-assertions}.
 
 @item Stack Clash protection
-If available the @option {-fstack-clash-protection} must have been
+If available the @option{-fstack-clash-protection} must have been
 used.
+Disabled by @option{--skip-stack-clash}.
 
 @item Control Flow protection
 If available the @option{-fcf-protection=full} must have been used.
+Disabled by @option{--skip-cf-protection}.
 
 @item Stack realignment
 For @var{i686} binaries, the @option{-mstackrealign} option must have
 been specified.
+Disabled by @option{--skip-stack-realign}.
+
+@item Source fortification
+The program must have been compiled with the
+@option{-D_FORTIFY_SOURCE=2} command line option specified.
+Disabled by @option{--skip-fortify}.
+
+@item Optimization
+The program must have been compiled with at least @option{-O2}
+optimization enabled.
+Disabled by @option{--skip-optimization}.
+
+@item Read only relocations
+The program must not have any relocations that are held in a writeable
+section.
+Disabled by @option{--skip-gnu-relro}.
 
 @end table
 
-The tool does support a couple of command line options:
+The tool does support a couple of other command line options as well:
 
 @table @code
 @item --enable-hardened
@@ -593,8 +652,6 @@ Enable the tool if it was previously disabled.
 @item --disable-hardened
 Disable the tool.
 
-@item --ignore-gaps
-Ignore gaps in the annobin data.
 @end table
 
 @c man end
@@ -602,6 +659,17 @@ Ignore gaps in the annobin data.
 @c -----------------------------------------------------------------
 @node Built-By
 @section The builder checker.
+
+@smallexample
+@c man begin SYNOPSIS annocheck
+
+annocheck
+  [@b{--all}]
+  [@b{--tool=}@var{name}]
+  [@b{--nottool=}@var{name}]
+  @var{file}@dots{}
+@c man end
+@end smallexample
 
 @c man begin DESCRIPTION annocheck
 

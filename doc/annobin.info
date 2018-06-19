@@ -443,62 +443,110 @@ File: annobin.info,  Node: Hardened,  Next: Built-By,  Up: Annocheck
 4.1 The security checker.
 =========================
 
-This tool checks that the specified files were compiled with the
-required security hardening options, as outlined in the elf-policy
-document.  Currently the tool checks for these features:
+
+     annocheck
+       [-skip-bind-now]
+       [-skip-cf-protection]
+       [-skip-dynamic-segment]
+       [-skip-fortify]
+       [-skip-glibcxx-assertions]
+       [-skip-gnu-relro]
+       [-skip-gnu-stack]
+       [-skip-optimization]
+       [-skip-pic]
+       [-skip-run-path]
+       [-skip-rwx-seg]
+       [-skip-stack-clash]
+       [-skip-stack-prot]
+       [-skip-stack-realign]
+       [-skip-textrel]
+       [-skip-threads]
+       [-skip-writeable-got]
+       [-ignore-gaps]
+       [-disable-hardened]
+       [-enable-hardened]
+       FILE...
+
+   The 'hardened' tool checks that the specified files were compiled
+with the required security hardening options, as outlined in the
+elf-policy document.  It runs a series of tests checking compilation
+options and link time options.  These tests are outlined below, along
+with the command line option that can be used to disable each test.
 
 'BIND_NOW'
-     Lazy binding must have been enabled via the linker option '-z now'.
+     Lazy binding must not have been enabled via the linker option '-z
+     now'.  Disabled by '--skip-bind-now'.
 
 'Non executable stack'
      The program must not have a stack in an executable region of
-     memory.
+     memory.  Disabled by '--skip-gnu-stack'.
 
 'Safe GOT relocations'
-     The relocations for the GOT table must be read only.
+     The relocations for the GOT table must be read only.  Disabled by
+     '--skip-writeable-got'.
 
 'No WX segments.'
      No program segment should have all three of the read, write and
-     execute permission bits set.
+     execute permission bits set.  Disabled by '--skip-rwx-seg'.
 
 'No text relocations'
-     The should be no relocations against executable code.
+     The should be no relocations against executable code.  Disabled by
+     '--skip-textrel'.
 
 'Correct runpaths'
      The runpath information used to locate shared libraries at runtime
-     must only include directories rooted at /USR.
+     must only include directories rooted at /USR.  Disabled by
+     '--skip-run-path'.
 
 'Missing annobin data'
      The program must have been compiled with annobin notes enabled.
+     Disabled by '--ignore-gaps'.
 
 'Strong stack protection'
      The program must have been compiled with the
      '-fstack-protector-strong' option enabled, and with
      '-D_FORTIFY_SOURCE=2' specified.  It must also have been compiled
-     at at least optimization level 2.
+     at at least optimization level 2.  Disabled by '--skip-stack-prot'.
 
 'Dynamic data present'
-     Dynamic executables must have a dynamic segment.
+     Dynamic executables must have a dynamic segment.  Disabled by
+     '--skip-dynamic-segment'.
 
 'Position Independent compilation'
      Shared libraries must have been compiled with '-fPIE' and dynamic
-     executables must have been compiled with '-fPIC'.
+     executables must have been compiled with '-fPIC'.  Disabled by
+     '--skip-pic'.
 
 'Safe exceptions'
      Program which use exception handling must have been compiled with
      '-fexceptions' enabled and with '-D_GLIBCXX_ASSERTIONS' specified.
+     Disabled by '--skip-threads' and/or '--skip-glibcxx-assertions'.
 
 'Stack Clash protection'
      If available the '-fstack-clash-protection' must have been used.
+     Disabled by '--skip-stack-clash'.
 
 'Control Flow protection'
      If available the '-fcf-protection=full' must have been used.
+     Disabled by '--skip-cf-protection'.
 
 'Stack realignment'
      For I686 binaries, the '-mstackrealign' option must have been
-     specified.
+     specified.  Disabled by '--skip-stack-realign'.
 
-   The tool does support a couple of command line options:
+'Source fortification'
+     The program must have been compiled with the '-D_FORTIFY_SOURCE=2'
+     command line option specified.  Disabled by '--skip-fortify'.
+
+'Optimization'
+     The program must have been compiled with at least '-O2'
+     optimization enabled.  Disabled by '--skip-optimization'.
+
+'Read only relocations'
+     The program must not have any relocations that are held in a
+     writeable section.  Disabled by '--skip-gnu-relro'.
+
+   The tool does support a couple of other command line options as well:
 
 '--enable-hardened'
      Enable the tool if it was previously disabled.
@@ -506,18 +554,23 @@ document.  Currently the tool checks for these features:
 '--disable-hardened'
      Disable the tool.
 
-'--ignore-gaps'
-     Ignore gaps in the annobin data.
-
 
 File: annobin.info,  Node: Built-By,  Prev: Hardened,  Up: Annocheck
 
 4.2 The builder checker.
 ========================
 
-The BUILT-BY tool is disabled by default, but it can be enabled by the
-command line option '--enable-builtby'.  The tool checks the specified
-files to see if any information is stored about how the file was built.
+
+     annocheck
+       [-all]
+       [-tool=NAME]
+       [-nottool=NAME]
+       FILE...
+
+   The BUILT-BY tool is disabled by default, but it can be enabled by
+the command line option '--enable-builtby'.  The tool checks the
+specified files to see if any information is stored about how the file
+was built.
 
    The tool supports a few command line options to customise its
 behaviour:
@@ -1483,12 +1536,12 @@ Node: The CF Encoding13460
 Node: The ENUM Encoding14532
 Node: Annocheck14889
 Node: Hardened16547
-Node: Built-By18744
-Node: Legacy Scripts19996
-Node: Who Built Me20763
-Node: ABI Checking23523
-Node: Hardening Checks25637
-Node: Checking Archives29723
-Node: GNU FDL32145
+Node: Built-By20406
+Node: Legacy Scripts21750
+Node: Who Built Me22517
+Node: ABI Checking25277
+Node: Hardening Checks27391
+Node: Checking Archives31477
+Node: GNU FDL33899
 
 End Tag Table

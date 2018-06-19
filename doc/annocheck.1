@@ -129,7 +129,7 @@
 .\" ========================================================================
 .\"
 .IX Title "ANNOCHECK 1"
-.TH ANNOCHECK 1 "2018-06-06" "annobin-1" "RPM Development Tools"
+.TH ANNOCHECK 1 "2018-06-19" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -146,6 +146,35 @@ annocheck
   [\fB\-\-ignore\-unknown\fR]
   [\fB\-\-dwarf\-dir=\fR\fIdir\fR]
   [\fB\-\-prefix=\fR\fItext\fR]
+  \fIfile\fR...
+.PP
+annocheck
+  [\fB\-\-skip\-bind\-now\fR]
+  [\fB\-\-skip\-cf\-protection\fR]
+  [\fB\-\-skip\-dynamic\-segment\fR]
+  [\fB\-\-skip\-fortify\fR]
+  [\fB\-\-skip\-glibcxx\-assertions\fR]
+  [\fB\-\-skip\-gnu\-relro\fR]
+  [\fB\-\-skip\-gnu\-stack\fR]
+  [\fB\-\-skip\-optimization\fR]
+  [\fB\-\-skip\-pic\fR]
+  [\fB\-\-skip\-run\-path\fR]
+  [\fB\-\-skip\-rwx\-seg\fR]
+  [\fB\-\-skip\-stack\-clash\fR]
+  [\fB\-\-skip\-stack\-prot\fR]
+  [\fB\-\-skip\-stack\-realign\fR]
+  [\fB\-\-skip\-textrel\fR]
+  [\fB\-\-skip\-threads\fR]
+  [\fB\-\-skip\-writeable\-got\fR]
+  [\fB\-\-ignore\-gaps\fR]
+  [\fB\-\-disable\-hardened\fR]
+  [\fB\-\-enable\-hardened\fR]
+  \fIfile\fR...
+.PP
+annocheck
+  [\fB\-\-all\fR]
+  [\fB\-\-tool=\fR\fIname\fR]
+  [\fB\-\-nottool=\fR\fIname\fR]
   \fIfile\fR...
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
@@ -192,78 +221,112 @@ information.
 .IX Item "--version"
 Report the version of the tool and then exit.
 .PP
-This tool checks that the specified files were compiled with the
-required security hardening options, as outlined in the elf-policy
-document.  Currently the tool checks for these features:
+The \f(CW\*(C`hardened\*(C'\fR tool checks that the specified files were compiled
+with the required security hardening options, as outlined in the
+elf-policy document.  It runs a series of tests checking compilation
+options and link time options.  These tests are outlined below, along
+with the command line option that can be used to disable each test.
 .ie n .IP """BIND_NOW""" 4
 .el .IP "\f(CWBIND_NOW\fR" 4
 .IX Item "BIND_NOW"
-Lazy binding must have been enabled via the linker option \fB\-z
-now\fR.
+Lazy binding must not have been enabled via the linker option
+\&\fB\-z now\fR.
+Disabled by \fB\-\-skip\-bind\-now\fR.
 .ie n .IP """Non executable stack""" 4
 .el .IP "\f(CWNon executable stack\fR" 4
 .IX Item "Non executable stack"
 The program must not have a stack in an executable region of memory.
+Disabled by \fB\-\-skip\-gnu\-stack\fR.
 .ie n .IP """Safe GOT relocations""" 4
 .el .IP "\f(CWSafe GOT relocations\fR" 4
 .IX Item "Safe GOT relocations"
 The relocations for the \s-1GOT\s0 table must be read only.
+Disabled by \fB\-\-skip\-writeable\-got\fR.
 .ie n .IP """No WX segments.""" 4
 .el .IP "\f(CWNo WX segments.\fR" 4
 .IX Item "No WX segments."
 No program segment should have all three of the read, write and
 execute permission bits set.
+Disabled by \fB\-\-skip\-rwx\-seg\fR.
 .ie n .IP """No text relocations""" 4
 .el .IP "\f(CWNo text relocations\fR" 4
 .IX Item "No text relocations"
 The should be no relocations against executable code.
+Disabled by \fB\-\-skip\-textrel\fR.
 .ie n .IP """Correct runpaths""" 4
 .el .IP "\f(CWCorrect runpaths\fR" 4
 .IX Item "Correct runpaths"
 The runpath information used to locate shared libraries at runtime
 must only include directories rooted at \fI/usr\fR.
+Disabled by \fB\-\-skip\-run\-path\fR.
 .ie n .IP """Missing annobin data""" 4
 .el .IP "\f(CWMissing annobin data\fR" 4
 .IX Item "Missing annobin data"
 The program must have been compiled with annobin notes enabled.
+Disabled by \fB\-\-ignore\-gaps\fR.
 .ie n .IP """Strong stack protection""" 4
 .el .IP "\f(CWStrong stack protection\fR" 4
 .IX Item "Strong stack protection"
-The program must have been compiled with the \f(CW@option\fR
-{\-fstack\-protector\-strong} option enabled, and with
+The program must have been compiled with the
+\&\fB\-fstack\-protector\-strong\fR option enabled, and with
 \&\fB\-D_FORTIFY_SOURCE=2\fR specified.  It must also have been
 compiled at at least optimization level 2.
+Disabled by \fB\-\-skip\-stack\-prot\fR.
 .ie n .IP """Dynamic data present""" 4
 .el .IP "\f(CWDynamic data present\fR" 4
 .IX Item "Dynamic data present"
 Dynamic executables must have a dynamic segment.
+Disabled by \fB\-\-skip\-dynamic\-segment\fR.
 .ie n .IP """Position Independent compilation""" 4
 .el .IP "\f(CWPosition Independent compilation\fR" 4
 .IX Item "Position Independent compilation"
 Shared libraries must have been compiled with \fB\-fPIE\fR and
 dynamic executables must have been compiled with \fB\-fPIC\fR.
+Disabled by \fB\-\-skip\-pic\fR.
 .ie n .IP """Safe exceptions""" 4
 .el .IP "\f(CWSafe exceptions\fR" 4
 .IX Item "Safe exceptions"
 Program which use exception handling must have been compiled with
 \&\fB\-fexceptions\fR enabled and with \fB\-D_GLIBCXX_ASSERTIONS\fR
 specified.
+Disabled by \fB\-\-skip\-threads\fR and/or \fB\-\-skip\-glibcxx\-assertions\fR.
 .ie n .IP """Stack Clash protection""" 4
 .el .IP "\f(CWStack Clash protection\fR" 4
 .IX Item "Stack Clash protection"
-If available the \f(CW@option\fR {\-fstack\-clash\-protection} must have been
+If available the \fB\-fstack\-clash\-protection\fR must have been
 used.
+Disabled by \fB\-\-skip\-stack\-clash\fR.
 .ie n .IP """Control Flow protection""" 4
 .el .IP "\f(CWControl Flow protection\fR" 4
 .IX Item "Control Flow protection"
 If available the \fB\-fcf\-protection=full\fR must have been used.
+Disabled by \fB\-\-skip\-cf\-protection\fR.
 .ie n .IP """Stack realignment""" 4
 .el .IP "\f(CWStack realignment\fR" 4
 .IX Item "Stack realignment"
 For \fIi686\fR binaries, the \fB\-mstackrealign\fR option must have
 been specified.
+Disabled by \fB\-\-skip\-stack\-realign\fR.
+.ie n .IP """Source fortification""" 4
+.el .IP "\f(CWSource fortification\fR" 4
+.IX Item "Source fortification"
+The program must have been compiled with the
+\&\fB\-D_FORTIFY_SOURCE=2\fR command line option specified.
+Disabled by \fB\-\-skip\-fortify\fR.
+.ie n .IP """Optimization""" 4
+.el .IP "\f(CWOptimization\fR" 4
+.IX Item "Optimization"
+The program must have been compiled with at least \fB\-O2\fR
+optimization enabled.
+Disabled by \fB\-\-skip\-optimization\fR.
+.ie n .IP """Read only relocations""" 4
+.el .IP "\f(CWRead only relocations\fR" 4
+.IX Item "Read only relocations"
+The program must not have any relocations that are held in a writeable
+section.
+Disabled by \fB\-\-skip\-gnu\-relro\fR.
 .PP
-The tool does support a couple of command line options:
+The tool does support a couple of other command line options as well:
 .ie n .IP """\-\-enable\-hardened""" 4
 .el .IP "\f(CW\-\-enable\-hardened\fR" 4
 .IX Item "--enable-hardened"
@@ -272,10 +335,6 @@ Enable the tool if it was previously disabled.
 .el .IP "\f(CW\-\-disable\-hardened\fR" 4
 .IX Item "--disable-hardened"
 Disable the tool.
-.ie n .IP """\-\-ignore\-gaps""" 4
-.el .IP "\f(CW\-\-ignore\-gaps\fR" 4
-.IX Item "--ignore-gaps"
-Ignore gaps in the annobin data.
 .PP
 The \fIbuilt-by\fR tool is disabled by default, but it can be enabled
 by the command line option \fB\-\-enable\-builtby\fR.  The tool
