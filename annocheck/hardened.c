@@ -48,12 +48,15 @@ enum test_result
   RESULT_PASS
 };
 
+/* This structure defines an individual test.  */
+
 typedef struct test
 {
-  bool	            enabled;
-  enum test_result  result;
-  const char *      name;
+  bool	            enabled;	/* If false then do not run this test.  */
+  enum test_result  result;	/* Initialised in start(), checked in finish().  */
+  const char *      name;	/* Also used as part of the command line option to disable the test.  */
   void (*           show_result)(eu_checksec_data *, enum test_result);
+  const char *      description;/* Used in the --help output to describe the test.  */
 } test;
 
 enum test_index
@@ -79,45 +82,48 @@ enum test_index
   TEST_MAX
 };
 
-static void show_bind_now_result (eu_checksec_data *, enum test_result);
-static void show_cf_protection_result (eu_checksec_data *, enum test_result);
-static void show_dynamic_segment_result (eu_checksec_data *, enum test_result);
-static void show_fortify_result (eu_checksec_data *, enum test_result);
-static void show_glibcxx_assertions_result (eu_checksec_data *, enum test_result);
-static void show_gnu_relro_result (eu_checksec_data *, enum test_result);
-static void show_gnu_stack_result (eu_checksec_data *, enum test_result);
-static void show_optimization_result (eu_checksec_data *, enum test_result);
-static void show_pic_result (eu_checksec_data *, enum test_result);
-static void show_run_path_result (eu_checksec_data *, enum test_result);
-static void show_rwx_seg_result (eu_checksec_data *, enum test_result);
-static void show_stack_clash_result (eu_checksec_data *, enum test_result);
-static void show_stack_prot_result (eu_checksec_data *, enum test_result);
-static void show_stack_realign_result (eu_checksec_data *, enum test_result);
-static void show_textrel_result (eu_checksec_data *, enum test_result);
-static void show_threads_result (eu_checksec_data *, enum test_result);
-static void show_writeable_got_result (eu_checksec_data *, enum test_result);
+static void show_BIND_NOW           (eu_checksec_data *, enum test_result);
+static void show_CF_PROTECTION      (eu_checksec_data *, enum test_result);
+static void show_DYNAMIC_SEGMENT    (eu_checksec_data *, enum test_result);
+static void show_FORTIFY            (eu_checksec_data *, enum test_result);
+static void show_GLIBCXX_ASSERTIONS (eu_checksec_data *, enum test_result);
+static void show_GNU_RELRO          (eu_checksec_data *, enum test_result);
+static void show_GNU_STACK          (eu_checksec_data *, enum test_result);
+static void show_OPTIMIZATION       (eu_checksec_data *, enum test_result);
+static void show_PIC                (eu_checksec_data *, enum test_result);
+static void show_RUN_PATH           (eu_checksec_data *, enum test_result);
+static void show_RWX_SEG            (eu_checksec_data *, enum test_result);
+static void show_STACK_CLASH        (eu_checksec_data *, enum test_result);
+static void show_STACK_PROT         (eu_checksec_data *, enum test_result);
+static void show_STACK_REALIGN      (eu_checksec_data *, enum test_result);
+static void show_TEXTREL            (eu_checksec_data *, enum test_result);
+static void show_THREADS            (eu_checksec_data *, enum test_result);
+static void show_WRITEABLE_GOT      (eu_checksec_data *, enum test_result);
+
+#define TEST(name,upper,description) \
+  [ TEST_##upper ] = { true, 0, #name, show_ ## upper, description }
 
 /* Array of tests to run.  Default to enabling them all.
    The result field is initialised in the start() function.  */
 static test tests [TEST_MAX] =
 {
-  [TEST_BIND_NOW]           = { true, 0, "bind-now", show_bind_now_result },
-  [TEST_CF_PROTECTION]      = { true, 0, "cf-protection", show_cf_protection_result },
-  [TEST_DYNAMIC_SEGMENT]    = { true, 0, "dynamic-segment", show_dynamic_segment_result },
-  [TEST_FORTIFY]            = { true, 0, "textrel", show_fortify_result },
-  [TEST_GLIBCXX_ASSERTIONS] = { true, 0, "glibcxx-assertions", show_glibcxx_assertions_result },
-  [TEST_GNU_RELRO]          = { true, 0, "gnu-relro", show_gnu_relro_result },
-  [TEST_GNU_STACK]          = { true, 0, "gnu-stack", show_gnu_stack_result },
-  [TEST_OPTIMIZATION]       = { true, 0, "optimization", show_optimization_result },
-  [TEST_PIC]                = { true, 0, "pic", show_pic_result },
-  [TEST_RUN_PATH]           = { true, 0, "run-path", show_run_path_result },
-  [TEST_RWX_SEG]            = { true, 0, "rwx-seg", show_rwx_seg_result },
-  [TEST_STACK_CLASH]        = { true, 0, "textrel", show_stack_clash_result },
-  [TEST_STACK_PROT]         = { true, 0, "stack-prot", show_stack_prot_result },
-  [TEST_STACK_REALIGN]      = { true, 0, "stack-realign", show_stack_realign_result },
-  [TEST_TEXTREL]            = { true, 0, "textrel", show_textrel_result },
-  [TEST_THREADS]            = { true, 0, "threads", show_threads_result },
-  [TEST_WRITEABLE_GOT]      = { true, 0, "writeable-got", show_writeable_got_result },
+  TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
+  TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8 only)"),
+  TEST (dynamic-segment,    DYNAMIC_SEGMENT,    "There is a dynamic segment/section present"),
+  TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
+  TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compield with -D_GLIBCXX_ASSERTIONS"),
+  TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writeable"),
+  TEST (gnu-stack,          GNU_STACK,          "The stack is not executable"),
+  TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
+  TEST (pic,                PIC,                "Compiled with -fPIC or fPIE"),
+  TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
+  TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
+  TEST (stack-clash,        STACK_CLASH,        "Compiled with -fstack-clash-protection (not ARM)"),
+  TEST (stack-prot,         STACK_PROT,         "Compiled with -fstack-protector-strong"),
+  TEST (stack-realign,      STACK_REALIGN,      "Compiled with -mstackrealign (i686 only)"),
+  TEST (textrel,            TEXTREL,            "There are no text relocations in the binary"),
+  TEST (threads,            THREADS,            "Compiled with -fexceptions"),
+  TEST (writeable-got,      WRITEABLE_GOT,      "The .got section is not writeable"),
 };
 
 
@@ -819,7 +825,7 @@ ice (eu_checksec_data * data, const char * message)
 }
 
 static void
-show_bind_now_result (eu_checksec_data * data, enum test_result result)
+show_BIND_NOW (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -830,7 +836,7 @@ show_bind_now_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_dynamic_segment_result (eu_checksec_data * data, enum test_result result)
+show_DYNAMIC_SEGMENT (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -841,7 +847,7 @@ show_dynamic_segment_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_gnu_relro_result (eu_checksec_data * data, enum test_result result)
+show_GNU_RELRO (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -852,7 +858,7 @@ show_gnu_relro_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_gnu_stack_result (eu_checksec_data * data, enum test_result result)
+show_GNU_STACK (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -863,7 +869,7 @@ show_gnu_stack_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_rwx_seg_result (eu_checksec_data * data, enum test_result result)
+show_RWX_SEG (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -874,7 +880,7 @@ show_rwx_seg_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_pic_result (eu_checksec_data * data, enum test_result result)
+show_PIC (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -886,7 +892,7 @@ show_pic_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_stack_prot_result (eu_checksec_data * data, enum test_result result)
+show_STACK_PROT (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -898,7 +904,7 @@ show_stack_prot_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_stack_clash_result (eu_checksec_data * data, enum test_result result)
+show_STACK_CLASH (eu_checksec_data * data, enum test_result result)
 {
   /* The ARM does not have stack clash protection support.  */
   if (arm_found)
@@ -923,7 +929,7 @@ show_stack_clash_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_textrel_result (eu_checksec_data * data, enum test_result result)
+show_TEXTREL (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -934,7 +940,7 @@ show_textrel_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_fortify_result (eu_checksec_data * data, enum test_result result)
+show_FORTIFY (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -947,7 +953,7 @@ show_fortify_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_cf_protection_result (eu_checksec_data * data, enum test_result result)
+show_CF_PROTECTION (eu_checksec_data * data, enum test_result result)
 {
   if (! x86_found)
     return;
@@ -971,7 +977,7 @@ show_cf_protection_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_glibcxx_assertions_result (eu_checksec_data * data, enum test_result result)
+show_GLIBCXX_ASSERTIONS (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -983,7 +989,7 @@ show_glibcxx_assertions_result (eu_checksec_data * data, enum test_result result
 }
 
 static void
-show_stack_realign_result (eu_checksec_data * data, enum test_result result)
+show_STACK_REALIGN (eu_checksec_data * data, enum test_result result)
 {
   if (!i686_found)
     return;
@@ -998,7 +1004,7 @@ show_stack_realign_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_run_path_result (eu_checksec_data * data, enum test_result result)
+show_RUN_PATH (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -1009,7 +1015,7 @@ show_run_path_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_threads_result (eu_checksec_data * data, enum test_result result)
+show_THREADS (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -1020,7 +1026,7 @@ show_threads_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_writeable_got_result (eu_checksec_data * data, enum test_result result)
+show_WRITEABLE_GOT (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -1031,7 +1037,7 @@ show_writeable_got_result (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_optimization_result (eu_checksec_data * data, enum test_result result)
+show_OPTIMIZATION (eu_checksec_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -1086,36 +1092,22 @@ version (void)
 static void
 usage (void)
 {
-  einfo (INFO, "Hardening/Security checker.  Tests for:");
-  einfo (INFO, "  lazy binding");
-  einfo (INFO, "  executable stack");
-  einfo (INFO, "  segments with write + executable");
-  einfo (INFO, "  text relocations");
-  einfo (INFO, "  runpath entries not under /usr");
-  einfo (INFO, "  missing annobin data");
-  einfo (INFO, "  missing dynamic segment");
-  einfo (INFO, "  writeable relocations for the GOT");
-  einfo (INFO, "  compilation without sufficient optimization");
-  einfo (INFO, "  compilation without -fstack-protector-strong");
-  einfo (INFO, "  compilation without -D_FORTIFY_SOURCE=2");
-  einfo (INFO, "  compilation without -D_GLIBCXX_ASSERTIONS");
-  einfo (INFO, "  compilation without -fPIE");
-  einfo (INFO, "  compilation without -fstack-clash-protection (not arm)");
-  einfo (INFO, "  compilation without -fexceptions");
-  einfo (INFO, "  compilation without -fcf-protection=full (x86 only, gcc 8 only)");
-  einfo (INFO, "  compilation without -mstackrealign (i686 only)");
-  einfo (INFO, "Still to do:");
-  einfo (INFO, "  Add a machine readable output mode");
-  einfo (INFO, "This tool is enabled by default.  This can be changed by:");
-  einfo (INFO, "  --disable-hardened  Disables the hardening checker");
-  einfo (INFO, "  --enable-hardened   Reenables the hardening checker");
-  einfo (INFO, "The following option can be used to disable some checks:");
-  einfo (INFO, "  --ignore-gaps       Ignores gaps in the annobin data");
+  einfo (INFO, "Hardening/Security checker.  By default all relevant tests are run.");
+  einfo (INFO, "  To disable an individual test use the following options:");
 
-  einfo (INFO, "Individual tests can be disabled with the following options:");
   int i;
   for (i = 0; i < TEST_MAX; i++)
-    einfo (INFO, "  --skip-%s", tests[i].name);
+    einfo (INFO, "    --skip-%-19sDisables: %s", tests[i].name, tests[i].description);
+  
+  einfo (INFO, "  The tool will also report missing annobin data unless:");
+  einfo (INFO, "    --ignore-gaps             Ignore missing annobin data");
+
+  einfo (INFO, "  The tool is enabled by default.  This can be changed by:");
+  einfo (INFO, "    --disable-hardened        Disables the hardening checker");
+  einfo (INFO, "    --enable-hardened         Reenables the hardening checker");
+
+  einfo (INFO, "  Still to do:");
+  einfo (INFO, "    Add a machine readable output mode");
 }
 
 static bool

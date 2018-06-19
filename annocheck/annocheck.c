@@ -198,6 +198,7 @@ usage (void)
   for (checker = first_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next)
     {
       push_component (checker);
+      einfo (PARTIAL, "\n");
       if (checker->usage)
 	checker->usage ();
       else
