@@ -552,11 +552,12 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 
       const char * prefix = "/usr/lib/debug/.build-id/";
       const char * suffix = ".debug";
-      char * debugfile = xmalloc (strlen (prefix)
-				  + build_id_len * 2
-				  + strlen (suffix) + 2);
-      char * n = debugfile;
+      char * n;
       unsigned char * d = (unsigned char *) build_id_ptr;
+
+      n = debugfile = xmalloc (strlen (prefix)
+			       + build_id_len * 2
+			       + strlen (suffix) + 2);
       
       n += sprintf (n, "%s%02x/", prefix, *d++);
       build_id_len --;
