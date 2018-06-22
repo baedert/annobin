@@ -794,7 +794,7 @@ eu_checksec_walk_dwarf (eu_checksec_data * data, dwarf_walker func, void * ptr)
 
       if (alt != NULL)
 	{
-	  (void) dwarf_end (dwarf);
+	  /* NB/ Do not close the parent dwarf, as that will close the alt as well...  */
 	  (void) scan_dwarf (data, alt, func, ptr);
 	  data->dwarf = alt;
 	}
