@@ -8,5 +8,5 @@ AUTOMAKE_OPTIONS = no-dependencies
 bin_PROGRAMS = annocheck
 annocheck_SOURCES = annocheck.c hardened.c built-by.c annocheck.h
 annocheck_LDADD = -lelf -ldw -lrpm -lrpmio -liberty
-annocheck_CFLAGS = -O2 -ansi -g
+annocheck_CFLAGS = -O2 -ansi -g -Wshadow=global -Wall -Werror
 

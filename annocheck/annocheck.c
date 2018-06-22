@@ -142,9 +142,9 @@ einfo (einfo_type type, const char * format, ...)
 /* -------------------------------------------------------------------- */
 
 static void
-push_component (checker * checker)
+push_component (checker * tool)
 {
-  component = checker->name;
+  component = tool->name;
 }
 
 static void
@@ -169,12 +169,12 @@ print_version (void)
 {
   einfo (INFO, "Version %d.%d", major_version, minor_version);
 
-  checker * checker;
-  for (checker = first_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next)
-    if (checker->version)
+  checker * tool;
+  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+    if (tool->version)
       {
-	push_component (checker);
-	checker->version ();
+	push_component (tool);
+	tool->version ();
 	pop_component ();
       }
 }
@@ -194,13 +194,14 @@ usage (void)
   einfo (INFO, "   --version          [Report the verion of the tool & exit]");
 
   einfo (INFO, "The following scanning tools are available:");
-  checker * checker;
-  for (checker = first_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next)
+
+  checker * tool;
+  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
     {
-      push_component (checker);
+      push_component (tool);
       einfo (PARTIAL, "\n");
-      if (checker->usage)
-	checker->usage ();
+      if (tool->usage)
+	tool->usage ();
       else
 	einfo (INFO, "Does not have any specific options");
       pop_component ();
@@ -232,18 +233,18 @@ process_command_line (uint argc, const char * argv[])
 
   while (a < argc)
     {
-      const char * arg = argv[a];
-      bool used = false;
-      checker * checker;
-      const char * parameter;
+      const char *  arg = argv[a];
+      bool          used = false;
+      checker *     tool;
+      const char *  parameter;
 
       ++ a;
 
-      for (checker = first_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next)
-	if (checker->process_arg != NULL)
+      for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+	if (tool->process_arg != NULL)
 	  {
-	    push_component (checker);
-	    if (checker->process_arg (arg, argv, argc, & a))
+	    push_component (tool);
+	    if (tool->process_arg (arg, argv, argc, & a))
 	      used = true;
 	    pop_component ();
 	  }
@@ -401,14 +402,14 @@ run_checkers (const char * filename, int fd, Elf * elf)
   data.elf = elf;
   data.is_32bit = gelf_getclass (elf) == ELFCLASS32;
 
-  checker * checker;
+  checker * tool;
 
   /* Call the checker start functions.  */
-  for (checker = first_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next)
-    if (checker->start)
+  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+    if (tool->start)
       {
-	push_component (checker);
-	checker->start (& data);
+	push_component (tool);
+	tool->start (& data);
 	pop_component ();
       }
 
@@ -442,14 +443,14 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	  einfo (VERBOSE2, "%s: Examining section %s", filename, sec.secname);
 
 	  /* Walk the checkers, asking each in turn if they are interested in this section.  */
-	  for (checker = first_sec_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next_sec)
+	  for (tool = first_sec_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next_sec)
 	    {
-	      if (checker->interesting_sec == NULL)
+	      if (tool->interesting_sec == NULL)
 		continue;
 
-	      push_component (checker);
+	      push_component (tool);
 
-	      if (checker->interesting_sec (& data, & sec))
+	      if (tool->interesting_sec (& data, & sec))
 		{
 		  /* Delay loading the section contents until a checker expresses interest.  */
 		  if (sec.data == NULL)
@@ -463,7 +464,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 		    {
 		      einfo (VERBOSE2, "is interested in section %s", sec.secname);
 
-		      ret &= checker->check_sec (& data, & sec);
+		      ret &= tool->check_sec (& data, & sec);
 		    }
 		}
 	      else
@@ -492,21 +493,21 @@ run_checkers (const char * filename, int fd, Elf * elf)
 
 	  einfo (VERBOSE2, "%s: considering segment %lu", filename, (unsigned long) cnt);
 
-	  for (checker = first_seg_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next_seg)
+	  for (tool = first_seg_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next_seg)
 	    {
-	      if (checker->interesting_seg == NULL)
+	      if (tool->interesting_seg == NULL)
 		continue;
 
-	      push_component (checker);
+	      push_component (tool);
 
-	      if (checker->interesting_seg (& data, & seg))
+	      if (tool->interesting_seg (& data, & seg))
 		{
 		  /* Delay loading the contents of the segment until they are actually needed.  */
 		  if (seg.data == NULL)
 		    seg.data = elf_getdata_rawchunk (elf, seg.phdr->p_offset,
 						     seg.phdr->p_filesz, ELF_T_BYTE);
 
-		  ret &= checker->check_seg (& data, & seg);
+		  ret &= tool->check_seg (& data, & seg);
 		}
 	      else
 		einfo (VERBOSE2, "is not interested in segment %lu", (unsigned long) cnt);
@@ -516,16 +517,26 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	}
     }
 
-  for (checker = first_checker; checker != NULL; checker = ((checker_internal *)(checker->internal))->next)
-    if (checker->finish)
+  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+    if (tool->finish)
       {
-	push_component (checker);
-	ret &= checker->finish (& data);
+	push_component (tool);
+	ret &= tool->finish (& data);
 	pop_component ();
       }
 
   return ret;
 }
+
+#define TRY_DEBUG(format,args...)					\
+  do									\
+    {									\
+      sprintf (debugfile, format, args);				\
+      einfo (VERBOSE, "%s:  try: %s", data->filename, debugfile);	\
+      if ((fd = open (debugfile, O_RDONLY)) != -1)			\
+	goto found;							\
+    }									\
+  while (0)
 
 static Dwarf *
 follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
@@ -537,7 +548,9 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
   /* First try the build-id method.  */
   ssize_t       build_id_len;
   const void *  build_id_ptr;
-  
+
+  einfo (VERBOSE2, "%s: Attempting to locate separate debuginfo file", data->filename);
+
   build_id_len = dwelf_elf_gnu_build_id (data->elf, & build_id_ptr);
   if (build_id_len > 0)
     {
@@ -550,27 +563,45 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 	where NNNN+NN is the build-id value as a hexadecimal
 	string.  */
 
-      const char * prefix = "/usr/lib/debug/.build-id/";
-      const char * suffix = ".debug";
-      char * n;
-      unsigned char * d = (unsigned char *) build_id_ptr;
+      const char *     leadin = "/usr/lib/debug/.build-id/";
+      unsigned char *  d = (unsigned char *) build_id_ptr;
+      char             build_id_dir[3];
+      char *           build_id_name;
+      char *           n;
 
-      n = debugfile = xmalloc (strlen (prefix)
+      einfo (VERBOSE2, "%s: Testing possibilities based upon the build-id", data->filename);
+
+      debugfile = n = xmalloc (strlen (leadin)
+                               + strlen (dwarf_path ? dwarf_path : "")
 			       + build_id_len * 2
-			       + strlen (suffix) + 2);
+			       + strlen (".debug") + 6);
       
-      n += sprintf (n, "%s%02x/", prefix, *d++);
+      sprintf (build_id_dir, "%02x", * d++);
       build_id_len --;
+      build_id_name = n = xmalloc (build_id_len * 2 + 1);
       while (build_id_len --)
-	n += sprintf (n, "%02x", *d++);
-      n += sprintf (n, "%s", suffix);
+	n += sprintf (n, "%02x", *d++);      
+      
+      if (dwarf_path)
+	{
+	  /* If the user has supplied a directory to search then this might be
+	     an unpacked debuginfo rpm.  So try the following possibilities:
 
-      einfo (VERBOSE, "%s: Look for build-id based debug info file: %s",
-	     data->filename, debugfile);
-      if ((fd = open (debugfile, O_RDONLY)) != -1)
-	goto found;
+	     <dwarf-dir>/NNNNN.debug
+	     <dwarf-dir>/NN/NNNNN.debug
+	     <dwarf-dir>/.build-id/NN/NNNN.debug
+	     <dwarf-dir>/usr/lib/debug/.build-id/NN/NNNNN.debug */
+
+          TRY_DEBUG ("%s/%s.debug", dwarf_path, build_id_name);
+          TRY_DEBUG ("%s/%s/%s.debug", dwarf_path, build_id_dir, build_id_name);
+          TRY_DEBUG ("%s/.build-id/%s/%s.debug", dwarf_path, build_id_dir, build_id_name);
+          TRY_DEBUG ("%s/%s/%s/%s.debug", dwarf_path, leadin + 1, build_id_dir, build_id_name);
+	}
+
+      TRY_DEBUG ("%s/%s/%s.debug", leadin, build_id_dir, build_id_name);
 
       free (debugfile);
+      einfo (VERBOSE, "%s: Could not find separate debug based on build-id", data->filename);
     }
 
   /* Now try using a .gnu.debuglink section.  */
@@ -580,7 +611,7 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
   if ((link = dwelf_elf_gnu_debuglink (data->elf, & crc)) == NULL)
     return NULL;
 
-  einfo (VERBOSE, "%s: Try to find separate debug file for: %s", data->filename, link);
+  einfo (VERBOSE2, "%s: Testing possibilities based upon the debuglink", data->filename);
 
   size_t canon_dirlen;
 
@@ -616,70 +647,37 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
     }
   
   /* First try in the current directory.  */
-  sprintf (debugfile, "%s", link);
-  einfo (VERBOSE2, " try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("./%s", link);
 
   /* Then try in a subdirectory called .debug.  */
-  sprintf (debugfile, ".debug/%s", link);
-  einfo (VERBOSE2, " try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("./.debug/%s", link);
 
   /* Then try in the same directory as the original file.  */
-  sprintf (debugfile, "%s%s", canon_dir, link);
-  einfo (VERBOSE2, "try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("%s%s", canon_dir, link);
 
   /* And the .debug subdirectory of that directory.  */
-  sprintf (debugfile, "%s.debug/%s", canon_dir, link);
-  einfo (VERBOSE2, "try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("%s.debug/%s", canon_dir, link);
 
   /* Try the first extra debug file root.  */
-  sprintf (debugfile, "%s/%s", DEBUGDIR_2, link);
-  einfo (VERBOSE2, "try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("%s/%s", DEBUGDIR_2, link);
 
   /* Try the first extra debug file root, with directory extensions.  */
-  sprintf (debugfile, "%s%s%s", DEBUGDIR_2, canon_dir, link);
-  einfo (VERBOSE2, " try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("%s%s%s", DEBUGDIR_2, canon_dir, link);
 
   /* Try the second extra debug file root.  */
-  sprintf (debugfile, "%s/%s", DEBUGDIR_3, link);
-  einfo (VERBOSE2, " try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("%s/%s", DEBUGDIR_3, link);
 
-  /* Try the third extra debug file root.  */
-  sprintf (debugfile, "%s/%s", DEBUGDIR_4, link);
-  einfo (VERBOSE2, " try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  /* Try the fourth extra debug file root.  */
+  TRY_DEBUG ("%s/%s", DEBUGDIR_4, link);
 
   /* Then try in the global debugfile directory.  */
-  sprintf (debugfile, "%s/%s", DEBUGDIR_1, link);
-  einfo (VERBOSE2, " try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("%s/%s", DEBUGDIR_1, link);
 
   /* Then try in the global debugfile directory, with directory extensions.  */
-  sprintf (debugfile, "%s%s%s", DEBUGDIR_1, canon_dir, link);
-  einfo (VERBOSE2, " try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("%s%s%s", DEBUGDIR_1, canon_dir, link);
 
   /* Try the first extra debug file root, with directory extensions.  */
-  sprintf (debugfile, "%s%s%s", DEBUGDIR_2, canon_dir, link);
-  einfo (VERBOSE2, " try: %s\n", debugfile);
-  if ((fd = open (debugfile, O_RDONLY)) != -1)
-    goto found;
+  TRY_DEBUG ("%s%s%s", DEBUGDIR_2, canon_dir, link);
 
   /* FIMXE: This is a workaround for a bug in the Fedora packaging
      system.  It is possible for the debuginfo files to be out of
@@ -692,43 +690,36 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
     {
       char * end;
       unsigned long revision = strtoul (dash + 1, & end, 10);
+
       while (revision > 1)
 	{
 	  --revision;
-	  sprintf (debugfile, "%s%s%.*s%lu%s", DEBUGDIR_2, canon_dir, (int) (dash - link) + 1, link, revision, end);
-	  einfo (VERBOSE2, " try: %s\n", debugfile);
-	  if ((fd = open (debugfile, O_RDONLY)) != -1)
-	    goto found;
+
+	  TRY_DEBUG ("%s%s%.*s%lu%s", DEBUGDIR_2, canon_dir, (int) (dash - link) + 1, link, revision, end);
 	}
     }
 
   /* Failed to find the file.  */
-  einfo (VERBOSE, "%s: Could not find separate debug file:  %s", data->filename, link);
+  einfo (VERBOSE, "%s: Could not find separate debug file: %s", data->filename, link);
 
   free (canon_dir);
   free (debugfile);
   return NULL;
 
  found:
-  /* FIXME: We should verify the CRC value... */
+  /* FIXME: We should verify the CRC value.  */
 
   free (canon_dir);
 
-  Dwarf * separate_debug_file;
-
   /* Now open the file.... */
-  if ((separate_debug_file = dwarf_begin (fd, DWARF_C_READ)) == NULL)
-    {
-      einfo (VERBOSE, "%s: Failed to open separate debug file: %s", data->filename, debugfile);
-      free (debugfile);
-      return NULL;
-    }
+  Dwarf * separate_debug_file = dwarf_begin (fd, DWARF_C_READ);
+  
+  einfo (VERBOSE, "%s: %s separate debug file: %s",
+	 data->filename,
+	 separate_debug_file == NULL ? "Failed to open" : "Found",
+	 debugfile);
 
-  einfo (VERBOSE, "%s: Found separate debug info file: %s", data->filename, debugfile);
   free (debugfile);
-
-  /* Do not free debugfile - it might be referenced inside
-     the structure returned by open_debug_file().  */
   return separate_debug_file;
 }
 
@@ -787,18 +778,11 @@ eu_checksec_walk_dwarf (eu_checksec_data * data, dwarf_walker func, void * ptr)
   if ((dwarf = data->dwarf) == NULL)
     return true;
 
-  if (! scan_dwarf (data, dwarf, func, ptr))
-    {
-      /* Check for an alternate file.  */
-      Dwarf * alt = dwarf_getalt (dwarf);
+  (void) scan_dwarf (data, dwarf, func, ptr);
 
-      if (alt != NULL)
-	{
-	  /* NB/ Do not close the parent dwarf, as that will close the alt as well...  */
-	  (void) scan_dwarf (data, alt, func, ptr);
-	  data->dwarf = alt;
-	}
-    }
+  /* We used to call dwarf_getalt() if the scan failed to find anything.
+     But that was a waste of time.  libdw will automatically load any
+     alternate debug info files pointed to by sections in the binary.  */
 
   /* We do not close the dwarf handle as we will probably want to use it again.  */
   return true;
@@ -1017,7 +1001,7 @@ process_elf (const char * filename, int fd, Elf * elf)
 	return true;
       return einfo (WARN, "%s: is not an ELF format file", filename);
     }
-  
+
   return ret;
 }
 
