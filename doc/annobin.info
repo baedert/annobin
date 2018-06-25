@@ -27,7 +27,7 @@ This manual describes the ANNOBIN plugin and the 'annocheck' program,
 and how you can use them to determine what security features were used
 when a program was built.
 
-   This manual is for 'annobin' (Annobin) version 6.0.
+   This manual is for 'annobin' (Annobin) version 7.0.
 
    This document is distributed under the terms of the GNU Free
 Documentation License version 1.3.  A copy of the license is included in
@@ -392,6 +392,7 @@ File: annobin.info,  Node: Annocheck,  Next: Legacy Scripts,  Prev: Examining,  
        [-verbose]
        [-quiet]
        [-ignore-unknown]
+       [-debug-rpm=FILE]
        [-dwarf-dir=DIR]
        [-prefix=TEXT]
        FILE...
@@ -415,8 +416,11 @@ for these whenever it is checking debug information.
    The program supports some generic command line options that are used
 regardless of which tools are enabled.
 
+'--debug-rpm=FILE'
+     Look in FILE for separate dwarf debug information.
+
 '--dwarf-dir=DIR'
-     Look in DIR for separate dwarf debug information files
+     Look in DIR for separate dwarf debug information files.
 
 '--help'
      Display this message & exit.
@@ -1535,13 +1539,13 @@ Node: The GOW Encoding12012
 Node: The CF Encoding13460
 Node: The ENUM Encoding14532
 Node: Annocheck14889
-Node: Hardened16547
-Node: Built-By20406
-Node: Legacy Scripts21750
-Node: Who Built Me22517
-Node: ABI Checking25277
-Node: Hardening Checks27391
-Node: Checking Archives31477
-Node: GNU FDL33899
+Node: Hardened16649
+Node: Built-By20508
+Node: Legacy Scripts21852
+Node: Who Built Me22619
+Node: ABI Checking25379
+Node: Hardening Checks27493
+Node: Checking Archives31579
+Node: GNU FDL34001
 
 End Tag Table

@@ -5,7 +5,7 @@
 @setchapternewpage odd
 
 @c man begin INCLUDE
-@set VERSION 6.0
+@set VERSION 7.0
 @set VERSION_PACKAGE (Annobin) 
 @set UPDATED June 2018
 @c man end
@@ -463,6 +463,7 @@ annocheck
   [@b{--verbose}]
   [@b{--quiet}]
   [@b{--ignore-unknown}]
+  [@b{--debug-rpm=}@var{file}]
   [@b{--dwarf-dir=}@var{dir}]
   [@b{--prefix=}@var{text}]
   @var{file}@dots{}
@@ -492,8 +493,11 @@ regardless of which tools are enabled.
 
 @table @code
 
+@item --debug-rpm=@var{file}
+Look in @var{file} for separate dwarf debug information.
+
 @item --dwarf-dir=@var{dir}
-Look in @var{dir} for separate dwarf debug information files
+Look in @var{dir} for separate dwarf debug information files.
 
 @item --help
 Display this message & exit.

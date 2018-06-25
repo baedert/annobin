@@ -129,7 +129,7 @@
 .\" ========================================================================
 .\"
 .IX Title "ANNOCHECK 1"
-.TH ANNOCHECK 1 "2018-06-19" "annobin-1" "RPM Development Tools"
+.TH ANNOCHECK 1 "2018-06-25" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -144,6 +144,7 @@ annocheck
   [\fB\-\-verbose\fR]
   [\fB\-\-quiet\fR]
   [\fB\-\-ignore\-unknown\fR]
+  [\fB\-\-debug\-rpm=\fR\fIfile\fR]
   [\fB\-\-dwarf\-dir=\fR\fIdir\fR]
   [\fB\-\-prefix=\fR\fItext\fR]
   \fIfile\fR...
@@ -191,10 +192,14 @@ it will search for these whenever it is checking debug information.
 .PP
 The program supports some generic command line options that are used
 regardless of which tools are enabled.
+.ie n .IP """\-\-debug\-rpm=\fIfile\fP""" 4
+.el .IP "\f(CW\-\-debug\-rpm=\f(CIfile\f(CW\fR" 4
+.IX Item "--debug-rpm=file"
+Look in \fIfile\fR for separate dwarf debug information.
 .ie n .IP """\-\-dwarf\-dir=\fIdir\fP""" 4
 .el .IP "\f(CW\-\-dwarf\-dir=\f(CIdir\f(CW\fR" 4
 .IX Item "--dwarf-dir=dir"
-Look in \fIdir\fR for separate dwarf debug information files
+Look in \fIdir\fR for separate dwarf debug information files.
 .ie n .IP """\-\-help""" 4
 .el .IP "\f(CW\-\-help\fR" 4
 .IX Item "--help"

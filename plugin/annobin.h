@@ -99,6 +99,12 @@ extern void annobin_target_specific_function_notes (const char *, const char *);
    notes in the .note.gnu.property section.  */
 extern void annobin_target_specific_loader_notes (void);
 
+/* Called during plugin_init ().
+   Returns the bias, if any, that should be applied to
+   the start symbol in order for it to avoid conflicts
+   with file symbols and/or the first function symbol.  */
+extern signed int annobin_target_start_symbol_bias (void);
+
 extern void annobin_inform (unsigned, const char *, ...);
 extern void annobin_output_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned, bool, unsigned);
 extern void annobin_output_static_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned);

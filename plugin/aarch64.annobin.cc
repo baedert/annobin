@@ -18,6 +18,12 @@
    encoded in the binary.  Instead we record the TLS dialect...  */
 static signed int saved_tls_dialect = -1;
 
+signed int
+annobin_target_start_symbol_bias (void)
+{
+  return 0;
+}
+
 void
 annobin_save_target_specific_information (void)
 {

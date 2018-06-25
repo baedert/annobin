@@ -22,6 +22,18 @@ annobin_save_target_specific_information (void)
   ;
 }
 
+signed int
+annobin_target_start_symbol_bias (void)
+{
+  /* We set the address of the start symbol to be the current address plus two.
+     That way this symbol will not be confused for a file start/function start
+     symbol.  This is especially important on the PowerPC target as that
+     generates synthetic symbols for function entry points, but only if there
+     is no real symbol for that address.  */
+
+  return 2;
+}
+
 void
 annobin_record_global_target_notes (void)
 {

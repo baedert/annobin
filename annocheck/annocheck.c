@@ -26,7 +26,7 @@
 ulong         verbosity = 0;
 
 uint          major_version = 1;
-uint          minor_version = 0;
+uint          minor_version = 1;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -36,6 +36,8 @@ static const char *	component = "annocheck";
 static bool             ignore_unknown = false;
 static char *           saved_args = NULL;
 static char *           prefix = "";
+static const char *     debug_rpm = NULL;
+static const char *     debug_rpm_dir = NULL;
 static const char *     dwarf_path = NULL;
 
 static checker *        first_checker = NULL;
@@ -185,6 +187,7 @@ usage (void)
   einfo (INFO, "Runs various scans on the given files");
   einfo (INFO, "Useage: %s [options] <file(s)>", component);
   einfo (INFO, " Options are:");
+  einfo (INFO, "   --debug-rpm=<FILE> [Find separate dwarf debug information in <FILE>]");
   einfo (INFO, "   --dwarf-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
   einfo (INFO, "   --help             [Display this message & exit]");
   einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types]");
@@ -277,12 +280,18 @@ process_command_line (uint argc, const char * argv[])
 
 	    case 'd':
 	      save_arg (orig_arg);
+	      bool is_path = arg[1] == 'w';
 	      parameter = strchr (arg, '=');
 	      if (parameter == NULL)
 		parameter = argv[a++];
 	      else
 		parameter ++;
-	      dwarf_path = parameter;
+	      if (is_path)
+		dwarf_path = parameter;
+	      else
+		debug_rpm = parameter;
+	      if (dwarf_path != NULL && debug_rpm != NULL)
+		einfo (WARN, "Behaviour is udnefined with both --debug-rpm and --dwarf-dir");
 	      break;
 
 	    case 'p':
@@ -528,11 +537,67 @@ run_checkers (const char * filename, int fd, Elf * elf)
   return ret;
 }
 
+/* Like process_rpm_file, except that the rpm is just
+   extracted and then left untouched.  Returns the name
+   of the directory holding the rpm contents.  */
+
+static const char *
+extract_rpm_file (const char * filename)
+{
+  static char dirname[32];
+
+  if (debug_rpm_dir != NULL)
+    return debug_rpm_dir;
+
+  dirname[0] = 0;
+  strcpy (dirname, "annocheck.debuginfo.XXXXXX");
+  if (mkdtemp (dirname) == NULL)
+    {
+      einfo (WARN, "Failed to create temporary directory for processing rpm: %s", filename);
+      return NULL;
+    }
+
+  einfo (VERBOSE2, "Created temporary directory: %s", dirname);
+
+  char * fname;
+  char * command;
+  char * cwd = getcwd (NULL, 0);
+
+  if (filename[0] != '/')
+    fname = concat (cwd, "/", filename, NULL);
+  else
+    fname = concat (filename, NULL);
+
+  command = concat (/* Change into the temporary directory.  */
+		    "cd ", dirname,
+		    /* Convert the rpm to cpio format.  */
+		    " && rpm2cpio ", fname,
+		    /* Pipe the output into cpio in order to extract the files.  */
+		    " | cpio -dium --quiet",
+		    /* Then move out of the directory.  */
+		    " && cd ..",
+		    NULL);
+
+  einfo (VERBOSE2, "Running rpm extractor command sequence: %s", command);
+  if (system (command))
+    {
+      einfo (WARN, "Failed to extract rpm file: %s", filename);
+      return NULL;
+    }
+
+  free (command);
+  free (cwd);
+  free (fname);
+
+  einfo (VERBOSE2, "Extraction successful");
+  return debug_rpm_dir = dirname;
+}
+
 #define TRY_DEBUG(format,args...)					\
   do									\
     {									\
       sprintf (debugfile, format, args);				\
-      einfo (VERBOSE, "%s:  try: %s", data->filename, debugfile);	\
+      einfo (VERBOSE2, "%s:  try: %s", data->filename, debugfile);	\
       if ((fd = open (debugfile, O_RDONLY)) != -1)			\
 	goto found;							\
     }									\
@@ -563,6 +628,7 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 	where NNNN+NN is the build-id value as a hexadecimal
 	string.  */
 
+      const char *     path;
       const char *     leadin = "/usr/lib/debug/.build-id/";
       unsigned char *  d = (unsigned char *) build_id_ptr;
       char             build_id_dir[3];
@@ -571,8 +637,17 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 
       einfo (VERBOSE2, "%s: Testing possibilities based upon the build-id", data->filename);
 
+      if (debug_rpm)
+	/* If the user has told us an rpm file that contains
+	   debug information then extract it and use it.  */
+	path = extract_rpm_file (debug_rpm);
+      else if (dwarf_path)
+	path = dwarf_path;
+      else
+	path = "";
+      
       debugfile = n = xmalloc (strlen (leadin)
-                               + strlen (dwarf_path ? dwarf_path : "")
+                               + strlen (path)
 			       + build_id_len * 2
 			       + strlen (".debug") + 6);
       
@@ -582,26 +657,26 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
       while (build_id_len --)
 	n += sprintf (n, "%02x", *d++);      
       
-      if (dwarf_path)
+      if (* path)
 	{
 	  /* If the user has supplied a directory to search then this might be
 	     an unpacked debuginfo rpm.  So try the following possibilities:
 
-	     <dwarf-dir>/NNNNN.debug
-	     <dwarf-dir>/NN/NNNNN.debug
-	     <dwarf-dir>/.build-id/NN/NNNN.debug
-	     <dwarf-dir>/usr/lib/debug/.build-id/NN/NNNNN.debug */
+	     <path>/NNNNN.debug
+	     <path>/NN/NNNNN.debug
+	     <path>/.build-id/NN/NNNN.debug
+	     <path>/usr/lib/debug/.build-id/NN/NNNNN.debug */
 
-          TRY_DEBUG ("%s/%s.debug", dwarf_path, build_id_name);
-          TRY_DEBUG ("%s/%s/%s.debug", dwarf_path, build_id_dir, build_id_name);
-          TRY_DEBUG ("%s/.build-id/%s/%s.debug", dwarf_path, build_id_dir, build_id_name);
-          TRY_DEBUG ("%s/%s/%s/%s.debug", dwarf_path, leadin + 1, build_id_dir, build_id_name);
+          TRY_DEBUG ("%s/%s.debug", path, build_id_name);
+          TRY_DEBUG ("%s/%s/%s.debug", path, build_id_dir, build_id_name);
+          TRY_DEBUG ("%s/.build-id/%s/%s.debug", path, build_id_dir, build_id_name);
+          TRY_DEBUG ("%s/%s/%s/%s.debug", path, leadin + 1, build_id_dir, build_id_name);
 	}
 
       TRY_DEBUG ("%s/%s/%s.debug", leadin, build_id_dir, build_id_name);
 
       free (debugfile);
-      einfo (VERBOSE, "%s: Could not find separate debug based on build-id", data->filename);
+      einfo (VERBOSE2, "%s: Could not find separate debug based on build-id", data->filename);
     }
 
   /* Now try using a .gnu.debuglink section.  */
@@ -609,7 +684,10 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
   const char *  link;
 
   if ((link = dwelf_elf_gnu_debuglink (data->elf, & crc)) == NULL)
-    return NULL;
+    {
+      einfo (VERBOSE2, "%s: Could not find separate debug file", data->filename);
+      return NULL;
+    }
 
   einfo (VERBOSE2, "%s: Testing possibilities based upon the debuglink", data->filename);
 
@@ -639,14 +717,20 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 
   /* If we have been provided with a dwarf directory, try that first.  */
   if (dwarf_path)
+    TRY_DEBUG ("%s/%s", dwarf_path, link);
+
+  /* If we have been pointed at an debuginfo rpm then try that next.  */
+  if (debug_rpm)
     {
-      sprintf (debugfile, "%s/%s", dwarf_path, link);
-      einfo (VERBOSE2, " try: %s\n", debugfile);
-      if ((fd = open (debugfile, O_RDONLY)) != -1)
-	goto found;
+      const char * dir = extract_rpm_file (debug_rpm);
+      TRY_DEBUG ("./%s/%s", dir, link);
+      TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_1, link);
+      TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_2, link);
+      TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_3, link);
+      TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_4, link);
     }
   
-  /* First try in the current directory.  */
+  /* next try in the current directory.  */
   TRY_DEBUG ("./%s", link);
 
   /* Then try in a subdirectory called .debug.  */
@@ -701,7 +785,7 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 
   /* Failed to find the file.  */
   einfo (VERBOSE, "%s: Could not find separate debug file: %s", data->filename, link);
-
+  
   free (canon_dir);
   free (debugfile);
   return NULL;
@@ -790,6 +874,57 @@ eu_checksec_walk_dwarf (eu_checksec_data * data, dwarf_walker func, void * ptr)
 
 /* -------------------------------------------------------------------- */
 
+static const char *
+find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, bool prefer_func)
+{
+  Elf_Data * sym_data;
+
+  if ((sym_data = elf_getdata (sym_sec, NULL)) == NULL)
+    {
+      einfo (VERBOSE2, "No symbol section data");
+      return NULL;
+    }
+
+  bool use_sym = false;
+  bool use_saved = false;
+  GElf_Sym saved_sym;
+  GElf_Sym sym;
+  int symndx = 1;
+
+  while (gelf_getsym (sym_data, symndx, & sym) != NULL)
+    {
+      if (sym.st_value >= addr && sym.st_value <= addr + 2)
+	{
+	  if (!prefer_func || ELF64_ST_TYPE (sym.st_info) == STT_FUNC)
+	    {
+	      use_sym = true;
+	      break;
+	    }
+
+	  memcpy (& saved_sym, & sym, sizeof sym);
+	  use_saved = true;
+	  continue;
+	}
+
+      /* As of version 3 of the protocol, start symbols are set at base address plus 2.  */
+      if (!prefer_func && sym.st_value == addr + 2)
+	{
+	  use_sym = true;
+	  break;
+	}
+
+      symndx++;
+    }
+
+  if (use_sym)
+    return elf_strptr (elf, sym_hdr->sh_link, sym.st_name);
+
+  if (use_saved)
+    return elf_strptr (elf, sym_hdr->sh_link, saved_sym.st_name);
+
+  return NULL;
+}
+
 typedef struct walker_info
 {
   ulong          start;
@@ -803,11 +938,37 @@ find_symbol_addr_using_dwarf (eu_checksec_data * data, Dwarf * dwarf, Dwarf_Die 
 {
   assert (data != NULL && die != NULL && ptr != NULL);
 
-  walker_info *  info;
+  walker_info * info = (walker_info *) ptr;
+
+  /* If we are examining a separate debuginfo file then
+     it might have a symbol table that we can use.  */
+  if (data->elf != dwarf_getelf (dwarf))
+    {
+      Elf_Scn *    sym_sec = NULL;
+      Elf *        elf = dwarf_getelf (dwarf);
+
+      while ((sym_sec = elf_nextscn (elf, sym_sec)) != NULL)
+	{
+	  Elf64_Shdr   sym_shdr;
+
+	  read_section_header (data, sym_sec, & sym_shdr);
+
+	  if ((sym_shdr.sh_type == SHT_SYMTAB) || (sym_shdr.sh_type == SHT_DYNSYM))
+	    {
+	      const char * name;
+
+	      name = find_symbol_in (elf, sym_sec, info->start, & sym_shdr, info->prefer_func);
+	      if (name)
+		{
+		  *(info->name) = name;
+		  return false;
+		}
+	    }
+	}
+    }
+
   size_t         nlines;
   Dwarf_Lines *  lines;
-
-  info = (walker_info *) ptr;
 
   dwarf_getsrclines (die, & lines, & nlines);
 
@@ -836,60 +997,15 @@ find_symbol_addr_using_dwarf (eu_checksec_data * data, Dwarf * dwarf, Dwarf_Die 
   return true;
 }
 
-static const char *
-find_symbol_in (eu_checksec_data * data, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, bool prefer_func)
-{
-  Elf_Data * sym_data;
-  if ((sym_data = elf_getdata (sym_sec, NULL)) == NULL)
-    {
-      einfo (VERBOSE2, "No symbol section data");
-      return NULL;
-    }
-
-  bool use_sym = false;
-  bool use_saved = false;
-  GElf_Sym saved_sym;
-  GElf_Sym sym;
-  int symndx = 1;
-
-  while (gelf_getsym (sym_data, symndx, & sym) != NULL)
-    {
-      if (sym.st_value == addr)
-	{
-	  if (!prefer_func || ELF64_ST_TYPE (sym.st_info) == STT_FUNC)
-	    {
-	      use_sym = true;
-	      break;
-	    }
-
-	  memcpy (& saved_sym, & sym, sizeof sym);
-	  use_saved = true;
-	  continue;
-	}
-
-      /* As of version 3 of the protocol, start symbols are set at base address plus 2.  */
-      if (!prefer_func && sym.st_value == addr + 2)
-	{
-	  use_sym = true;
-	  break;
-	}
-
-      symndx++;
-    }
-
-  if (use_sym)
-    return elf_strptr (data->elf, sym_hdr->sh_link, sym.st_name);
-  else if (use_saved)
-    return elf_strptr (data->elf, sym_hdr->sh_link, saved_sym.st_name);
-  else
-    return NULL;
-}
-
 /* Return the name of a symbol most appropriate for address range START..END.
    Returns NULL if no symbol could be found.  */
 
 const char *
-eu_checksec_find_symbol_for_address_range (eu_checksec_data * data, eu_checksec_section * sec, ulong start, ulong end, bool prefer_func)
+eu_checksec_find_symbol_for_address_range (eu_checksec_data *     data,
+					   eu_checksec_section *  sec,
+					   ulong                  start,
+					   ulong                  end,
+					   bool                   prefer_func)
 {
   static const char * previous_result;
   static ulong        previous_start;
@@ -917,7 +1033,7 @@ eu_checksec_find_symbol_for_address_range (eu_checksec_data * data, eu_checksec_
 
       if (sym_shdr.sh_type == SHT_SYMTAB || sym_shdr.sh_type == SHT_DYNSYM)
 	{
-	  name = find_symbol_in (data, sym_sec, start, & sym_shdr, prefer_func);
+	  name = find_symbol_in (data->elf, sym_sec, start, & sym_shdr, prefer_func);
 	  if (name != NULL)
 	    return previous_result = name;
 	}
@@ -932,7 +1048,7 @@ eu_checksec_find_symbol_for_address_range (eu_checksec_data * data, eu_checksec_
 
       if ((sym_shdr.sh_type == SHT_SYMTAB) || (sym_shdr.sh_type == SHT_DYNSYM))
 	{
-	  name = find_symbol_in (data, sym_sec, start, & sym_shdr, prefer_func);
+	  name = find_symbol_in (data->elf, sym_sec, start, & sym_shdr, prefer_func);
 	  if (name)
 	    return previous_result = name;
 	}
@@ -1010,11 +1126,11 @@ process_rpm_file (const char * filename)
 {
   /* It turns out that the simplest/most portable way to handle an rpm is
      to use the rpm2cpio and cpio programs to unpack it for us...  */
-  char dirname[20];
+  char dirname[32];
 
-  strcpy (dirname, "annocheck.XXXXXX");
+  strcpy (dirname, "annocheck.rpm.XXXXXX");
   if (mkdtemp (dirname) == NULL)
-    return einfo (WARN, "Faield to create temporary directory for processing rpm: %s", filename);
+    return einfo (WARN, "Failed to create temporary directory for processing rpm: %s", filename);
 
   einfo (VERBOSE2, "Created temporary directory: %s", dirname);
 
@@ -1060,7 +1176,7 @@ process_rpm_file (const char * filename)
   free (fname);
   free (pname);
 
-  einfo (VERBOSE2, "Extraction successful");
+  einfo (VERBOSE2, "RPM processed successful");
   return true;
 }
 
@@ -1091,7 +1207,7 @@ process_file (const char * filename)
       struct dirent * entry;
       bool result = true;
 
-      einfo (VERBOSE, "Scanning directory: '%s'", filename);
+      einfo (VERBOSE2, "Scanning directory: '%s'", filename);
       while ((entry = readdir (dir)) != NULL)
 	{
 	  if (streq (entry->d_name, ".") || streq (entry->d_name, ".."))
@@ -1196,18 +1312,19 @@ main (int argc, const char ** argv)
   if (! process_command_line (argc, argv))
     return EXIT_FAILURE;
 
-  if (!process_files ())
-    {
-      /* FIXME: This is a hack.  When --ignore-unknown is active we
-	 are probably processing an rpm, and we do not want the
-	 return status from annocheck to stop the cleanup of the
-	 temporary directory.  */
-      if (ignore_unknown)
-	return EXIT_SUCCESS;
-      return EXIT_FAILURE;
-    }
+  bool res = process_files ();
 
-  return EXIT_SUCCESS;
+  if (debug_rpm_dir)
+    rmdir (debug_rpm_dir);
+  
+  /* FIXME: This is a hack.  When --ignore-unknown is active we
+     are probably processing an rpm, and we do not want the
+     return status from annocheck to stop the cleanup of the
+     temporary directory.  */
+  if (!res && ignore_unknown)
+    res = true;
+  
+  return res ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 /* -------------------------------------------------------------------- */

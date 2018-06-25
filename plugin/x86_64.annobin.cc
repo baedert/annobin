@@ -48,6 +48,12 @@ static unsigned HOST_WIDE_INT  global_ibt = 0;
 static unsigned HOST_WIDE_INT  global_shstk = 0;
 #endif
 
+signed int
+annobin_target_start_symbol_bias (void)
+{
+  return 0;
+}
+
 void
 annobin_save_target_specific_information (void)
 {

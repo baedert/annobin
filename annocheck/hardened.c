@@ -227,22 +227,15 @@ static const char *
 get_component_name (eu_checksec_data *     data,
 		    eu_checksec_section *  sec,
 		    hardened_note_data *   note_data,
-		    bool                   inc_addr,
 		    bool                   prefer_func_symbol)
 {
   static char buffer[256];
   const char * sym = eu_checksec_find_symbol_for_address_range (data, sec, note_data->start, note_data->end, prefer_func_symbol);
 
-  if (sym == NULL || inc_addr)
-    sprintf (buffer, "addr range: %#lx..%#lx ", note_data->start, note_data->end);
+  if (sym == NULL)
+    sprintf (buffer, "addr range: %#lx..%#lx", note_data->start, note_data->end);
   else
-    buffer[0] = 0;
-
-  if (sym)
-    {
-      strcat (buffer, "component: ");
-      strcat (buffer, sym);
-    }
+    sprintf (buffer, "component: %s", sym);
 
   return buffer;
 }
@@ -260,7 +253,36 @@ stack_prot_type (uint value)
     default: return "<unknown>";
     }
 }
-  
+
+static bool
+skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
+{
+  if (component_name == NULL)
+    return false;
+
+  /* We know that some glibc startup functions cannot be compiled
+     with stack protection enabled.  So do not complain about them.  */
+#if 0
+  static const char * skip_these_funcs[] =
+    {
+      "_init",
+      "_fini",
+      "__libc_csu_init",
+      "__libc_csu_fini",
+      "_start"
+    };
+  int i;
+
+  for (i = ARRAY_SIZE (skip_these_funcs); i--;)
+    if (streq (component_name, skip_these_funcs[i]))
+      return true;
+#else
+  if (streq (component_name, "component: elf_init.c"))
+    return true;
+#endif
+  return false;
+}
+
 static bool
 walk_notes (eu_checksec_data *     data,
 	    eu_checksec_section *  sec,
@@ -326,10 +348,18 @@ walk_notes (eu_checksec_data *     data,
 
 	      if (! ignore_gaps)
 		{
+		  const char * sym = eu_checksec_find_symbol_for_address_range (data, sec,
+										fake_note.start,
+										fake_note.end, prefer_func_name);
 		  /* Note - we ignore gaps at the start and end of the file.  These are
 		     going to be from the crt code which does not need to be chacked.  */
-		  einfo (VERBOSE, "%s: GAP:  (%s ?) in annobin notes",
-			 data->filename, get_component_name (data, sec, & fake_note, true, prefer_func_name));
+		  if (sym)
+		    einfo (VERBOSE, "%s: GAP:  (%lx..%lx component: %s or just after...) in annobin notes",
+			   data->filename, fake_note.start, fake_note.end, sym);
+		  else
+		    einfo (VERBOSE, "%s: GAP:  (%lx..%lx) in annobin notes",
+			   data->filename, fake_note.start, fake_note.end);
+		    
 		  gap_detected = true;
 		}
 	    }
@@ -343,6 +373,10 @@ walk_notes (eu_checksec_data *     data,
 
   if (note->n_namesz < 3)
     return false;
+
+  /* We skip notes for empty ranges.  */
+  if (note_data->start == note_data->end)
+    return true;
 
   const char *  namedata = sec->data->d_buf + name_offset;
   uint          pos = (namedata[0] == 'G' ? 3 : 1);
@@ -405,7 +439,7 @@ walk_notes (eu_checksec_data *     data,
 
 	      einfo (VERBOSE2, "%s: (%s) built-by gcc version %lu",
 		     data->filename,
-		     get_component_name (data, sec, note_data, false, prefer_func_name),
+		     get_component_name (data, sec, note_data, prefer_func_name),
 		     version);
 
 	      if (gcc_version == RESULT_UNKNOWN)
@@ -457,23 +491,19 @@ walk_notes (eu_checksec_data *     data,
       if (value == RESULT_UNKNOWN)
 	return false;
 
-      /* We know that __libc_csu_init cannot be compiled with stack protection
-	 enabled because it is part of glibc's start up code.  So do not complain.  */
-      if (value == 0
-	  && streq (get_component_name (data, sec, note_data, false, false), "__libc_csu_init"))
-	break;
-
       switch (value)
 	{
 	case 0: /* NONE */
+	  if (skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
+	    return true;
 	  einfo (VERBOSE, "%s: fail: (%s): No stack protection enabled",
-		 data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
+		 data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	  value = RESULT_FAIL;
 	  break;
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
 	case 4: /* EXPLICIT */
 	  einfo (VERBOSE, "%s: fail: (%s): Insufficient stack protection: %s",
-		 data->filename, get_component_name (data, sec, note_data, false, prefer_func_name),
+		 data->filename, get_component_name (data, sec, note_data, prefer_func_name),
 		 stack_prot_type (value));
 	  value = RESULT_FAIL;
 	  break;
@@ -509,21 +539,23 @@ walk_notes (eu_checksec_data *     data,
 	    case 6:
 	      if (x86_found)
 		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
-		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
+		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
 	      break;
 	    case 3:
 	    case 7:
 	      if (x86_found)
 		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=return",
-		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
+		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
 	      break;
-	    case 5:
 	    case 1:
+	      if (skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
+		return true;
+	    case 5:
 	      if (x86_found)
 		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fcf-protection",
-		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
+		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
 	      break;
 	    default:
@@ -537,24 +569,30 @@ walk_notes (eu_checksec_data *     data,
 	  else if (value < tests[TEST_CF_PROTECTION].result)
 	    tests[TEST_CF_PROTECTION].result = value;
 	}
+      break;
 
     case 'F':
       if (streq (attr, "FORTIFY"))
 	{
 	  switch (value)
 	    {
-	    case RESULT_UNKNOWN: return false;
+	    case RESULT_UNKNOWN:
+	      return false;
+
 	    case 0:
+	      if (skip_check (TEST_FORTIFY, get_component_name (data, sec, note_data, prefer_func_name)))
+		return true;
 	    case 1:
 	      einfo (VERBOSE, "%s: fail: (%s): Insufficient value for -D_FORTIFY_SOURCE: %d",
-		     data->filename, 
-		     get_component_name (data, sec, note_data, false, prefer_func_name),
+		     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
 		     value);
 	      value = RESULT_FAIL;
 	      break;
+
 	    case 2:
 	      value = RESULT_PASS;
 	      break;
+
 	    default:
 	      einfo (VERBOSE, "ICE: Unexpected FORTIFY level of %d", value);
 	      value = RESULT_ICE;
@@ -579,8 +617,7 @@ walk_notes (eu_checksec_data *     data,
 	  if (value == 0 || value == 1)
 	    {
 	      einfo (VERBOSE, "%s: fail: (%s): Insufficient optimization level: -O%d",
-		     data->filename, 
-		     get_component_name (data, sec, note_data, false, prefer_func_name),
+		     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
 		     value);
 	      value = RESULT_FAIL;
 	    }
@@ -597,8 +634,10 @@ walk_notes (eu_checksec_data *     data,
 	  switch (value)
 	    {
 	    case 0:
+	      if (skip_check (TEST_GLIBCXX_ASSERTIONS, get_component_name (data, sec, note_data, prefer_func_name)))
+		return true;
 	      einfo (VERBOSE, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
-		     data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
+		     data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
 	      break;
 	    case 1:
@@ -624,7 +663,7 @@ walk_notes (eu_checksec_data *     data,
 	    case 0:
 	      if (! arm_found)
 		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fstack-clash-protection",
-		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
+		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      tests[TEST_STACK_CLASH].result = RESULT_FAIL;
 	      break;
 	    case 1:
@@ -645,7 +684,7 @@ walk_notes (eu_checksec_data *     data,
 	    case RESULT_UNKNOWN: return false;
 	    case 0:
 		einfo (VERBOSE, "%s: fail: (%s): Stack realignment not enabled",
-		       data->filename, get_component_name (data, sec, note_data, false, prefer_func_name));
+		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 		value = RESULT_FAIL;
 		break;
 	    case 1:
@@ -1086,7 +1125,7 @@ finish (eu_checksec_data * data)
 static void
 version (void)
 {
-  einfo (INFO, "version 1.0");
+  einfo (INFO, "version 1.1");
 }
 
 static void

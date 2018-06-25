@@ -68,6 +68,7 @@ static int            global_stack_clash_option = -1;
 #ifdef flag_cf_protection
 static int            global_cf_option = -1;
 #endif
+static signed int     target_start_sym_bias = 0;
 static unsigned int   annobin_note_count = 0;
 static unsigned int   global_GOWall_options = 0;
 static int            global_stack_prot_option = 0;
@@ -77,8 +78,8 @@ static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
-static unsigned char  annobin_version = 6; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 6");
+static unsigned char  annobin_version = 7; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 7");
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\
@@ -336,12 +337,15 @@ annobin_output_note (const char * name,
 	  else
 	    fprintf (asm_out_file, "\t.dc.l %s", (char *) desc1);
 
-	  /* We know that the annobin_current_filename symbol has been
-	     biased by 2 in order to avoid conflicting with the function
-	     name symbol for the first function in the file.  So reverse
-	     that bias here.  */
-	  if (desc1 == annobin_current_filename)
-	    fprintf (asm_out_file, "- 2");
+	  if (target_start_sym_bias)
+	    {
+	      /* We know that the annobin_current_filename symbol has been
+		 biased in order to avoid conflicting with the function
+		 name symbol for the first function in the file.  So reverse
+		 that bias here.  */
+	      if (desc1 == annobin_current_filename)
+		fprintf (asm_out_file, "- %d", target_start_sym_bias);
+	    }
 
 	  if (desc2)
 	    {
@@ -940,17 +944,20 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", annobin_current_filename);
   fprintf (asm_out_file, "\t.hidden %s\n", annobin_current_filename);
 
-  /* We set the address of the start symbol to be the current address plus two.
-     That way this symbol will not be confused for a file start/function start
-     symbol.  This is especially important on the PowerPC target as that
-     generates synthetic symbols for function entry points, but only if there
-     is no real symbol for that address.
+  if (target_start_sym_bias)
+    {
+      /* We set the address of the start symbol to be the current address plus
+	 a bias value.  That way this symbol will not be confused for a file
+	 start/function start symbol.
 
-     There is special code in annobin_output_note() that undoes this bias when
-     the symbol's address is being used to compute a range for the notes.
-
-     FIXME: This symbol causes problems during disassembly however...  */
-  fprintf (asm_out_file, "\t.equiv %s, . + 2\n", annobin_current_filename);
+	 There is special code in annobin_output_note() that undoes this bias
+	 when the symbol's address is being used to compute a range for the
+	 notes.  */
+      fprintf (asm_out_file, "\t.equiv %s, . + %d\n", annobin_current_filename,
+	       target_start_sym_bias);
+    }
+  else
+      fprintf (asm_out_file, "\t.equiv %s, .\n", annobin_current_filename);
 
   /* We explicitly set the size of the symbol to 0 so that it will not
      confuse other tools (eg GDB, elfutils) which look for symbols that
@@ -1292,6 +1299,8 @@ plugin_init (struct plugin_name_args *   plugin_info,
   sprintf (compiler_version, "gcc %s %s", version->basever, version->datestamp);
 
   annobin_save_target_specific_information ();
+
+  target_start_sym_bias = annobin_target_start_symbol_bias ();
 
   register_callback (plugin_info->base_name,
 		     PLUGIN_INFO,
