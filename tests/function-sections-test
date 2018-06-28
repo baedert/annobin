@@ -12,44 +12,34 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so function-sections-test.exe unused_code.o
-
-set +v
+rm -f hello.o hello2.o function-sections-test.exe unused_code.o unused_code.i unused_code.s
 
 GCC=gcc
 READELF=readelf
-
 PLUGIN=../plugin/.libs/annobin.so
+
+$GCC -fplugin=$PLUGIN \
+     -O2 \
+     -c \
+     -g \
+     -fpic \
+     --save-temps \
+     -ffunction-sections \
+ $srcdir/unused_code.c \
 
 $GCC -fplugin=$PLUGIN \
      -c \
      -fPIC \
      -Wall \
      -O1 \
-     -ffunction-sections \
  $srcdir/hello.c 
-
-$GCC -fplugin=$PLUGIN \
-     -O3 \
-     -c \
-     -fPIC \
-     -ffunction-sections \
- $srcdir/hello2.c 
 
 $GCC -fplugin=$PLUGIN \
      -O2 \
      -c \
-     -fpic \
-     --save-temps \
+     -fPIC \
      -ffunction-sections \
- $srcdir/unused_code.c \
-     -o unused_code.o
-if [ $? != 0 ];
-then
-    echo "$GCC does not support gexplicit stack protection.  Skipping test."
-    exit 0
-fi
-
+ $srcdir/hello2.c 
 
 $GCC -fplugin=$PLUGIN \
      -L . \
@@ -57,7 +47,21 @@ $GCC -fplugin=$PLUGIN \
      -Wl,-z,now,-z,relro \
      -Wl,--gc-sections -Wl,--print-gc-sections \
      -Wl,-Map,fred.map \
- hello.o hello2.o unused_code.o -o function-sections-test.exe
+ hello.o unused_code.o hello2.o -o function-sections-test.exe
+
+# Note - currently unused_func_1 and unused_func_2 will not be
+# garbage collected.  The duplicate of the linkonce_func_1
+# function however will be discarded.  This is because the linker
+# sees the relocations in the gnu build notes section against
+# the unused functions, and since they are not in a section
+# group together, it presumes that the relocations must be
+# satisified.
+#
+# To solve this problem the annobin plugin will have to create
+# a section group containing both the code and the notes.  In
+# fact strictly speaking GCC should be doing this, and annobin
+# should just be adding the notes to the section group.
+
 
 # FIXME - we should check that the notes were parsed correctly...
 $READELF --notes --wide function-sections-test.exe > /dev/null

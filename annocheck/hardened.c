@@ -24,11 +24,9 @@ static bool disabled = false;
 static bool ignore_gaps = false;
 
 /* These are initialised on a per-input-file basis by start().  */
-static bool i686_found;
-static bool x86_found;
-static bool arm_found;
+static int  e_type;
+static int  e_machine;
 static bool debuginfo_file;
-static bool et_exec_found;
 static int  num_fails;
 static int  num_maybes;
 static int  gcc_version;
@@ -147,19 +145,15 @@ start (eu_checksec_data * data)
     {
       Elf32_Ehdr * hdr = elf32_getehdr (data->elf);
 
-      et_exec_found = hdr->e_type == ET_EXEC;
-      x86_found     = hdr->e_machine == EM_386;
-      i686_found    = x86_found;
-      arm_found     = hdr->e_machine == EM_ARM;
+      e_type = hdr->e_type;
+      e_machine = hdr->e_machine;
     }
   else
     {
       Elf64_Ehdr * hdr = elf64_getehdr (data->elf);
       
-      et_exec_found = hdr->e_type == ET_EXEC;
-      x86_found     = hdr->e_machine == EM_X86_64;
-      i686_found    = false;
-      arm_found     = false;
+      e_type = hdr->e_type;
+      e_machine = hdr->e_machine;
     }
 }
 
@@ -467,10 +461,14 @@ walk_notes (eu_checksec_data *     data,
 	case 1:
 	case 2:
 	  /* Compiled wth -fpic not -fpie.  */
-	  value = et_exec_found ? RESULT_FAIL : RESULT_PASS;
-	  if (et_exec_found)
-	    einfo (VERBOSE, "%s: Warning: executable compiled with -fPIC rather than -fPIE",
-		   data->filename);
+	  if (e_type == ET_EXEC)
+	    {
+	      einfo (VERBOSE, "%s: Warning: executable compiled with -fPIC rather than -fPIE",
+		     data->filename);
+	      value = RESULT_FAIL;
+	    }
+	  else
+	    value = RESULT_PASS;
 	  break;
 	case 3:
 	case 4:
@@ -537,14 +535,14 @@ walk_notes (eu_checksec_data *     data,
 	      break;
 	    case 2:
 	    case 6:
-	      if (x86_found)
+	      if (e_machine == EM_386 || e_machine == EM_X86_64)
 		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
 		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
 	      break;
 	    case 3:
 	    case 7:
-	      if (x86_found)
+	      if (e_machine == EM_386 || e_machine == EM_X86_64)
 		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=return",
 		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
@@ -553,7 +551,7 @@ walk_notes (eu_checksec_data *     data,
 	      if (skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
 		return true;
 	    case 5:
-	      if (x86_found)
+	      if (e_machine == EM_386 || e_machine == EM_X86_64)
 		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fcf-protection",
 		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
@@ -661,7 +659,7 @@ walk_notes (eu_checksec_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      if (! arm_found)
+	      if (e_machine != EM_ARM)
 		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fstack-clash-protection",
 		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      tests[TEST_STACK_CLASH].result = RESULT_FAIL;
@@ -671,7 +669,7 @@ walk_notes (eu_checksec_data *     data,
 		tests[TEST_STACK_CLASH].result = RESULT_PASS;
 	      break;
 	    default:
-	      if (! arm_found)
+	      if (e_machine != EM_ARM)
 		einfo (VERBOSE, "ICE: Unexpected stack-clash value: %d", value);
 	      tests[TEST_STACK_CLASH].result = RESULT_ICE;
 	      return false;
@@ -681,14 +679,17 @@ walk_notes (eu_checksec_data *     data,
 	{
 	  switch (value)
 	    {
-	    case RESULT_UNKNOWN: return false;
+	    case RESULT_UNKNOWN:
+	      return false;
 	    case 0:
+	      if (e_machine == EM_386)
 		einfo (VERBOSE, "%s: fail: (%s): Stack realignment not enabled",
 		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
-		value = RESULT_FAIL;
-		break;
+	      value = RESULT_FAIL;
+	      break;
 	    case 1:
 	      value = RESULT_PASS;
+	      break;
 	    }
 
 	  if (tests[TEST_STACK_REALIGN].result == RESULT_UNKNOWN)
@@ -866,6 +867,10 @@ ice (eu_checksec_data * data, const char * message)
 static void
 show_BIND_NOW (eu_checksec_data * data, enum test_result result)
 {
+  /* Only executables need to have their binding checked.  */
+  if (e_type != ET_EXEC)
+    return;
+
   switch (result)
     {
     case RESULT_PASS: pass (data, "Linked with -Wl,-z,now"); break;
@@ -877,6 +882,10 @@ show_BIND_NOW (eu_checksec_data * data, enum test_result result)
 static void
 show_DYNAMIC_SEGMENT (eu_checksec_data * data, enum test_result result)
 {
+  /* Relocateable object files do not have dynamic segments.  */
+  if (e_type == ET_REL)
+    return;
+
   switch (result)
     {
     case RESULT_PASS: pass (data, "Dynamic segment is present"); break;
@@ -888,6 +897,10 @@ show_DYNAMIC_SEGMENT (eu_checksec_data * data, enum test_result result)
 static void
 show_GNU_RELRO (eu_checksec_data * data, enum test_result result)
 {
+  /* Relocateable object files are not yet linked.  */
+  if (e_type == ET_REL)
+    return;
+
   switch (result)
     {
     case RESULT_PASS: pass (data, "Linked with -Wl,-z,relro"); break;
@@ -899,6 +912,10 @@ show_GNU_RELRO (eu_checksec_data * data, enum test_result result)
 static void
 show_GNU_STACK (eu_checksec_data * data, enum test_result result)
 {
+  /* Relocateable object files do not have a stack.  */
+  if (e_type == ET_REL)
+    return;
+
   switch (result)
     {
     case RESULT_PASS: pass (data, "Stack not executable"); break;
@@ -910,6 +927,10 @@ show_GNU_STACK (eu_checksec_data * data, enum test_result result)
 static void
 show_RWX_SEG (eu_checksec_data * data, enum test_result result)
 {
+  /* Relocateable object files do not have segments.  */
+  if (e_type == ET_REL)
+    return;
+
   switch (result)
     {
     case RESULT_FAIL: fail (data, "RWX segment found"); break;
@@ -946,7 +967,7 @@ static void
 show_STACK_CLASH (eu_checksec_data * data, enum test_result result)
 {
   /* The ARM does not have stack clash protection support.  */
-  if (arm_found)
+  if (e_machine == EM_ARM)
     return;
 
   switch (result)
@@ -970,6 +991,10 @@ show_STACK_CLASH (eu_checksec_data * data, enum test_result result)
 static void
 show_TEXTREL (eu_checksec_data * data, enum test_result result)
 {
+  /* Relocateable object files can have text relocations.  */
+  if (e_type == ET_REL)
+    return;
+
   switch (result)
     {
     case RESULT_FAIL: fail (data, "Text relocations found"); break;
@@ -994,7 +1019,7 @@ show_FORTIFY (eu_checksec_data * data, enum test_result result)
 static void
 show_CF_PROTECTION (eu_checksec_data * data, enum test_result result)
 {
-  if (! x86_found)
+  if (e_machine != EM_386 && e_machine != EM_X86_64)
     return;
 
   switch (result)
@@ -1030,7 +1055,7 @@ show_GLIBCXX_ASSERTIONS (eu_checksec_data * data, enum test_result result)
 static void
 show_STACK_REALIGN (eu_checksec_data * data, enum test_result result)
 {
-  if (!i686_found)
+  if (e_machine != EM_386)
     return;
 
   switch (result)
@@ -1045,6 +1070,10 @@ show_STACK_REALIGN (eu_checksec_data * data, enum test_result result)
 static void
 show_RUN_PATH (eu_checksec_data * data, enum test_result result)
 {
+  /* Relocateable object files do not need a runtime path.  */
+  if (e_type == ET_REL)
+    return;
+
   switch (result)
     {
     case RESULT_FAIL:    fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr"); break;
@@ -1067,6 +1096,10 @@ show_THREADS (eu_checksec_data * data, enum test_result result)
 static void
 show_WRITEABLE_GOT (eu_checksec_data * data, enum test_result result)
 {
+  /* Relocateable object files do not have a GOT.  */
+  if (e_type == ET_REL)
+    return;
+
   switch (result)
     {
     case RESULT_FAIL:    fail (data, "Relocations for the GOT/PLT sections are writeable"); break;

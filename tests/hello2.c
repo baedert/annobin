@@ -21,3 +21,10 @@ big_stack (int arg)
   return extern_func (array, arg) * extern_func2 () + extern_func3 ();
 }
 
+int linkonce_func_1 (void) __attribute ((section (".gnu.linkonce.t.linkonce_func_1")));
+int linkonce_func_1 (void) __attribute__((optimize("-O3"),__noinline__));
+int
+linkonce_func_1 (void)
+{
+  return 26;
+}
