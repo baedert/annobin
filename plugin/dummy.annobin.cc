@@ -20,7 +20,7 @@
    annobin_save_target_specific_information - Called during plugin_init()
    annobin_target_start_symbol_bias         - Called during plugin_init()
    annobin_record_global_target_notes       - Called during PLUGIN_START_UNIT
-   annobin_target_specific_function_notes   - Called during PLUGIN_ALL_PASSES_END
+   annobin_target_specific_function_notes   - Called during PLUGIN_ALL_PASSES_START
    annobin_target_specific_loader_notes     - Called during PLUGIN_FINISH_UNIT.  */
 
 signed int
@@ -40,7 +40,7 @@ annobin_record_global_target_notes (void)
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end, bool force)
 {
 }
 

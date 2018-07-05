@@ -26,14 +26,14 @@ static bool found_builder;
 static bool all = false;
 
 static void
-builtby_start (eu_checksec_data * data)
+builtby_start (annocheck_data * data)
 {
   found_builder = false;
 }
 
 static bool
-builtby_interesting_sec (eu_checksec_data *     data,
-			 eu_checksec_section *  sec)
+builtby_interesting_sec (annocheck_data *     data,
+			 annocheck_section *  sec)
 {
   if (disabled)
     return false;
@@ -67,8 +67,8 @@ found (const char * source, const char * filename, const char * tool)
 }
 
 static bool
-builtby_note_walker (eu_checksec_data *     data,
-		     eu_checksec_section *  sec,
+builtby_note_walker (annocheck_data *     data,
+		     annocheck_section *  sec,
 		     GElf_Nhdr *            note,
 		     size_t                 name_offset,
 		     size_t                 data_offset,
@@ -95,14 +95,14 @@ builtby_note_walker (eu_checksec_data *     data,
 }
 
 static bool
-builtby_check_sec (eu_checksec_data *     data,
-		   eu_checksec_section *  sec)
+builtby_check_sec (annocheck_data *     data,
+		   annocheck_section *  sec)
 {
   if (streq (sec->secname, ".comment"))
     return found (".comment section", data->filename, (const char *) sec->data->d_buf);
 
   if (streq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
-    return eu_checksec_walk_notes (data, sec, builtby_note_walker, (void *) data->filename);
+    return annocheck_walk_notes (data, sec, builtby_note_walker, (void *) data->filename);
 
   return true; /* Allow the search to continue.  */
 }
@@ -110,7 +110,7 @@ builtby_check_sec (eu_checksec_data *     data,
 /* Look for DW_AT_producer attributes.  */
 
 static bool
-builtby_dwarf_walker (eu_checksec_data * data, Dwarf * dwarf, Dwarf_Die * die, void * ptr)
+builtby_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, void * ptr)
 {
   Dwarf_Attribute  attr;
   const char *     string;
@@ -127,7 +127,7 @@ builtby_dwarf_walker (eu_checksec_data * data, Dwarf * dwarf, Dwarf_Die * die, v
 }
 
 static bool
-builtby_finish (eu_checksec_data * data)
+builtby_finish (annocheck_data * data)
 {
   if (disabled)
     return true;
@@ -135,7 +135,7 @@ builtby_finish (eu_checksec_data * data)
   if (found_builder && ! all)
     return true;
 
-  (void) eu_checksec_walk_dwarf (data, builtby_dwarf_walker, NULL);
+  (void) annocheck_walk_dwarf (data, builtby_dwarf_walker, NULL);
     
   if (! found_builder)
     einfo (INFO, "%s: could not determine builder", data->filename);
@@ -241,6 +241,6 @@ struct checker builtby_checker =
 static __attribute__((constructor)) void
 builtby_register_checker (void) 
 {
-  if (! eu_checksec_add_checker (& builtby_checker, major_version))
+  if (! annocheck_add_checker (& builtby_checker, major_version))
     disabled = true;
 }

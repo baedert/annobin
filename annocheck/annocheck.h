@@ -11,8 +11,8 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
-#ifndef __EU_CHECKSEC_H__
-#define __EU_CHECKSEC_H__
+#ifndef __ANNOCHECK_H__
+#define __ANNOCHECK_H__
 
 #define _GNU_SOURCE
 #include <assert.h>
@@ -65,7 +65,7 @@ typedef unsigned char  uchar;
 typedef unsigned int   uint;
 typedef unsigned long  ulong;
 
-typedef struct eu_checksec_data
+typedef struct annocheck_data
 {
   const char *         filename;
   const char *         full_filename;
@@ -75,22 +75,22 @@ typedef struct eu_checksec_data
   Elf_Data *           syms;
   Dwarf *              dwarf;
   bool                 dwarf_searched;
-} eu_checksec_data;
+} annocheck_data;
 
-typedef struct eu_checksec_section
+typedef struct annocheck_section
 {
   const char *         secname;
   Elf_Scn *            scn;
   Elf64_Shdr           shdr;
   Elf_Data *           data;
-} eu_checksec_section;
+} annocheck_section;
 
-typedef struct eu_checksec_segment
+typedef struct annocheck_segment
 {
   GElf_Phdr *          phdr;
   uint                 number;
   Elf_Data *           data;
-} eu_checksec_segment;
+} annocheck_segment;
 
 typedef struct checker
 {
@@ -99,42 +99,42 @@ typedef struct checker
   /* Called before starting the check of a file.
      Can be NULL.
      The section_headers and segment_headers fields will not have been initialised.  */
-  void (* start) (eu_checksec_data * DATA);
+  void (* start) (annocheck_data * DATA);
 
   /* Called to see if the checker is interested in the particular section.
      Can be NULL.  If NULL, all sections are ignored.
      If FALSE is returned the section is not processed any further.
      Note - called even if there are segments in the file.
      Note - SECTION->data may not be initialised at this point.  */
-  bool (* interesting_sec) (eu_checksec_data *     DATA,
-			    eu_checksec_section *  SECTION);
+  bool (* interesting_sec) (annocheck_data *     DATA,
+			    annocheck_section *  SECTION);
 
   /* Called to check a section.
      If interesting_sec is not NULL, then this field cannot be NULL.
      If FALSE is returned the check is considered to have failed.
      Note - SECTION->data will be initialised at this point.  */
-  bool (* check_sec) (eu_checksec_data *     DATA,
-		      eu_checksec_section *  SECTION);
+  bool (* check_sec) (annocheck_data *     DATA,
+		      annocheck_section *  SECTION);
 
   /* Called before checking a segment.
      Can be NULL.  If NULL, all segments are ignored.
      If FALSE is returned the segment is not processed any further.
      Note - called even if there are sections in the file.
      The SEG->DATA field may not have beeen initialised.  */
-  bool (* interesting_seg) (eu_checksec_data *    DATA,
-			    eu_checksec_segment * SEG);
+  bool (* interesting_seg) (annocheck_data *    DATA,
+			    annocheck_segment * SEG);
 
   /* Called to check a segment.
      If interesting_seg is not NULL, then this field cannot be NULL.
      If FALSE is returned the check is considered to have failed.
      the SEG->DATA field will have been initialised.  */
-  bool (* check_seg) (eu_checksec_data *    DATA,
-		      eu_checksec_segment * SEG);
+  bool (* check_seg) (annocheck_data *    DATA,
+		      annocheck_segment * SEG);
 
   /* Called at the end of checking a file.
      Can be NULL.
      Returns a success/fail status for the entire scan.  */
-  bool (* finish) (eu_checksec_data * DATA);
+  bool (* finish) (annocheck_data * DATA);
 
   /* Called to allow the callback a chance to handle its own command line arguments.
      Can be NULL.  */
@@ -160,8 +160,8 @@ typedef struct checker
 #undef PTR
 
 /* Type for the ELF note walker.  */
-typedef bool (*  note_walker) (eu_checksec_data *     DATA,
-			       eu_checksec_section *  SEC,
+typedef bool (*  note_walker) (annocheck_data *     DATA,
+			       annocheck_section *  SEC,
 			       GElf_Nhdr *            NOTE,
 			       size_t                 NAME_OFFSET,
 			       size_t                 DESC_OFFSET,
@@ -171,27 +171,27 @@ typedef bool (*  note_walker) (eu_checksec_data *     DATA,
    Stops if FUNC returns FALSE.
    Passes PTR to FUNC along with a pointer to the note and the offsets to the name and desc data fields.
    Returns FALSE if it could not walk the notes.  */
-extern bool      eu_checksec_walk_notes (eu_checksec_data * DATA, eu_checksec_section * SEC, note_walker FUNC, void * PTR);
+extern bool      annocheck_walk_notes (annocheck_data * DATA, annocheck_section * SEC, note_walker FUNC, void * PTR);
 
 /* Type for the DWARF DIE walker.  */
-typedef bool (*  dwarf_walker) (eu_checksec_data * DATA, Dwarf * DWARF, Dwarf_Die * DIE, void * PTR);
+typedef bool (*  dwarf_walker) (annocheck_data * DATA, Dwarf * DWARF, Dwarf_Die * DIE, void * PTR);
 
 /* Walks over the DWARF DIEs in DATA, applying FUNC to each.
    Stops if FUNC returns FALSE.
    Passes PTR to FUNC along with a pointer to the DIE.
    Returns FALSE if it could not walk the debug information.  */
-extern bool      eu_checksec_walk_dwarf (eu_checksec_data * DATA, dwarf_walker FUNC, void * PTR);
+extern bool      annocheck_walk_dwarf (annocheck_data * DATA, dwarf_walker FUNC, void * PTR);
 
 /* Called to register a checker.
    Returns FALSE if the checker could not be registered.
    Can be called from static constructors.
    The MAJOR version number is used to verify that the checker is compatible with the framework.  */
-extern bool      eu_checksec_add_checker (struct checker * CHECKER, uint MAJOR);
+extern bool      annocheck_add_checker (struct checker * CHECKER, uint MAJOR);
 
 /* Return the name of a symbol most appropriate for address START..END.
    Returns NULL if no symbol could be found.  */
-extern const char *  eu_checksec_find_symbol_for_address_range
-  (eu_checksec_data * DATA, eu_checksec_section * SEC, ulong START, ulong ADDR, bool PREFER_FUNC);
+extern const char *  annocheck_find_symbol_for_address_range
+  (annocheck_data * DATA, annocheck_section * SEC, ulong START, ulong ADDR, bool PREFER_FUNC);
 
 /* An enum controlling the behaviour of the einfo function:  */
 typedef enum einfo_type
@@ -221,4 +221,4 @@ extern ulong        verbosity;
 extern uint major_version;
 extern uint minor_version;
 
-#endif /* __EU_CHECKSEC_H__ */
+#endif /* __ANNOCHECK_H__ */

@@ -53,7 +53,7 @@ typedef struct test
   bool	            enabled;	/* If false then do not run this test.  */
   enum test_result  result;	/* Initialised in start(), checked in finish().  */
   const char *      name;	/* Also used as part of the command line option to disable the test.  */
-  void (*           show_result)(eu_checksec_data *, enum test_result);
+  void (*           show_result)(annocheck_data *, enum test_result);
   const char *      description;/* Used in the --help output to describe the test.  */
 } test;
 
@@ -80,23 +80,23 @@ enum test_index
   TEST_MAX
 };
 
-static void show_BIND_NOW           (eu_checksec_data *, enum test_result);
-static void show_CF_PROTECTION      (eu_checksec_data *, enum test_result);
-static void show_DYNAMIC_SEGMENT    (eu_checksec_data *, enum test_result);
-static void show_FORTIFY            (eu_checksec_data *, enum test_result);
-static void show_GLIBCXX_ASSERTIONS (eu_checksec_data *, enum test_result);
-static void show_GNU_RELRO          (eu_checksec_data *, enum test_result);
-static void show_GNU_STACK          (eu_checksec_data *, enum test_result);
-static void show_OPTIMIZATION       (eu_checksec_data *, enum test_result);
-static void show_PIC                (eu_checksec_data *, enum test_result);
-static void show_RUN_PATH           (eu_checksec_data *, enum test_result);
-static void show_RWX_SEG            (eu_checksec_data *, enum test_result);
-static void show_STACK_CLASH        (eu_checksec_data *, enum test_result);
-static void show_STACK_PROT         (eu_checksec_data *, enum test_result);
-static void show_STACK_REALIGN      (eu_checksec_data *, enum test_result);
-static void show_TEXTREL            (eu_checksec_data *, enum test_result);
-static void show_THREADS            (eu_checksec_data *, enum test_result);
-static void show_WRITEABLE_GOT      (eu_checksec_data *, enum test_result);
+static void show_BIND_NOW           (annocheck_data *, enum test_result);
+static void show_CF_PROTECTION      (annocheck_data *, enum test_result);
+static void show_DYNAMIC_SEGMENT    (annocheck_data *, enum test_result);
+static void show_FORTIFY            (annocheck_data *, enum test_result);
+static void show_GLIBCXX_ASSERTIONS (annocheck_data *, enum test_result);
+static void show_GNU_RELRO          (annocheck_data *, enum test_result);
+static void show_GNU_STACK          (annocheck_data *, enum test_result);
+static void show_OPTIMIZATION       (annocheck_data *, enum test_result);
+static void show_PIC                (annocheck_data *, enum test_result);
+static void show_RUN_PATH           (annocheck_data *, enum test_result);
+static void show_RWX_SEG            (annocheck_data *, enum test_result);
+static void show_STACK_CLASH        (annocheck_data *, enum test_result);
+static void show_STACK_PROT         (annocheck_data *, enum test_result);
+static void show_STACK_REALIGN      (annocheck_data *, enum test_result);
+static void show_TEXTREL            (annocheck_data *, enum test_result);
+static void show_THREADS            (annocheck_data *, enum test_result);
+static void show_WRITEABLE_GOT      (annocheck_data *, enum test_result);
 
 #define TEST(name,upper,description) \
   [ TEST_##upper ] = { true, 0, #name, show_ ## upper, description }
@@ -126,7 +126,7 @@ static test tests [TEST_MAX] =
 
 
 static void
-start (eu_checksec_data * data)
+start (annocheck_data * data)
 {
   /* (Re) Set the results for the tests.  */
   int i;
@@ -158,8 +158,8 @@ start (eu_checksec_data * data)
 }
 
 static bool
-interesting_sec (eu_checksec_data *     data,
-		 eu_checksec_section *  sec)
+interesting_sec (annocheck_data *     data,
+		 annocheck_section *  sec)
 {
   if (disabled)
     return false;
@@ -218,13 +218,13 @@ typedef struct hardened_note_data
 } hardened_note_data;
 
 static const char *
-get_component_name (eu_checksec_data *     data,
-		    eu_checksec_section *  sec,
+get_component_name (annocheck_data *     data,
+		    annocheck_section *  sec,
 		    hardened_note_data *   note_data,
 		    bool                   prefer_func_symbol)
 {
   static char buffer[256];
-  const char * sym = eu_checksec_find_symbol_for_address_range (data, sec, note_data->start, note_data->end, prefer_func_symbol);
+  const char * sym = annocheck_find_symbol_for_address_range (data, sec, note_data->start, note_data->end, prefer_func_symbol);
 
   if (sym == NULL)
     sprintf (buffer, "addr range: %#lx..%#lx", note_data->start, note_data->end);
@@ -278,19 +278,22 @@ skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
 }
 
 static bool
-walk_notes (eu_checksec_data *     data,
-	    eu_checksec_section *  sec,
-	    GElf_Nhdr *            note,
-	    size_t                 name_offset,
-	    size_t                 data_offset,
-	    void *                 ptr)
+walk_notes (annocheck_data *     data,
+	    annocheck_section *  sec,
+	    GElf_Nhdr *          note,
+	    size_t               name_offset,
+	    size_t               data_offset,
+	    void *               ptr)
 {
   bool prefer_func_name;
   hardened_note_data * note_data;
 
   if (note->n_type != NT_GNU_BUILD_ATTRIBUTE_OPEN
       && note->n_type != NT_GNU_BUILD_ATTRIBUTE_FUNC)
-    return true;
+    {
+      einfo (FAIL, "Unrecognised annobin note type %d", note->n_type);
+      return false;
+    }
 
   prefer_func_name = note->n_type == NT_GNU_BUILD_ATTRIBUTE_FUNC;
   note_data = (hardened_note_data *) ptr;
@@ -328,7 +331,10 @@ walk_notes (eu_checksec_data *     data,
 	  end   = descdata[4] | (descdata[5] << 8) | (descdata[6] << 16) | (descdata[7] << 24);
 	}
       else
-	return false;
+	{
+	  einfo (FAIL, "Corrupt annobin note, desc size: %x", note->n_descsz);
+	  return false;
+	}
 
       if (note->n_type == NT_GNU_BUILD_ATTRIBUTE_OPEN)
 	{
@@ -342,7 +348,7 @@ walk_notes (eu_checksec_data *     data,
 
 	      if (! ignore_gaps)
 		{
-		  const char * sym = eu_checksec_find_symbol_for_address_range (data, sec,
+		  const char * sym = annocheck_find_symbol_for_address_range (data, sec,
 										fake_note.start,
 										fake_note.end, prefer_func_name);
 		  /* Note - we ignore gaps at the start and end of the file.  These are
@@ -366,10 +372,13 @@ walk_notes (eu_checksec_data *     data,
     }
 
   if (note->n_namesz < 3)
-    return false;
+    {
+      einfo (FAIL, "Corrupt annobin note, name size: %x", note->n_namesz);
+      return false;
+    }
 
-  /* We skip notes for empty ranges.  */
-  if (note_data->start == note_data->end)
+  /* We skip notes for empty ranges unless we are dealing with unrelocated object files.  */
+  if (e_type != ET_REL && note_data->start == note_data->end)
     return true;
 
   const char *  namedata = sec->data->d_buf + name_offset;
@@ -707,8 +716,8 @@ walk_notes (eu_checksec_data *     data,
 }
 
 static bool
-check_note_section (eu_checksec_data *    data,
-		    eu_checksec_section * sec)
+check_note_section (annocheck_data *    data,
+		    annocheck_section * sec)
 {
   if (streq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
     {
@@ -718,15 +727,15 @@ check_note_section (eu_checksec_data *    data,
       hard_data.end = 0;
       hard_data.prev_end = 0;
 
-      return eu_checksec_walk_notes (data, sec, walk_notes, (void *) & hard_data);
+      return annocheck_walk_notes (data, sec, walk_notes, (void *) & hard_data);
     }
 
   return true;
 }
 
 static bool
-check_string_section (eu_checksec_data *    data,
-		      eu_checksec_section * sec)
+check_string_section (annocheck_data *    data,
+		      annocheck_section * sec)
 {
   /* Check the string table to see if it contains "__pthread_register_cancel".
      This is not as accurate as checking for a function symbol with this name,
@@ -754,8 +763,8 @@ not_rooted_at_usr (const char * str)
 }
 
 static bool
-check_dynamic_section (eu_checksec_data *    data,
-		       eu_checksec_section * sec)
+check_dynamic_section (annocheck_data *    data,
+		       annocheck_section * sec)
 {
   size_t num_entries = sec->shdr.sh_size / sec->shdr.sh_entsize;
 
@@ -787,8 +796,8 @@ check_dynamic_section (eu_checksec_data *    data,
 }  
 
 static bool
-check_sec (eu_checksec_data *     data,
-	   eu_checksec_section *  sec)
+check_sec (annocheck_data *     data,
+	   annocheck_section *  sec)
 {
   /* Note - the types checked here should correspond to the types
      selected in interesting_sec().  */
@@ -804,8 +813,8 @@ check_sec (eu_checksec_data *     data,
 }
 
 static bool
-interesting_seg (eu_checksec_data *    data,
-		 eu_checksec_segment * seg)
+interesting_seg (annocheck_data *    data,
+		 annocheck_segment * seg)
 {
   if (disabled)
     return false;
@@ -839,33 +848,33 @@ interesting_seg (eu_checksec_data *    data,
 }
 
 static void
-fail (eu_checksec_data * data, const char * message)
+fail (annocheck_data * data, const char * message)
 {
   einfo (INFO, "%s: FAIL: %s", data->filename, message);
   ++ num_fails;
 }
 
 static void
-maybe (eu_checksec_data * data, const char * message)
+maybe (annocheck_data * data, const char * message)
 {
   einfo (INFO, "%s: MAYB: %s", data->filename, message);
   ++ num_maybes;
 }
 
 static void
-pass (eu_checksec_data * data, const char * message)
+pass (annocheck_data * data, const char * message)
 {
   einfo (VERBOSE, "%s: pass: %s", data->filename, message);
 }
 
 static void
-ice (eu_checksec_data * data, const char * message)
+ice (annocheck_data * data, const char * message)
 {
   einfo (INFO, "%s: internal error: %s", data->filename, message);
 }
 
 static void
-show_BIND_NOW (eu_checksec_data * data, enum test_result result)
+show_BIND_NOW (annocheck_data * data, enum test_result result)
 {
   /* Only executables need to have their binding checked.  */
   if (e_type != ET_EXEC)
@@ -880,7 +889,7 @@ show_BIND_NOW (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_DYNAMIC_SEGMENT (eu_checksec_data * data, enum test_result result)
+show_DYNAMIC_SEGMENT (annocheck_data * data, enum test_result result)
 {
   /* Relocateable object files do not have dynamic segments.  */
   if (e_type == ET_REL)
@@ -895,7 +904,7 @@ show_DYNAMIC_SEGMENT (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_GNU_RELRO (eu_checksec_data * data, enum test_result result)
+show_GNU_RELRO (annocheck_data * data, enum test_result result)
 {
   /* Relocateable object files are not yet linked.  */
   if (e_type == ET_REL)
@@ -910,7 +919,7 @@ show_GNU_RELRO (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_GNU_STACK (eu_checksec_data * data, enum test_result result)
+show_GNU_STACK (annocheck_data * data, enum test_result result)
 {
   /* Relocateable object files do not have a stack.  */
   if (e_type == ET_REL)
@@ -925,7 +934,7 @@ show_GNU_STACK (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_RWX_SEG (eu_checksec_data * data, enum test_result result)
+show_RWX_SEG (annocheck_data * data, enum test_result result)
 {
   /* Relocateable object files do not have segments.  */
   if (e_type == ET_REL)
@@ -940,7 +949,7 @@ show_RWX_SEG (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_PIC (eu_checksec_data * data, enum test_result result)
+show_PIC (annocheck_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -952,7 +961,7 @@ show_PIC (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_STACK_PROT (eu_checksec_data * data, enum test_result result)
+show_STACK_PROT (annocheck_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -964,7 +973,7 @@ show_STACK_PROT (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_STACK_CLASH (eu_checksec_data * data, enum test_result result)
+show_STACK_CLASH (annocheck_data * data, enum test_result result)
 {
   /* The ARM does not have stack clash protection support.  */
   if (e_machine == EM_ARM)
@@ -989,7 +998,7 @@ show_STACK_CLASH (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_TEXTREL (eu_checksec_data * data, enum test_result result)
+show_TEXTREL (annocheck_data * data, enum test_result result)
 {
   /* Relocateable object files can have text relocations.  */
   if (e_type == ET_REL)
@@ -1004,7 +1013,7 @@ show_TEXTREL (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_FORTIFY (eu_checksec_data * data, enum test_result result)
+show_FORTIFY (annocheck_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -1017,7 +1026,7 @@ show_FORTIFY (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_CF_PROTECTION (eu_checksec_data * data, enum test_result result)
+show_CF_PROTECTION (annocheck_data * data, enum test_result result)
 {
   if (e_machine != EM_386 && e_machine != EM_X86_64)
     return;
@@ -1041,7 +1050,7 @@ show_CF_PROTECTION (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_GLIBCXX_ASSERTIONS (eu_checksec_data * data, enum test_result result)
+show_GLIBCXX_ASSERTIONS (annocheck_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -1053,7 +1062,7 @@ show_GLIBCXX_ASSERTIONS (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_STACK_REALIGN (eu_checksec_data * data, enum test_result result)
+show_STACK_REALIGN (annocheck_data * data, enum test_result result)
 {
   if (e_machine != EM_386)
     return;
@@ -1068,7 +1077,7 @@ show_STACK_REALIGN (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_RUN_PATH (eu_checksec_data * data, enum test_result result)
+show_RUN_PATH (annocheck_data * data, enum test_result result)
 {
   /* Relocateable object files do not need a runtime path.  */
   if (e_type == ET_REL)
@@ -1083,7 +1092,7 @@ show_RUN_PATH (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_THREADS (eu_checksec_data * data, enum test_result result)
+show_THREADS (annocheck_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -1094,7 +1103,7 @@ show_THREADS (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_WRITEABLE_GOT (eu_checksec_data * data, enum test_result result)
+show_WRITEABLE_GOT (annocheck_data * data, enum test_result result)
 {
   /* Relocateable object files do not have a GOT.  */
   if (e_type == ET_REL)
@@ -1109,7 +1118,7 @@ show_WRITEABLE_GOT (eu_checksec_data * data, enum test_result result)
 }
 
 static void
-show_OPTIMIZATION (eu_checksec_data * data, enum test_result result)
+show_OPTIMIZATION (annocheck_data * data, enum test_result result)
 {
   switch (result)
     {
@@ -1121,7 +1130,7 @@ show_OPTIMIZATION (eu_checksec_data * data, enum test_result result)
 }
 
 static bool
-finish (eu_checksec_data * data)
+finish (annocheck_data * data)
 {
   if (disabled || debuginfo_file)
     return true;
@@ -1242,6 +1251,6 @@ struct checker hardened_checker =
 static __attribute__((constructor)) void
 register_checker (void) 
 {
-  if (! eu_checksec_add_checker (& hardened_checker, major_version))
+  if (! annocheck_add_checker (& hardened_checker, major_version))
     disabled = true;
 }

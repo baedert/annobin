@@ -20,48 +20,14 @@ OBJCOPY=objcopy
 
 PLUGIN=../plugin/.libs/annobin.so
 
+OPTS="-fno-stack-protector -O1 -D_FORTIFY_SOURCE=1"
+
 $GCC -fplugin=$PLUGIN \
      -c \
-     -fPIC \
-     -Wall \
-     -g \
-     -fno-stack-protector \
-     -fplugin-arg-annobin-stack-threshold=0x10 \
- $srcdir/hello.c 
+     $OPTS \
+     $srcdir/hello.c  $srcdir/hello2.c  $srcdir/hello3.c  $srcdir/hello_lib.c 
 
-$GCC -fplugin=$PLUGIN \
-     -O3 \
-     -c \
-     -fPIC \
-     -fno-stack-protector \
-     -fplugin-arg-annobin-global-file-syms \
- $srcdir/hello2.c 
-
-$GCC -fplugin=$PLUGIN \
-     -O2 \
-     -c \
-     -fPIE \
-     -g3 \
-     -fstack-protector-strong \
-     -D_FORTIFY_SOURCE=2 \
-     -fplugin-arg-annobin-no-stack-size-notes \
-     -grecord-gcc-switches \
- $srcdir/hello3.c \
-
-$GCC -fplugin=$PLUGIN \
-    -O2 \
-    -fpic \
-    -fstack-protector \
-    -shared \
- $srcdir/hello_lib.c \
-     -o libhello.so
-
-$GCC -fplugin=$PLUGIN \
-     -L . -pie \
-     -Wl,-z,now,-z,relro \
- hello.o hello2.o hello3.o -lhello -o hardening-fail-test.exe
-
-# $OBJCOPY --merge-notes hardening-fail-test.exe hardening-fail-test-merged.exe
+$GCC hello.o hello2.o hello3.o hello_lib.o -o hardening-fail-test.exe
 
 ../annocheck/annocheck  hardening-fail-test.exe
 

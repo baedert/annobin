@@ -117,12 +117,15 @@ annobin_record_global_target_notes (void)
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end, bool force)
 {
-  if ((unsigned long) ix86_isa_flags != global_x86_isa)
+  const char * func_name = aname;
+
+  if (force
+      || (unsigned long) ix86_isa_flags != global_x86_isa)
     {
-      annobin_inform (1, "ISA value has changed from %lx to %lx for %s",
-		   global_x86_isa, ix86_isa_flags, aname);
+      annobin_inform (1, "record ISA value of %lx for %s",
+		      ix86_isa_flags, func_name);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, ix86_isa_flags,
 				   "numeric: ABI", aname, aname_end, FUNC);
@@ -131,40 +134,38 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 	min_x86_isa = ix86_isa_flags;
       if ((unsigned long) ix86_isa_flags > max_x86_isa)
 	max_x86_isa = ix86_isa_flags;
+
+      aname = aname_end = NULL;
     }
 
-  if (ix86_force_align_arg_pointer != global_stack_realign)
+  if (force
+      || ix86_force_align_arg_pointer != global_stack_realign)
     {
       char buffer [128];
       unsigned len = sprintf (buffer, "GA%cstack_realign", ix86_force_align_arg_pointer ? BOOL_T : BOOL_F);
+
+      annobin_inform (1, "Record function specific stack realign setting of %s for %s",
+		      ix86_force_align_arg_pointer ? "false" : "true", func_name);
       annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
 				  aname, aname_end, FUNC);
-      annobin_inform (1, "Record function specific stack realign setting of %s for %s",
-		      ix86_force_align_arg_pointer ? "false" : "true", aname);
+      aname = aname_end = NULL;
     }
 
 #ifdef flag_cet
-  if (global_cet != flag_cet)
-    fprintf (stderr, "1\n");
-  if (global_set_switch != flag_cet_switch)
-    fprintf (stderr, "2\n");
-  if (global_ibt != (ix86_isa_flags2 & OPTION_MASK_ISA_IBT))
-    fprintf (stderr, "3\n");
-  if (global_shstk != (ix86_isa_flags & OPTION_MASK_ISA_SHSTK))
-    fprintf (stderr, "4\n");
-
-  if ((global_cet != flag_cet)
+  if (force
+      || (global_cet != flag_cet)
       || (global_set_switch != flag_cet_switch)
       || (global_ibt != (ix86_isa_flags2 & OPTION_MASK_ISA_IBT))
       || (global_shstk != (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)))
     {
-      annobin_inform (1, "CET values have changed from %d:%d:%lx:%lx to %d:%d:%lx:%lx",
-		      global_cet, global_set_switch, global_ibt, global_shstk,
+      annobin_inform (1, "recording CET value of %d:%d:%lx:%lx for %s",
 		      flag_cet, flag_cet_switch,
 		      (ix86_isa_flags2 & OPTION_MASK_ISA_IBT),
-		      (ix86_isa_flags & OPTION_MASK_ISA_SHSTK));
+		      (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)
+		      func_name);
 	
       record_cet_note (aname, aname_end, FUNC);
+      aname = aname_end = NULL;
     }
 #endif
 }

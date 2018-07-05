@@ -239,7 +239,6 @@ process_command_line (uint argc, const char * argv[])
       const char *  arg = argv[a];
       bool          used = false;
       checker *     tool;
-      const char *  parameter;
 
       ++ a;
 
@@ -260,6 +259,7 @@ process_command_line (uint argc, const char * argv[])
 
       if (arg[0] == '-')
         {
+	  const char *  parameter;
 	  const char * orig_arg = arg;
 
 	  arg += (arg[1] == '-' ? 2 : 1);
@@ -279,19 +279,45 @@ process_command_line (uint argc, const char * argv[])
 	      break;
 
 	    case 'd':
-	      save_arg (orig_arg);
-	      bool is_path = arg[1] == 'w';
 	      parameter = strchr (arg, '=');
 	      if (parameter == NULL)
 		parameter = argv[a++];
 	      else
 		parameter ++;
-	      if (is_path)
+
+	      if (strncmp (arg, "dwarf-dir", 9) == 0)
 		dwarf_path = parameter;
-	      else
+	      else if (strncmp (arg, "debug-rpm", 9) == 0)
 		debug_rpm = parameter;
+	      else
+		goto unknown_arg;
+		  
+	      if (parameter[0] != '/')
+		{
+		  const char * tmp;
+		  /* Convert a relative path to an absolute one so that if/when
+		     we recurse into a directory, the path will remain valid.  */
+		  if (parameter == argv[a-1])
+		    tmp = concat (orig_arg, " ", getcwd (NULL, 0), "/", parameter, NULL);
+		  else
+		    tmp = concat (orig_arg, getcwd (NULL, 0), "/", parameter, NULL);
+		  save_arg (tmp);
+		  free ((void *) tmp);
+		}
+	      else
+		{
+		  save_arg (orig_arg);
+		  if (parameter == argv[a-1])
+		    save_arg (parameter);
+		}
+
 	      if (dwarf_path != NULL && debug_rpm != NULL)
-		einfo (WARN, "Behaviour is udnefined with both --debug-rpm and --dwarf-dir");
+		{
+		  static bool warned = false;
+		  if (! warned)
+		    einfo (WARN, "Behaviour is udnefined when both --debug-rpm and --dwarf-dir are specified");
+		  warned = true;
+		}
 	      break;
 
 	    case 'p':
@@ -351,7 +377,7 @@ process_command_line (uint argc, const char * argv[])
    Returns FALSE if the walk could not be executed.  */
 
 bool
-eu_checksec_walk_notes (eu_checksec_data * data, eu_checksec_section * sec, note_walker func, void * ptr)
+annocheck_walk_notes (annocheck_data * data, annocheck_section * sec, note_walker func, void * ptr)
 {
   assert (data != NULL && sec != NULL && func != NULL);
 
@@ -376,7 +402,7 @@ eu_checksec_walk_notes (eu_checksec_data * data, eu_checksec_section * sec, note
 /* Read in the section header for SECTION.  */
 
 static void
-read_section_header (eu_checksec_data * data, Elf_Scn * section, Elf64_Shdr * s64hdr)
+read_section_header (annocheck_data * data, Elf_Scn * section, Elf64_Shdr * s64hdr)
 {
   if (data->is_32bit)
     {
@@ -402,7 +428,7 @@ read_section_header (eu_checksec_data * data, Elf_Scn * section, Elf64_Shdr * s6
 static bool
 run_checkers (const char * filename, int fd, Elf * elf)
 {
-  eu_checksec_data data;
+  annocheck_data data;
 
   memset (& data, 0, sizeof data);
   data.full_filename = filename;
@@ -435,7 +461,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 
       while ((scn = elf_nextscn (elf, scn)) != NULL)
 	{
-	  eu_checksec_section  sec;
+	  annocheck_section  sec;
 
 	  memset (& sec, 0, sizeof sec);
 
@@ -493,7 +519,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
       for (cnt = 0; cnt < phnum; ++cnt)
 	{
 	  GElf_Phdr   mem;
-	  eu_checksec_segment seg;
+	  annocheck_segment seg;
 
 	  memset (& seg, 0, sizeof seg);
 
@@ -563,10 +589,20 @@ extract_rpm_file (const char * filename)
   char * command;
   char * cwd = getcwd (NULL, 0);
 
+  /* If filename is a relative path, convert it to an absolute one
+     so that it can be found once we change into the temporary directory.  */
   if (filename[0] != '/')
     fname = concat (cwd, "/", filename, NULL);
   else
+    /* This is just so that we can safely call free(fname) at the end.  */
     fname = concat (filename, NULL);
+
+  if (access (fname, F_OK) == -1) 
+    {
+      einfo (SYS_ERROR, "Error reading rpm file file %s", fname);
+      free (fname);
+      return NULL;
+    }
 
   command = concat (/* Change into the temporary directory.  */
 		    "cd ", dirname,
@@ -604,7 +640,7 @@ extract_rpm_file (const char * filename)
   while (0)
 
 static Dwarf *
-follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
+follow_debuglink (annocheck_data * data, Dwarf * dwarf)
 {
   char *  canon_dir = NULL;
   char *  debugfile = NULL;
@@ -628,7 +664,7 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 	where NNNN+NN is the build-id value as a hexadecimal
 	string.  */
 
-      const char *     path;
+      const char *     path = NULL;
       const char *     leadin = "/usr/lib/debug/.build-id/";
       unsigned char *  d = (unsigned char *) build_id_ptr;
       char             build_id_dir[3];
@@ -643,7 +679,8 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 	path = extract_rpm_file (debug_rpm);
       else if (dwarf_path)
 	path = dwarf_path;
-      else
+
+      if (path == NULL)
 	path = "";
       
       debugfile = n = xmalloc (strlen (leadin)
@@ -810,7 +847,7 @@ follow_debuglink (eu_checksec_data * data, Dwarf * dwarf)
 /* -------------------------------------------------------------------- */
 
 static bool
-scan_dwarf (eu_checksec_data * data, Dwarf * dwarf, dwarf_walker func, void * ptr)
+scan_dwarf (annocheck_data * data, Dwarf * dwarf, dwarf_walker func, void * ptr)
 {
   Dwarf_Off  cuoffset;
   Dwarf_Off  ncuoffset = 0;
@@ -840,7 +877,7 @@ scan_dwarf (eu_checksec_data * data, Dwarf * dwarf, dwarf_walker func, void * pt
    Returns FALSE if the walk could not be executed.  */
 
 bool
-eu_checksec_walk_dwarf (eu_checksec_data * data, dwarf_walker func, void * ptr)
+annocheck_walk_dwarf (annocheck_data * data, dwarf_walker func, void * ptr)
 {
   Dwarf * dwarf;
 
@@ -889,9 +926,9 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, 
   bool use_saved = false;
   GElf_Sym saved_sym;
   GElf_Sym sym;
-  int symndx = 1;
+  unsigned int symndx;
 
-  while (gelf_getsym (sym_data, symndx, & sym) != NULL)
+  for (symndx = 1; gelf_getsym (sym_data, symndx, & sym) != NULL; symndx++)
     {
       if (sym.st_value >= addr && sym.st_value <= addr + 2)
 	{
@@ -912,8 +949,6 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, 
 	  use_sym = true;
 	  break;
 	}
-
-      symndx++;
     }
 
   if (use_sym)
@@ -934,7 +969,7 @@ typedef struct walker_info
 } walker_info;
 
 static bool
-find_symbol_addr_using_dwarf (eu_checksec_data * data, Dwarf * dwarf, Dwarf_Die * die, void * ptr)
+find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, void * ptr)
 {
   assert (data != NULL && die != NULL && ptr != NULL);
 
@@ -1001,8 +1036,8 @@ find_symbol_addr_using_dwarf (eu_checksec_data * data, Dwarf * dwarf, Dwarf_Die 
    Returns NULL if no symbol could be found.  */
 
 const char *
-eu_checksec_find_symbol_for_address_range (eu_checksec_data *     data,
-					   eu_checksec_section *  sec,
+annocheck_find_symbol_for_address_range (annocheck_data *     data,
+					   annocheck_section *  sec,
 					   ulong                  start,
 					   ulong                  end,
 					   bool                   prefer_func)
@@ -1060,7 +1095,7 @@ eu_checksec_find_symbol_for_address_range (eu_checksec_data *     data,
   walker.end = end;
   walker.name = & name;
   walker.prefer_func = prefer_func;
-  eu_checksec_walk_dwarf (data, find_symbol_addr_using_dwarf, & walker);
+  annocheck_walk_dwarf (data, find_symbol_addr_using_dwarf, & walker);
 
   return previous_result = name;
 }
@@ -1330,7 +1365,7 @@ main (int argc, const char ** argv)
 /* -------------------------------------------------------------------- */
 
 bool
-eu_checksec_add_checker (struct checker * new_checker, uint major)
+annocheck_add_checker (struct checker * new_checker, uint major)
 {
   if (major < major_version)
     return false;

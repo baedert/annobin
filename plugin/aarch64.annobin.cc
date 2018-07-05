@@ -43,13 +43,13 @@ annobin_record_global_target_notes (void)
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end, bool force)
 {
-  if (saved_tls_dialect == aarch64_tls_dialect)
+  if (!force && saved_tls_dialect == aarch64_tls_dialect)
     return;
 
-  annobin_inform (1, "TLS dialect has changed from %d to %d for %s",
-		  saved_tls_dialect, aarch64_tls_dialect, current_function_name ());
+  annobin_inform (1, "recording TLS dialect of %d for %s",
+		  aarch64_tls_dialect, current_function_name ());
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
 			       "numeric: ABI: TLS dialect", aname, aname_end,

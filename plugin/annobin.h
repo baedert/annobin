@@ -87,12 +87,14 @@ extern void annobin_save_target_specific_information (void);
    notes in the .gnu.build.attributes section.  */
 extern void annobin_record_global_target_notes (void);
 
-/* Called during PLUGIN_ALL_PASSES_END.
+/* Called during PLUGIN_ALL_PASSES_START.
    Should produce notes specific to the function just compiled.
    Should only produce notes for the static tools, ie
    notes in the .gnu.build.attributes section.
-   Arguments are the start and end symbols for the function.  */
-extern void annobin_target_specific_function_notes (const char *, const char *);
+   Arguments are the start and end symbols for the function,
+   and a boolean indicating if the notes should be generated,
+   even if nothing has changed.  */
+extern void annobin_target_specific_function_notes (const char *, const char *, bool);
 
 /* Called during PLUGIN_FINISH_UNIT.
    Should only produce notes for the dynamic loader, ie
