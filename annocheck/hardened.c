@@ -277,6 +277,51 @@ skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
   return false;
 }
 
+/* Returns true iff addr1 and addr2 are in the same section.  */
+
+static bool
+same_section (annocheck_data * data,
+	      ulong            addr1,
+	      ulong            addr2)
+{
+  Elf_Scn * addr1_scn = NULL;
+  Elf_Scn * addr2_scn = NULL;
+  Elf_Scn * scn = NULL;
+
+  if (data->is_32bit)
+    {
+      while ((scn = elf_nextscn (data->elf, scn)) != NULL)
+	{
+	  Elf32_Shdr * shdr = elf32_getshdr (scn);
+
+	  if (addr1_scn == NULL
+	      && shdr->sh_addr <= addr1 && ((shdr->sh_addr + shdr->sh_size) >= addr1))
+	    addr1_scn = scn;
+
+	  if (addr2_scn == NULL
+	      && shdr->sh_addr <= addr2 && ((shdr->sh_addr + shdr->sh_size) >= addr2))
+	    addr2_scn = scn;
+	}
+    }
+  else
+    {
+      while ((scn = elf_nextscn (data->elf, scn)) != NULL)
+	{
+	  Elf64_Shdr * shdr = elf64_getshdr (scn);
+
+	  if (addr1_scn == NULL
+	      && shdr->sh_addr <= addr1 && ((shdr->sh_addr + shdr->sh_size) >= addr1))
+	    addr1_scn = scn;
+
+	  if (addr2_scn == NULL
+	      && shdr->sh_addr <= addr2 && ((shdr->sh_addr + shdr->sh_size) >= addr2))
+	    addr2_scn = scn;
+	}
+    }
+
+  return addr1_scn == addr2_scn && addr1_scn != NULL;
+}
+
 static bool
 walk_notes (annocheck_data *     data,
 	    annocheck_section *  sec,
@@ -285,8 +330,8 @@ walk_notes (annocheck_data *     data,
 	    size_t               data_offset,
 	    void *               ptr)
 {
-  bool prefer_func_name;
-  hardened_note_data * note_data;
+  bool                  prefer_func_name;
+  hardened_note_data *  note_data;
 
   if (note->n_type != NT_GNU_BUILD_ATTRIBUTE_OPEN
       && note->n_type != NT_GNU_BUILD_ATTRIBUTE_FUNC)
@@ -338,8 +383,14 @@ walk_notes (annocheck_data *     data,
 
       if (note->n_type == NT_GNU_BUILD_ATTRIBUTE_OPEN)
 	{
+	  ulong aligned_end = align (note_data->prev_end, 16);
+
 	  if (note_data->prev_end > 0
-	      && start > align (note_data->prev_end, 16))
+	      && start > aligned_end
+	      /* Build notes are not guaranteed to be organised in order of
+		 increasing address, but we should find the all of the notes
+		 for one section in the same place.  */
+	      && same_section (data, start, aligned_end))
 	    {
 	      hardened_note_data fake_note;
 
@@ -349,10 +400,10 @@ walk_notes (annocheck_data *     data,
 	      if (! ignore_gaps)
 		{
 		  const char * sym = annocheck_find_symbol_for_address_range (data, sec,
-										fake_note.start,
-										fake_note.end, prefer_func_name);
+									      fake_note.start,
+									      fake_note.end, prefer_func_name);
 		  /* Note - we ignore gaps at the start and end of the file.  These are
-		     going to be from the crt code which does not need to be chacked.  */
+		     going to be from the crt code which does not need to be checked.  */
 		  if (sym)
 		    einfo (VERBOSE, "%s: GAP:  (%lx..%lx component: %s or just after...) in annobin notes",
 			   data->filename, fake_note.start, fake_note.end, sym);
@@ -837,7 +888,8 @@ interesting_seg (annocheck_data *    data,
       break;
     }
 
-  if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R))
+  if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R)
+      && seg->phdr->p_type != PT_GNU_STACK)
     {
       einfo (VERBOSE, "%s: fail: seg %d has Read, Write and eXecute flags\n",
 	     data->filename, seg->number);
