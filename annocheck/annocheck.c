@@ -22,6 +22,9 @@
 /* Maximum number of input files.  FIXME: Use a linked list instead.  */
 #define MAX_NUM_FILES 256
 
+/* Prefix used to isolate annobin symbols from program symbols.  */
+#define ANNOBIN_SYMBOL_PREFIX ".annobin_"
+
 /* -1: silent, 0: normal, 1: verbose, 2: very verbose.  */
 ulong         verbosity = 0;
 
@@ -1070,7 +1073,8 @@ annocheck_find_symbol_for_address_range (annocheck_data *     data,
 	{
 	  name = find_symbol_in (data->elf, sym_sec, start, & sym_shdr, prefer_func);
 	  if (name != NULL)
-	    return previous_result = name;
+	    goto found;
+
 	}
     }
 
@@ -1085,7 +1089,7 @@ annocheck_find_symbol_for_address_range (annocheck_data *     data,
 	{
 	  name = find_symbol_in (data->elf, sym_sec, start, & sym_shdr, prefer_func);
 	  if (name)
-	    return previous_result = name;
+	    goto found;
 	}
     }
 
@@ -1096,6 +1100,11 @@ annocheck_find_symbol_for_address_range (annocheck_data *     data,
   walker.name = & name;
   walker.prefer_func = prefer_func;
   annocheck_walk_dwarf (data, find_symbol_addr_using_dwarf, & walker);
+
+ found:
+  /* If we have found an ".annobin_" prefixed symbol then skip the prefix.  */
+  if (name && strncmp (name, ANNOBIN_SYMBOL_PREFIX, strlen (ANNOBIN_SYMBOL_PREFIX)) == 0)
+    name += strlen (ANNOBIN_SYMBOL_PREFIX);
 
   return previous_result = name;
 }
