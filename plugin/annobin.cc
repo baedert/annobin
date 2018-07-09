@@ -839,6 +839,11 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
     return;
 
   func_section = DECL_SECTION_NAME (current_function_decl);
+#if 0 /* We cannot call function_section() - this might create
+	 a NEW section which could be incompatible with the section
+	 that will ultimately be created for this function.  See:
+	   https://bugzilla.redhat.com/show_bug.cgi?id=1598961
+	 for an example of this.  */
   if (func_section == NULL)
     {
       section * sec = function_section (current_function_decl);
@@ -849,6 +854,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	    func_section = sec->named.name;
 	}
     }
+#endif
 
   func_name = current_function_name ();
   asm_name  = function_asm_name ();
