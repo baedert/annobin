@@ -875,7 +875,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
     asm_name = func_name;
 
   if (func_section == NULL && flag_function_sections)
-    func_section = concat (".text.", func_name, NULL); /* FIXME: memory leak.  */
+    func_section = concat (".text.", asm_name, NULL); /* FIXME: memory leak.  */
   
   /* If the function is going to be in its own section, then we do not know
      where it will end up in memory.  In particular we cannot rely upon it
