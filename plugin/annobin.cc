@@ -874,17 +874,21 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   if (asm_name == NULL)
     asm_name = func_name;
 
-  if (func_section == NULL && flag_function_sections)
-    func_section = concat (".text.", asm_name, NULL); /* FIXME: memory leak.  */
-  
   /* If the function is going to be in its own section, then we do not know
      where it will end up in memory.  In particular we cannot rely upon it
      being included in the memory range covered by the global notes.  So for
      such functions we always generate a full range of notes.
-     Likewise if the compiler is generating cold code, then we need to emit
-     notes for the cold section as well.  */
+
+     FIXME: We currently do not force the generation of notes when
+     flag_function_sections is in operation as this has the undesirable effect
+     of preventing linker garbage collection from deleting unused sections.
+     It turns out that some packages rely upon this happening.  See:
+     https://bugzilla.redhat.com/show_bug.cgi?id=1598961 (ndctl) for an example.  */
   force = func_section != NULL;
 
+  if (func_section == NULL && flag_function_sections)
+    func_section = concat (".text.", asm_name, NULL); /* FIXME: memory leak.  */
+  
   /* We use our own function start and end symbols so that they will
      not interfere with the program proper.  In particular if we use
      the function name symbol ourselves then we can cause problems
