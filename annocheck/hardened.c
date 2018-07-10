@@ -218,20 +218,31 @@ typedef struct hardened_note_data
 } hardened_note_data;
 
 static const char *
-get_component_name (annocheck_data *     data,
-		    annocheck_section *  sec,
+get_component_name (annocheck_data *       data,
+		    annocheck_section *    sec,
 		    hardened_note_data *   note_data,
 		    bool                   prefer_func_symbol)
 {
-  static char buffer[256];
-  const char * sym = annocheck_find_symbol_for_address_range (data, sec, note_data->start, note_data->end, prefer_func_symbol);
+  static char *  buffer = NULL;
+  const char *   sym;
+  int            res;
+
+  if (buffer != NULL)
+    {
+      free (buffer);
+      buffer = NULL;
+    }
+
+  sym = annocheck_find_symbol_for_address_range (data, sec, note_data->start, note_data->end, prefer_func_symbol);
 
   if (sym == NULL)
-    sprintf (buffer, "addr range: %#lx..%#lx", note_data->start, note_data->end);
+    res = asprintf (& buffer, "addr range: %#lx..%#lx", note_data->start, note_data->end);
   else
-    sprintf (buffer, "component: %s", sym);
+    res = asprintf (& buffer, "component: %s", sym);
 
-  return buffer;
+  if (res > 0)
+    return buffer;
+  return NULL;
 }
 
 static const char *
