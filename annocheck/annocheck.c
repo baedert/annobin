@@ -302,8 +302,10 @@ process_command_line (uint argc, const char * argv[])
 		     we recurse into a directory, the path will remain valid.  */
 		  if (parameter == argv[a-1])
 		    tmp = concat (orig_arg, " ", getcwd (NULL, 0), "/", parameter, NULL);
-		  else
-		    tmp = concat (orig_arg, getcwd (NULL, 0), "/", parameter, NULL);
+		  else if (debug_rpm == parameter)
+		    tmp = concat ("--debug-rpm=", getcwd (NULL, 0), "/", parameter, NULL);
+		  else /* dwarf_path == parameter  */
+		    tmp = concat ("--dwarf-dir=", getcwd (NULL, 0), "/", parameter, NULL);
 		  save_arg (tmp);
 		  free ((void *) tmp);
 		}
