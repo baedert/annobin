@@ -77,3 +77,13 @@ hotter (int x)
   else
     baz (baz (baz (baz (13))));
 }
+
+void * func_in_its_own_section (void) __attribute__((optimize("-O3"),section(".mysection"),__noinline__));
+
+void *
+func_in_its_own_section (void)
+{
+  asm volatile (".dc.l 0" );
+  return 0;
+}
+

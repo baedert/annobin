@@ -197,7 +197,8 @@ annobin_output_note (const char * name,
 		     const char * desc2,
 		     unsigned     descsz,
 		     bool         desc_is_string,
-		     unsigned     type)
+		     unsigned     type,
+		     const char * section_name)
 {
   unsigned i;
 
@@ -210,20 +211,7 @@ annobin_output_note (const char * name,
 	annobin_inform (0, "Create function specific note for: %s: %s", desc1, name_description);
     }
 
-  /* FIXME: When creating notes for functions we should check to see if there
-     is a section name associated with that function.  If so, then we ought to
-     put the notes into a sub-section named after that section.  Eg if code
-     goes into .text.foo then the notes should go into .gnu.build.attributes.foo.
-     Then both sections should also be placed into a section group, so that if
-     the linker decides to discard .text.foo, it will also discard the notes
-     as well.  (This extends to debug infomation and data as well).
-
-     But ... at the moment, the code section is created by gcc and it is not
-     associated with a section group.  We cannot add a group on afterwards and
-     so we are stuck.  */
-   
-  if (type == OPEN || type == FUNC)
-    fprintf (asm_out_file, "\t.pushsection %s\n", GNU_BUILD_ATTRS_SECTION_NAME);
+  fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n", section_name);
 
   if (name == NULL)
     {
@@ -403,10 +391,7 @@ annobin_output_note (const char * name,
 	}
     }
 
-  if (type == FUNC || type == OPEN)
-    fprintf (asm_out_file, "\t.popsection\n");
-
-  fprintf (asm_out_file, "\n");
+  fprintf (asm_out_file, "\t.popsection\n\n");
   fflush (asm_out_file);
 
   ++ annobin_note_count;
@@ -417,16 +402,17 @@ annobin_output_note (const char * name,
   DESC1, DESC2, (DESC1) == NULL ? 0 : (DESC2 == NULL) ? (annobin_is_64bit ? 8 : 4) : (annobin_is_64bit ? 16 : 8)
 
 void
-annobin_output_static_note (const char * buffer,
-			    unsigned     buffer_len,
-			    bool         name_is_string,
-			    const char * name_description,
-			    const char * start,
-			    const char * end,
-			    unsigned     note_type)
+annobin_output_static_note (const char *  buffer,
+			    unsigned      buffer_len,
+			    bool          name_is_string,
+			    const char *  name_description,
+			    const char *  start,
+			    const char *  end,
+			    unsigned      note_type,
+			    const char *  section_name)
 {
   annobin_output_note (buffer, buffer_len, name_is_string, name_description,
-		       DESC_PARAMETERS (start, end), true, note_type);
+		       DESC_PARAMETERS (start, end), true, note_type, section_name);
 }
 
 void
@@ -435,7 +421,8 @@ annobin_output_bool_note (const char    bool_type,
 			  const char *  name_description,
 			  const char *  start,
 			  const char *  end,
-			  unsigned      note_type)
+			  unsigned      note_type,
+			  const char *  section_name)
 {
   char buffer [6];
 
@@ -444,7 +431,7 @@ annobin_output_bool_note (const char    bool_type,
   /* Include the NUL byte at the end of the name "string".
      This is required by the ELF spec.  */
   annobin_output_static_note (buffer, strlen (buffer) + 1, false, name_description,
-			      start, end, note_type);
+			      start, end, note_type, section_name);
 }
 
 void
@@ -453,7 +440,8 @@ annobin_output_string_note (const char    string_type,
 			    const char *  name_description,
 			    const char *  start,
 			    const char *  end,
-			    unsigned      note_type)
+			    unsigned      note_type,
+			    const char *  section_name)
 {
   unsigned int len = strlen (string);
   char * buffer;
@@ -462,8 +450,10 @@ annobin_output_string_note (const char    string_type,
 
   sprintf (buffer, "GA%c%c%s", GNU_BUILD_ATTRIBUTE_TYPE_STRING, string_type, string);
 
-  annobin_output_static_note (buffer, len + 5, true, name_description,
-			      start, end, note_type);
+  /* Be kind to readers of the assembler source, and do
+     not put control characters into ascii strings.  */
+  annobin_output_static_note (buffer, len + 5, ISPRINT (string_type), name_description,
+			      start, end, note_type, section_name);
 
   free (buffer);
 }
@@ -474,7 +464,8 @@ annobin_output_numeric_note (const char     numeric_type,
 			     const char *   name_description,
 			     const char *   start,
 			     const char *   end,
-			     unsigned       note_type)
+			     unsigned       note_type,
+			     const char *   section_name)
 {
   unsigned i;
   char buffer [32];
@@ -511,7 +502,7 @@ annobin_output_numeric_note (const char     numeric_type,
     annobin_inform (0, "ICE: Unable to record numeric value in note %s\n", name_description);
 
   annobin_output_static_note (buffer, i + 1, false, name_description,
-			      start, end, note_type);
+			      start, end, note_type, section_name);
 }
 
 static int
@@ -611,7 +602,12 @@ compute_GOWall_options (void)
 }
 
 static void
-record_GOW_settings (unsigned int gow, bool local, const char * cname, const char * aname, const char * aname_end)
+record_GOW_settings (unsigned int gow,
+		     bool local,
+		     const char * cname,
+		     const char * aname,
+		     const char * aname_end,
+		     const char * sec_name)
 {
   char buffer [128];
   unsigned i;
@@ -631,34 +627,34 @@ record_GOW_settings (unsigned int gow, bool local, const char * cname, const cha
 
   if (local)
     {
-      annobin_inform (1, "Record a change in -g/-O/-Wall status for %s", cname);
+      annobin_inform (1, "Record -g/-O/-Wall status for %s", cname);
       annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			   DESC_PARAMETERS (aname, aname_end), true, FUNC);
+			   DESC_PARAMETERS (aname, aname_end), true, FUNC, sec_name);
     }
   else
     {
       annobin_inform (1, "Record status of -g/-O/-Wall");
       annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			   NULL, NULL, 0, false, OPEN);
+			   NULL, NULL, 0, false, OPEN, sec_name);
     }
 }
 
 #ifdef flag_stack_clash_protection
 static void
-record_stack_clash_note (const char * start, const char * end, int type)
+record_stack_clash_note (const char * start, const char * end, int type, const char * sec_name)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cstack_clash",
 			  flag_stack_clash_protection ? BOOL_T : BOOL_F);
 
   annobin_output_static_note (buffer, len + 1, true, "bool: -fstack-clash-protection status",
-			      start, end, type);
+			      start, end, type, sec_name);
 }
 #endif
 
 #ifdef flag_cf_protection
 static void
-record_cf_protection_note (const char * start, const char * end, int type)
+record_cf_protection_note (const char * start, const char * end, int type, const char * sec_name)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%ccf_protection", NUMERIC);
@@ -669,7 +665,7 @@ record_cf_protection_note (const char * start, const char * end, int type)
 
   annobin_inform (1, "Record cf-protection status of %d", flag_cf_protection);
   annobin_output_static_note (buffer, len + 1, false, "numeric: -fcf-protection status",
-			      start, end, type);
+			      start, end, type, sec_name);
 }
 #endif
 
@@ -707,22 +703,22 @@ static void
 annobin_emit_function_notes (const char *  func_name,
 			     const char *  start_sym,
 			     const char *  end_sym,
+			     const char *  sec_name,
 			     bool          force)
 {
   unsigned int count = annobin_note_count;
 
-  if (force)
-    {
-      /* XXX FIXME - generate the other global style notes as well.  */
-    }
-
-  annobin_target_specific_function_notes (start_sym, end_sym, force);
+  annobin_target_specific_function_notes (start_sym, end_sym, sec_name, force);
   /* If one or more notes were generated by the target specific function
      then we no longer need to include the start/end symbols in any
      futher notes that we gebenerate.  */
   if (annobin_note_count > count)
     start_sym = end_sym = NULL;
 
+#if 0
+  if (force)
+    record_global_notes (start_sym, end_sym, sec_name, FUNC);
+#endif
   if (flag_stack_protect != -1
       && (force
 	  || global_stack_prot_option != flag_stack_protect))
@@ -732,7 +728,7 @@ annobin_emit_function_notes (const char *  func_name,
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, flag_stack_protect,
 				   "numeric: -fstack-protector status",
-				   start_sym, end_sym, FUNC);
+				   start_sym, end_sym, FUNC, sec_name);
 
       /* We no longer need to include the symbols in the notes we generate.  */
       start_sym = end_sym = NULL;
@@ -745,7 +741,7 @@ annobin_emit_function_notes (const char *  func_name,
       annobin_inform (1, "Recording stack clash protection status of %d for %s",
 		      flag_stack_clash_protection, func_name);
 
-      record_stack_clash_note (start_sym, end_sym, FUNC);
+      record_stack_clash_note (start_sym, end_sym, FUNC, sec_name);
       start_sym = end_sym = NULL;
     }
 #endif
@@ -757,7 +753,7 @@ annobin_emit_function_notes (const char *  func_name,
       annobin_inform (1, "Recording control flow protection status of %d for %s",
 		      flag_cf_protection, func_name);
 
-      record_cf_protection_note (start_sym, end_sym, FUNC);
+      record_cf_protection_note (start_sym, end_sym, FUNC, sec_name);
       start_sym = end_sym = NULL;
     }
 #endif
@@ -768,14 +764,14 @@ annobin_emit_function_notes (const char *  func_name,
       annobin_inform (1, "Recording PIC status of %s", func_name);
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, compute_pic_option (),
 				   "numeric: pic type", start_sym, end_sym,
-				   FUNC);
+				   FUNC, sec_name);
       start_sym = end_sym = NULL;
     }
 
   if (force
       || global_GOWall_options != compute_GOWall_options ())
     {
-      record_GOW_settings (compute_GOWall_options (), true, func_name, start_sym, end_sym);
+      record_GOW_settings (compute_GOWall_options (), true, func_name, start_sym, end_sym, sec_name);
 
       start_sym = end_sym = NULL;
     }
@@ -787,7 +783,7 @@ annobin_emit_function_notes (const char *  func_name,
       annobin_inform (1, "Recording enum size for %s", func_name);
       annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, flag_short_enums,
 				flag_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
-				start_sym, end_sym, FUNC);
+				start_sym, end_sym, FUNC, sec_name);
       start_sym = end_sym = NULL;
     }
 
@@ -801,7 +797,7 @@ annobin_emit_function_notes (const char *  func_name,
 	  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE,
 				       current_function_static_stack_size,
 				       "numeric: stack-size",
-				       start_sym, end_sym, FUNC);
+				       start_sym, end_sym, FUNC, sec_name);
 	  start_sym = end_sym = NULL;
 	}
 
@@ -824,6 +820,8 @@ annobin_emit_function_notes (const char *  func_name,
 static void
 annobin_create_function_notes (void * gcc_data, void * user_data)
 {
+  const char * sec_name = NULL;
+  const char * group_name = NULL;
   const char * func_section;
   const char * func_name;
   const char * asm_name;
@@ -837,24 +835,6 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   if (! annobin_enable_static_notes || asm_out_file == NULL)
     return;
-
-  func_section = DECL_SECTION_NAME (current_function_decl);
-#if 0 /* We cannot call function_section() - this might create
-	 a NEW section which could be incompatible with the section
-	 that will ultimately be created for this function.  See:
-	   https://bugzilla.redhat.com/show_bug.cgi?id=1598961
-	 for an example of this.  */
-  if (func_section == NULL)
-    {
-      section * sec = function_section (current_function_decl);
-
-      if (sec != NULL)
-	{
-	  if (sec->common.flags & SECTION_NAMED)
-	    func_section = sec->named.name;
-	}
-    }
-#endif
 
   func_name = current_function_name ();
   asm_name  = function_asm_name ();
@@ -874,21 +854,29 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   if (asm_name == NULL)
     asm_name = func_name;
 
+  func_section = DECL_SECTION_NAME (current_function_decl);
+  if (func_section != NULL)
+    func_section = concat (func_section, NULL);
+
+  if (func_section == NULL && flag_function_sections)
+    func_section = concat (".text.", asm_name, NULL);
+
   /* If the function is going to be in its own section, then we do not know
      where it will end up in memory.  In particular we cannot rely upon it
      being included in the memory range covered by the global notes.  So for
-     such functions we always generate a full range of notes.
+     such functions we always generate a set of notes.
 
-     FIXME: We currently do not force the generation of notes when
-     flag_function_sections is in operation as this has the undesirable effect
-     of preventing linker garbage collection from deleting unused sections.
-     It turns out that some packages rely upon this happening.  See:
-     https://bugzilla.redhat.com/show_bug.cgi?id=1598961 (ndctl) for an example.  */
+     FIXME: We do not currently generate a full range of notes.  */
   force = func_section != NULL;
 
-  if (func_section == NULL && flag_function_sections)
-    func_section = concat (".text.", asm_name, NULL); /* FIXME: memory leak.  */
-  
+  if (func_section != NULL)
+    {
+      group_name = concat (func_section, ".group", NULL);
+      sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section, NULL);
+    }
+  else
+    sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME,  NULL);
+
   /* We use our own function start and end symbols so that they will
      not interfere with the program proper.  In particular if we use
      the function name symbol ourselves then we can cause problems
@@ -901,7 +889,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   end_sym = concat (ANNOBIN_SYMBOL_PREFIX, asm_name, ".end", NULL);
 
   count = annobin_note_count;
-  annobin_emit_function_notes (func_name, start_sym, end_sym, force);
+  annobin_emit_function_notes (func_name, start_sym, end_sym, sec_name, force);
   
   if (annobin_note_count > count)
     {
@@ -921,7 +909,15 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	}
       else
 	{
-	  fprintf (asm_out_file, "\t.pushsection %s, \"ax\"\n", func_section);
+	  /* Make sure that the note section is part of our section group.  */
+	  if (strstr (func_section, ".gnu.linkonce."))
+	    fprintf (asm_out_file, "\t.pushsection %s, \"G\", %%note, %s, comdat\n", sec_name, group_name);
+	  else
+	    fprintf (asm_out_file, "\t.pushsection %s, \"G\", %%note, %s\n", sec_name, group_name);
+	  fprintf (asm_out_file, "\t.popsection\n");
+
+	  /* Make sure that the code section is in our group.  */
+	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s\n", func_section, group_name);
 	  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", start_sym);
 	  fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
 	  fprintf (asm_out_file, "%s:\n", start_sym);
@@ -943,7 +939,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	     FIXME - Do we need to worry about COMDAT code sections ?  */
 	  if (strstr (func_section, ".gnu.linkonce."))
 	    {
-	      fprintf (asm_out_file, "\t.pushsection %s\n", GNU_BUILD_ATTRS_SECTION_NAME);
+	      fprintf (asm_out_file, "\t.pushsection %s\n", sec_name);
 	      fprintf (asm_out_file, "\t.weak %s\n", start_sym);
 	      fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
 	      fprintf (asm_out_file, "\t.weak %s\n", end_sym);
@@ -960,6 +956,10 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
     }
 
   free ((void *) start_sym);
+  free ((void *) func_section);
+  free ((void *) group_name);
+  free ((void *) sec_name);
+  
 #if 0
   annobin_inform (0, "START: bb %d label %p", crtl->has_bb_partition, crtl->subsections.cold_section_label);
 #endif
@@ -975,6 +975,7 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 #if 0
   annobin_inform (0, "END: bb %d label %p", crtl->has_bb_partition, crtl->subsections.cold_section_label);
 #endif
+
   if (saved_end_sym)
     {
       const char * dsn = DECL_SECTION_NAME (current_function_decl);
@@ -996,6 +997,7 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
       free ((void *) saved_end_sym);
       saved_end_sym = NULL;
     }
+
 #if 0
   switch_to_section (unlikely_text_section ());
   fprintf (asm_out_file, ".xxx\n");
@@ -1042,7 +1044,7 @@ record_fortify_level (int level)
   buffer[++len] = level;
   buffer[++len] = 0;
   annobin_output_note (buffer, len + 1, false, "FORTIFY SOURCE level",
-		       NULL, NULL, 0, false, OPEN);
+		       NULL, NULL, 0, false, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
   annobin_inform (1, "Record a FORTIFY SOURCE level of %d", level);
 }
 
@@ -1053,7 +1055,7 @@ record_glibcxx_assertions (bool on)
   unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS", on ? BOOL_T : BOOL_F);
 
   annobin_output_note (buffer, len + 1, false, on ? "_GLIBCXX_ASSERTIONS defined" : "_GLIBCXX_ASSERTIONS not defined",
-		       NULL, NULL, 0, false, OPEN);
+		       NULL, NULL, 0, false, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
   annobin_inform (1, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
 }
 
@@ -1183,29 +1185,29 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 			      "string: version",
 			      annobin_current_filename,
 			      annobin_current_endname,
-			      OPEN);
+			      OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 
   /* Record the version of the compiler.  */
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
-			      "string: build-tool", NULL, NULL, OPEN);
+			      "string: build-tool", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 
   /* Record optimization level, -W setting and -g setting  */
-  record_GOW_settings (global_GOWall_options, false, NULL, NULL, NULL);
+  record_GOW_settings (global_GOWall_options, false, NULL, NULL, NULL, GNU_BUILD_ATTRS_SECTION_NAME);
 
   /* Record -fstack-protector option.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
 			       /* See BZ 1563141 for an example where global_stack_protection can be -1.  */
 			       global_stack_prot_option >=0 ? global_stack_prot_option : 0,
 			       "numeric: -fstack-protector status",
-			       NULL, NULL, OPEN);
+			       NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 
 #ifdef flag_stack_clash_protection
   /* Record -fstack-clash-protection option.  */
-  record_stack_clash_note (NULL, NULL, OPEN);
+  record_stack_clash_note (NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 #endif
 #ifdef flag_cf_protection
   /* Record -fcf-protection option.  */
-  record_cf_protection_note (NULL, NULL, OPEN);
+  record_cf_protection_note (NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 #endif
 
   /* Look for -D _FORTIFY_SOURCE=<n> and -D_GLIBCXX_ASSERTIONS on the
@@ -1213,6 +1215,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      last version of the option, should multiple versions be set.  */
   bool fortify_level_recorded = false;
   bool glibcxx_assertions_recorded = false;
+
+#define FORTIFY_OPTION "_FORTIFY_SOURCE="
+#define GLIBCXX_OPTION "_GLIBCXX_ASSERTIONS"
 
   for (i = save_decoded_options_count; i--;)
     {
@@ -1223,13 +1228,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
 	  annobin_inform (2, "decoded arg %s", save_decoded_options[i].arg);
 
-	  if (strncmp (save_decoded_options[i].arg, "_FORTIFY_SOURCE=", strlen ("_FORTIFY_SOURCE=")) == 0)
+	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
 	    {
-	      int level = atoi (save_decoded_options[i].arg + strlen ("_FORTIFY_SOURCE="));
+	      int level = atoi (save_decoded_options[i].arg + strlen (FORTIFY_OPTION));
 
 	      if (level < 0 || level > 3)
 		{
-		  annobin_inform (0, "Unexpected value for FORIFY SOURCE: %s",
+		  annobin_inform (0, "Unexpected value in -D" FORTIFY_OPTION "%s",
 				  save_decoded_options[i].arg);
 		  level = 0;
 		}
@@ -1239,50 +1244,78 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 		  record_fortify_level (level);
 		  fortify_level_recorded = true;
 		}
-
-	      continue;
 	    }
 
-	  if (strncmp (save_decoded_options[i].arg, "_GLIBCXX_ASSERTIONS", strlen ("_GLIBCXX_ASSERTIONS")) == 0)
+	  else if (strncmp (save_decoded_options[i].arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
 	    {
 	      if (! glibcxx_assertions_recorded)
 		{
 		  record_glibcxx_assertions (true);
 		  glibcxx_assertions_recorded = true;
 		}
-
-	      continue;
 	    }
-	}
-      else if (save_decoded_options[i].opt_index == OPT_fpreprocessed)
-	{
-	  /* Preprocessed sources *might* have had -D_FORTIFY_SOURCE=<n>
-	     applied, but we cannot tell from here.  Well not without a
-	     deep inspection of the preprocessed sources.  So instead we
-	     record a level of -1 to let the user known that we do not know.
-	     Note: preprocessed sources includes the use of --save-temps.  */
-	  record_fortify_level (-1);
-	  fortify_level_recorded = true;
-	  record_glibcxx_assertions (false); /* FIXME: need a tri-state value...  */
-	  glibcxx_assertions_recorded = true;
-	  break;
 	}
     }
 
+  if (! fortify_level_recorded || ! glibcxx_assertions_recorded)
+    {
+      /* Not all gcc command line options get passed on to cc1 (or cc1plus).
+	 So if we have not see one of the options that interests us we check
+	 the COLLECT_GCC_OPTIONS environment variable instead.  */
+      const char * cgo = getenv ("COLLECT_GCC_OPTIONS");
+
+      if (cgo != NULL)
+	{
+	  if (! fortify_level_recorded)
+	    {
+	      const char * fort = strstr (cgo, FORTIFY_OPTION);
+
+	      if (fort != NULL)
+		{
+		  int level = atoi (fort + strlen (FORTIFY_OPTION));
+
+		  if (level < 0 || level > 3)
+		    {
+		      annobin_inform (0, "Unexpected value in -D" FORTIFY_OPTION "%.3s",
+				      fort + strlen (FORTIFY_OPTION));
+		      level = 0;
+		    }
+
+		  if (! fortify_level_recorded)
+		    {
+		      record_fortify_level (level);
+		      fortify_level_recorded = true;
+		    }
+		}
+	    }
+
+	  if (! glibcxx_assertions_recorded)
+	    {
+	      if (strstr (cgo, GLIBCXX_OPTION) != NULL)
+		{
+		  /* FIXME: We are assuming that the user has specified
+		     -D_GLIBCXX_ASSERTIONS and not -U_GLIBCXX_ASSERTIONS.  */
+		  record_glibcxx_assertions (true);
+		  glibcxx_assertions_recorded = true;
+		}
+	    }
+	}
+    }
+#if 0 /* If not found - do not record anything.  Annocheck likes it better this way.  */
   if (! fortify_level_recorded)
     record_fortify_level (0);
 
   if (! glibcxx_assertions_recorded)
     record_glibcxx_assertions (false);
-
+#endif
   /* Record the PIC status.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
-			       "numeric: PIC", NULL, NULL, OPEN);
+			       "numeric: PIC", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 
   /* Record enum size.  */
   annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums != 0,
 			    global_short_enums != 0 ? "bool: short-enums: on" : "bool: short-enums: off",
-			    NULL, NULL, OPEN);
+			    NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 
   /* Record target specific notes.  */
   annobin_record_global_target_notes ();
@@ -1318,10 +1351,8 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
     {
       annobin_inform (1, "Recording total static usage of %ld", annobin_total_static_stack_usage);
 
-      fprintf (asm_out_file, "\t.pushsection %s\n", GNU_BUILD_ATTRS_SECTION_NAME);
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE, annobin_total_static_stack_usage,
-				   "numeric: stack-size", NULL, NULL, OPEN);
-      fprintf (asm_out_file, "\t.popsection\n");
+				   "numeric: stack-size", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
     }
 
   annobin_target_specific_loader_notes ();

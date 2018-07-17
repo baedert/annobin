@@ -61,7 +61,7 @@ annobin_save_target_specific_information (void)
 
 #ifdef flag_cet
 static void
-record_cet_note (const char * start, const char * end, int type)
+record_cet_note (const char * start, const char * end, int type, const char * sec_name)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%ccet status", NUMERIC);
@@ -79,7 +79,7 @@ record_cet_note (const char * start, const char * end, int type)
 		  ix86_isa_flags & OPTION_MASK_ISA_SHSTK);
 
   annobin_output_static_note (buffer, len + 1, false, "numeric: -mcet status",
-			      start, end, type);
+			      start, end, type, sec_name);
 }
 #endif
 
@@ -93,7 +93,7 @@ annobin_record_global_target_notes (void)
   min_x86_isa = max_x86_isa = global_x86_isa = ix86_isa_flags;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
-			       "numeric: ABI", NULL, NULL, OPEN);
+			       "numeric: ABI", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
   annobin_inform (1, "Record global isa of %lx", global_x86_isa);
 
   {
@@ -102,7 +102,7 @@ annobin_record_global_target_notes (void)
     char buffer [128];
     unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
     annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
-				NULL, NULL, OPEN);
+				NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
     annobin_inform (1, "Record global stack realign setting of %s", global_stack_realign ? "false" : "true");
   }
 			       
@@ -112,12 +112,12 @@ annobin_record_global_target_notes (void)
   global_ibt = ix86_isa_flags2 & OPTION_MASK_ISA_IBT;
   global_shstk = ix86_isa_flags & OPTION_MASK_ISA_SHSTK;
 
-  record_cet_note (NULL, NULL, OPEN);
+  record_cet_note (NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 #endif
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, bool force)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
 {
   const char * func_name = aname;
 
@@ -128,7 +128,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 		      ix86_isa_flags, func_name);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, ix86_isa_flags,
-				   "numeric: ABI", aname, aname_end, FUNC);
+				   "numeric: ABI", aname, aname_end, FUNC, sec_name);
 
       if ((unsigned long) ix86_isa_flags < min_x86_isa)
 	min_x86_isa = ix86_isa_flags;
@@ -147,7 +147,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
       annobin_inform (1, "Record function specific stack realign setting of %s for %s",
 		      ix86_force_align_arg_pointer ? "false" : "true", func_name);
       annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
-				  aname, aname_end, FUNC);
+				  aname, aname_end, FUNC, sec_name);
       aname = aname_end = NULL;
     }
 
@@ -164,7 +164,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 		      (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)
 		      func_name);
 	
-      record_cet_note (aname, aname_end, FUNC);
+      record_cet_note (aname, aname_end, FUNC, sec_name);
       aname = aname_end = NULL;
     }
 #endif
@@ -238,7 +238,7 @@ annobin_target_specific_loader_notes (void)
 
   annobin_inform (1, "Creating notes for the dynamic loader");
 
-  fprintf (asm_out_file, "\t.pushsection %s, \"a\", %%note\n", NOTE_GNU_PROPERTY_SECTION_NAME);
+  fprintf (asm_out_file, "\t.section %s, \"a\", %%note\n", NOTE_GNU_PROPERTY_SECTION_NAME);
   fprintf (asm_out_file, "\t.balign 4\n");
 
   ptr = buffer;
@@ -297,8 +297,5 @@ annobin_target_specific_loader_notes (void)
     }
 
   annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
-		       false, NT_GNU_PROPERTY_TYPE_0);
-
-  fprintf (asm_out_file, "\t.popsection\n");
-  fflush (asm_out_file);
+		       false, NT_GNU_PROPERTY_TYPE_0, NOTE_GNU_PROPERTY_SECTION_NAME);
 }

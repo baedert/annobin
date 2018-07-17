@@ -91,10 +91,14 @@ extern void annobin_record_global_target_notes (void);
    Should produce notes specific to the function just compiled.
    Should only produce notes for the static tools, ie
    notes in the .gnu.build.attributes section.
-   Arguments are the start and end symbols for the function,
-   and a boolean indicating if the notes should be generated,
-   even if nothing has changed.  */
-extern void annobin_target_specific_function_notes (const char *, const char *, bool);
+   Arguments are the START and END symbols for the function,
+   the name of the note SECTION into which the notes should be
+   placed and a boolean indicating if it is necessary to FORCE
+   the generation of notes even if nothing has changed.  */
+extern void annobin_target_specific_function_notes (const char * START,
+						    const char * END,
+						    const char * SECTION,
+						    bool         FORCE);
 
 /* Called during PLUGIN_FINISH_UNIT.
    Should only produce notes for the dynamic loader, ie
@@ -107,12 +111,35 @@ extern void annobin_target_specific_loader_notes (void);
    with file symbols and/or the first function symbol.  */
 extern signed int annobin_target_start_symbol_bias (void);
 
-extern void annobin_inform (unsigned, const char *, ...);
-extern void annobin_output_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned, bool, unsigned);
-extern void annobin_output_static_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned);
-extern void annobin_output_bool_note (const char, const bool, const char *, const char *, const char *, unsigned);
-extern void annobin_output_string_note (const char, const char *, const char *, const char *, const char *, unsigned);
-extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, const char *, unsigned);
+/* Utility function to generate some output.  The first argument is a verbosity level.
+   If it is zero then the output is always generated, otherwise the output is only
+   generated if the level is less than or equal to the current verbosity setting.  */
+extern void annobin_inform (unsigned, const char *, ...) ATTRIBUTE_PRINTF(2, 3);
+
+/* Called to generate a single note.  NAME is the text to go into the name
+   field of the note.  NAMESZ is the length of the name, including the
+   terminating NUL.  NAME_IS_STRING is true if NAME only contains ASCII
+   characters.  NAME_DESCRIPTION is a description of the name field, using
+   in comments and verbose output.
+
+   FIXME: Finish comment.
+ */
+extern void annobin_output_note (const char * NAME,
+				 unsigned     NAMESZ,
+				 bool         NAME_IS_STRING,
+				 const char * NAME_DESCRIPTION,
+				 const char * DESC1,
+				 const char * DESC2,
+				 unsigned     DESCSZ,
+				 bool         DESC_IS_STRING,
+				 unsigned     TYPE,
+				 const char * SEC_NAME);
+
+extern void annobin_output_static_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned, const char *);
+extern void annobin_output_bool_note (const char, const bool, const char *, const char *, const char *, unsigned, const char *);
+extern void annobin_output_string_note (const char, const char *, const char *, const char *, const char *, unsigned, const char *);
+
+extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, const char *, unsigned, const char *);
 
 extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;

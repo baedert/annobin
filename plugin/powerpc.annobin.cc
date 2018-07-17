@@ -43,12 +43,12 @@ annobin_record_global_target_notes (void)
   saved_tls_size = rs6000_tls_size;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
-			       "numeric: ABI: TLS size", NULL, NULL, OPEN);
+			       "numeric: ABI: TLS size", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
   annobin_inform (1, "Recording global TLS size of %d", saved_tls_size);
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, bool force)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
 {
   if (!force && saved_tls_size == rs6000_tls_size)
     return;
@@ -57,7 +57,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 		  rs6000_tls_size, aname);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, rs6000_tls_size,
-			       "numeric: ABI: TLS size", aname, aname_end, FUNC);
+			       "numeric: ABI: TLS size", aname, aname_end, FUNC, sec_name);
 }
 
 typedef struct
@@ -78,9 +78,6 @@ annobin_target_specific_loader_notes (void)
 
   annobin_inform (1, "Creating notes for the dynamic loader");
 
-  fprintf (asm_out_file, "\t.pushsection %s, \"a\", %%note\n", NOTE_GNU_PROPERTY_SECTION_NAME);
-  fprintf (asm_out_file, "\t.balign 4\n");
-
   ptr = buffer;
 
   Elf64_loader_note note64;
@@ -92,7 +89,7 @@ annobin_target_specific_loader_notes (void)
   ptr += sizeof (note64);
 
   annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
-		       false, NT_GNU_PROPERTY_TYPE_0);
+		       false, NT_GNU_PROPERTY_TYPE_0, NOTE_GNU_PROPERTY_SECTION_NAME);
   fflush (asm_out_file);
 }
 

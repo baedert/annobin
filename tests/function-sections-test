@@ -12,32 +12,27 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o function-sections-test.exe unused_code.o unused_code.i unused_code.s
+rm -f hello.o hello2.o function-sections-test.exe unused_code.o unused_code.i unused_code.s fred.map
 
 GCC=gcc
 READELF=readelf
 PLUGIN=../plugin/.libs/annobin.so
 
+OPTS="-c -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -fPIE -O2"
+
 $GCC -fplugin=$PLUGIN \
-     -O2 \
-     -c \
-     -g \
-     -fpic \
+     $OPTS \
      --save-temps \
      -ffunction-sections \
  $srcdir/unused_code.c \
 
 $GCC -fplugin=$PLUGIN \
-     -c \
-     -fPIC \
-     -Wall \
+     $OPTS \
      -O1 \
  $srcdir/hello.c 
 
 $GCC -fplugin=$PLUGIN \
-     -O2 \
-     -c \
-     -fPIC \
+     $OPTS \
      -ffunction-sections \
  $srcdir/hello2.c 
 
@@ -47,6 +42,7 @@ $GCC -fplugin=$PLUGIN \
      -Wl,-z,now,-z,relro \
      -Wl,--gc-sections -Wl,--print-gc-sections \
      -Wl,-Map,fred.map \
+     -Wl,--orphan-handling=warn \
  hello.o unused_code.o hello2.o -o function-sections-test.exe
 
 # Note - currently unused_func_1 and unused_func_2 will not be
@@ -64,4 +60,5 @@ $GCC -fplugin=$PLUGIN \
 
 
 # FIXME - we should check that the notes were parsed correctly...
+# FIXME - we should check for gaps.
 $READELF --notes --wide function-sections-test.exe > /dev/null

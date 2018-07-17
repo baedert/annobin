@@ -935,6 +935,9 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, 
 
   for (symndx = 1; gelf_getsym (sym_data, symndx, & sym) != NULL; symndx++)
     {
+      if (GELF_ST_VISIBILITY (sym.st_other) == STV_HIDDEN)
+	continue;
+
       if (sym.st_value >= addr && sym.st_value <= addr + 2)
 	{
 	  if (!prefer_func || ELF64_ST_TYPE (sym.st_info) == STT_FUNC)
@@ -1042,10 +1045,10 @@ find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * 
 
 const char *
 annocheck_find_symbol_for_address_range (annocheck_data *     data,
-					   annocheck_section *  sec,
-					   ulong                  start,
-					   ulong                  end,
-					   bool                   prefer_func)
+					 annocheck_section *  sec,
+					 ulong                start,
+					 ulong                end,
+					 bool                 prefer_func)
 {
   static const char * previous_result;
   static ulong        previous_start;
@@ -1058,7 +1061,7 @@ annocheck_find_symbol_for_address_range (annocheck_data *     data,
   if (start == previous_start && end == previous_end)
     return previous_result;
 
-  assert (data != NULL && sec != NULL);
+  assert (data != NULL);
 
   previous_start = start;
   previous_end   = end;

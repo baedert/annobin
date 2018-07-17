@@ -30,7 +30,17 @@ static bool debuginfo_file;
 static int  num_fails;
 static int  num_maybes;
 static int  gcc_version;
-static bool gap_detected;
+
+typedef struct hardened_note_data
+{
+  ulong         start;
+  ulong         end;
+} hardened_note_data;
+
+static hardened_note_data *  ranges = NULL;
+static unsigned              num_allocated_ranges = 0;
+static unsigned              next_free_range = 0;
+#define RANGE_ALLOC_DELTA    16
 
 /* Possible results for a test.
    RESULT_UNKNOWN is special because it is also used when parsing a note
@@ -135,8 +145,13 @@ start (annocheck_data * data)
 
   /* Initialise other per-file variables.  */
   debuginfo_file = false;
-  gap_detected = false;
   gcc_version = RESULT_UNKNOWN;
+  if (num_allocated_ranges)
+    {
+      free (ranges);
+      ranges = NULL;
+      next_free_range = num_allocated_ranges = 0;
+    }
 
   num_fails = 0;
   num_maybes = 0;
@@ -210,13 +225,6 @@ align (unsigned long val, unsigned long alignment)
   return (val + (alignment - 1)) & (~ (alignment - 1));
 }
 
-typedef struct hardened_note_data
-{
-  ulong         prev_end;
-  ulong         start;
-  ulong         end;
-} hardened_note_data;
-
 static const char *
 get_component_name (annocheck_data *       data,
 		    annocheck_section *    sec,
@@ -265,9 +273,11 @@ skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
   if (component_name == NULL)
     return false;
 
+  if (streq (component_name, "component: elf_init.c"))
+    return true;
+
   /* We know that some glibc startup functions cannot be compiled
      with stack protection enabled.  So do not complain about them.  */
-#if 0
   static const char * skip_these_funcs[] =
     {
       "_init",
@@ -281,10 +291,7 @@ skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
   for (i = ARRAY_SIZE (skip_these_funcs); i--;)
     if (streq (component_name, skip_these_funcs[i]))
       return true;
-#else
-  if (streq (component_name, "component: elf_init.c"))
-    return true;
-#endif
+
   return false;
 }
 
@@ -333,6 +340,46 @@ same_section (annocheck_data * data,
   return addr1_scn == addr2_scn && addr1_scn != NULL;
 }
 
+static void
+record_range (ulong start, ulong end)
+{
+  if (start == end)
+    return;
+
+  if (next_free_range >= num_allocated_ranges)
+    {
+      num_allocated_ranges += RANGE_ALLOC_DELTA;
+      if (ranges == NULL)
+	ranges = xmalloc (num_allocated_ranges * sizeof ranges[0]);
+      else
+	ranges = xrealloc (ranges, num_allocated_ranges * sizeof ranges[0]);
+    }
+
+  /* Nothing clever here.  Just record the data.  */
+  assert (start < end);
+  ranges[next_free_range].start = start;
+  ranges[next_free_range].end   = end;
+  next_free_range ++;
+}
+
+static int
+compare_range (const void * r1, const void * r2)
+{
+  hardened_note_data * n1 = (hardened_note_data *) r1;
+  hardened_note_data * n2 = (hardened_note_data *) r2;
+
+  if (n1->end < n2->start)
+    return -1;
+  if (n1->start > n2->end)
+    return 1;
+  /* Overlap - we should merge the two ranges.  */
+  if (n1->start < n2->start)
+    return -1;
+  if (n1->end > n2->end)
+    return 1;
+  return 0;
+}
+
 static bool
 walk_notes (annocheck_data *     data,
 	    annocheck_section *  sec,
@@ -353,6 +400,12 @@ walk_notes (annocheck_data *     data,
 
   prefer_func_name = note->n_type == NT_GNU_BUILD_ATTRIBUTE_FUNC;
   note_data = (hardened_note_data *) ptr;
+
+  if (note->n_namesz < 3)
+    {
+      einfo (FAIL, "Corrupt annobin note, name size: %x", note->n_namesz);
+      return false;
+    }
 
   if (note->n_descsz > 0)
     {
@@ -392,51 +445,16 @@ walk_notes (annocheck_data *     data,
 	  return false;
 	}
 
-      if (note->n_type == NT_GNU_BUILD_ATTRIBUTE_OPEN)
+      if (e_type != ET_REL && ! ignore_gaps)
 	{
-	  ulong aligned_end = align (note_data->prev_end, 16);
-
-	  if (note_data->prev_end > 0
-	      && start > aligned_end
-	      /* Build notes are not guaranteed to be organised in order of
-		 increasing address, but we should find the all of the notes
-		 for one section in the same place.  */
-	      && same_section (data, start, aligned_end))
-	    {
-	      hardened_note_data fake_note;
-
-	      fake_note.start = note_data->prev_end + 1;
-	      fake_note.end   = start;
-
-	      if (! ignore_gaps)
-		{
-		  const char * sym = annocheck_find_symbol_for_address_range (data, sec,
-									      fake_note.start,
-									      fake_note.end, prefer_func_name);
-		  /* Note - we ignore gaps at the start and end of the file.  These are
-		     going to be from the crt code which does not need to be checked.  */
-		  if (sym)
-		    einfo (VERBOSE, "%s: GAP:  (%lx..%lx component: %s or just after...) in annobin notes",
-			   data->filename, fake_note.start, fake_note.end, sym);
-		  else
-		    einfo (VERBOSE, "%s: GAP:  (%lx..%lx) in annobin notes",
-			   data->filename, fake_note.start, fake_note.end);
-		    
-		  gap_detected = true;
-		}
-	    }
-
-	  note_data->prev_end = end;
+	  /* Notes can occur in any order and may be spread across multiple note
+	     sections.  So we record the range covered here and then check for
+	     gaps once we have examined all of the notes.  */
+	  record_range (start, end);
 	}
 
       note_data->start = start;
       note_data->end   = end;
-    }
-
-  if (note->n_namesz < 3)
-    {
-      einfo (FAIL, "Corrupt annobin note, name size: %x", note->n_namesz);
-      return false;
     }
 
   /* We skip notes for empty ranges unless we are dealing with unrelocated object files.  */
@@ -525,7 +543,8 @@ walk_notes (annocheck_data *     data,
       switch (value)
 	{
 	case RESULT_UNKNOWN:
-	  return false;
+	  einfo (VERBOSE, "ICE: unexpecetd value for PIC attribute (%x)", value);
+	  return true;
 	case 0:
 	  value = RESULT_FAIL;
 	  break;
@@ -558,7 +577,10 @@ walk_notes (annocheck_data *     data,
 
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
       if (value == RESULT_UNKNOWN)
-	return false;
+	{
+	  einfo (VERBOSE, "ICE: unexpecetd value for STACK PROT attribute (%x)", value);
+	  return true;
+	}
 
       switch (value)
 	{
@@ -583,7 +605,7 @@ walk_notes (annocheck_data *     data,
 	default:
 	  einfo (VERBOSE, "ICE: Unexpected stack protection level of %d", value);
 	  value = RESULT_ICE;
-	  return false;
+	  return true;
 	}
 
       if (tests[TEST_STACK_PROT].result == RESULT_UNKNOWN)
@@ -599,7 +621,8 @@ walk_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case RESULT_UNKNOWN:
-	      return false;
+	      einfo (VERBOSE, "ICE: unexpecetd value for CF attribute (%x)", value);
+	      return true;
 	    case 4:
 	    case 8:
 	      value = RESULT_PASS;
@@ -646,7 +669,11 @@ walk_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case RESULT_UNKNOWN:
-	      return false;
+	      einfo (VERBOSE, "ICE: unexpecetd value for FORTIFY attribute (%x)", value);
+	      /* Fall through.  */
+	    case 0xff:
+	      /* Old annobin plugins used to record a value of -1 for "unknown".  */
+	      return true;
 
 	    case 0:
 	      if (skip_check (TEST_FORTIFY, get_component_name (data, sec, note_data, prefer_func_name)))
@@ -679,7 +706,10 @@ walk_notes (annocheck_data *     data,
       if (streq (attr, "GOW"))
 	{
 	  if (value == RESULT_UNKNOWN)
-	    return false;
+	    {
+	      einfo (VERBOSE, "ICE: unexpecetd value for GOW attribute (%x)", value);
+	      return true;
+	    }
 
 	  value = (value >> 9) & 3;
 
@@ -714,7 +744,7 @@ walk_notes (annocheck_data *     data,
 	      break;
 	    default:
 	      einfo (VERBOSE, "ICE: Unexpected GLIBCXX_ASSERTIONS value: %d", value);
-	      return false;
+	      return true;
 	    }
 
 	  if (tests[TEST_GLIBCXX_ASSERTIONS].result == RESULT_UNKNOWN)
@@ -743,7 +773,7 @@ walk_notes (annocheck_data *     data,
 	      if (e_machine != EM_ARM)
 		einfo (VERBOSE, "ICE: Unexpected stack-clash value: %d", value);
 	      tests[TEST_STACK_CLASH].result = RESULT_ICE;
-	      return false;
+	      return true;
 	    }
 	}
       else if (streq (attr, "stack_realign"))
@@ -751,7 +781,8 @@ walk_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case RESULT_UNKNOWN:
-	      return false;
+	      einfo (VERBOSE, "ICE: unexpecetd value for stack realign attribute (%x)", value);
+	      return true;
 	    case 0:
 	      if (e_machine == EM_386)
 		einfo (VERBOSE, "%s: fail: (%s): Stack realignment not enabled",
@@ -781,13 +812,12 @@ static bool
 check_note_section (annocheck_data *    data,
 		    annocheck_section * sec)
 {
-  if (streq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
+  if (strneq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME, strlen (GNU_BUILD_ATTRS_SECTION_NAME)))
     {
       hardened_note_data hard_data;
 
       hard_data.start = 0;
       hard_data.end = 0;
-      hard_data.prev_end = 0;
 
       return annocheck_walk_notes (data, sec, walk_notes, (void *) & hard_data);
     }
@@ -934,6 +964,64 @@ static void
 ice (annocheck_data * data, const char * message)
 {
   einfo (INFO, "%s: internal error: %s", data->filename, message);
+}
+
+static void
+check_for_gaps (annocheck_data * data)
+{
+  bool gap_found = false;
+
+  assert (! ignore_gaps);
+
+  /* Sort the ranges array.  */
+  qsort (ranges, next_free_range, sizeof ranges[0], compare_range);
+
+  /* Scan the ranges array.  */
+  unsigned i;
+  for (i = 1; i < next_free_range; i++)
+    {
+      hardened_note_data gap;
+
+      gap.start = ranges[i-1].end;
+      gap.end   = ranges[i].start;
+
+      if (gap.start < gap.end
+	  && same_section (data, gap.start, gap.end))
+	{
+	  const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
+
+	  if (sym == NULL && gap.start != align (gap.start, 16))
+	    {
+	      sym = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
+	      if (sym)
+		gap.start = align (gap.start, 16);
+	    }
+
+	  if (sym && skip_check (TEST_MAX, sym))
+	    continue;
+
+	  gap_found = true;
+	  if (! BE_VERBOSE)
+	    break;
+
+	  /* Note - we ignore gaps at the start and end of the file.  These are
+	     going to be from the crt code which does not need to be checked.  */
+	  if (sym)
+	    einfo (VERBOSE, "%s: GAP:  (%lx..%lx probable component: %s) in annobin notes",
+		   data->filename, gap.start, gap.end, sym);
+	  else
+	    einfo (VERBOSE, "%s: GAP:  (%lx..%lx) in annobin notes",
+		   data->filename, gap.start, gap.end);
+	}
+    }
+
+  if (!gap_found)
+    return;
+
+  if (! BE_VERBOSE)
+    maybe (data, "Gaps were detected in the annobin coverage.  Run with -v to list");
+  else
+    maybe (data, "Gaps were detected in the annobin coverage");
 }
 
 static void
@@ -1198,13 +1286,8 @@ finish (annocheck_data * data)
   if (disabled || debuginfo_file)
     return true;
 
-  if (gap_detected)
-    {
-      if (! BE_VERBOSE)
-	maybe (data, "Gaps were detected in the annobin coverage.  Run with -v to list");
-      else
-	maybe (data, "Gaps were detected in the annobin coverage");
-    }
+  if (! ignore_gaps && e_type != ET_REL)
+    check_for_gaps (data);
 
   int i;
   for (i = 0; i < TEST_MAX; i++)

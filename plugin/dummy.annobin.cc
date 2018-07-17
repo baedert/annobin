@@ -40,7 +40,7 @@ annobin_record_global_target_notes (void)
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, bool force)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
 {
 }
 

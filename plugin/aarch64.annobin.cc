@@ -38,12 +38,13 @@ annobin_record_global_target_notes (void)
   saved_tls_dialect = aarch64_tls_dialect;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
-			       "numeric: ABI: TLS dialect", NULL, NULL, OPEN);
+			       "numeric: ABI: TLS dialect", NULL, NULL,
+			       OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
   annobin_inform (1, "Recording global TLS dialect of %d", saved_tls_dialect);
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, bool force)
+annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
 {
   if (!force && saved_tls_dialect == aarch64_tls_dialect)
     return;
@@ -53,7 +54,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
 			       "numeric: ABI: TLS dialect", aname, aname_end,
-			       FUNC);
+			       FUNC, sec_name);
 }
 
 typedef struct
@@ -74,9 +75,6 @@ annobin_target_specific_loader_notes (void)
 
   annobin_inform (1, "Creating notes for the dynamic loader");
 
-  fprintf (asm_out_file, "\t.pushsection %s, \"a\", %%note\n", NOTE_GNU_PROPERTY_SECTION_NAME);
-  fprintf (asm_out_file, "\t.balign 4\n");
-
   ptr = buffer;
 
   Elf64_loader_note note64;
@@ -88,6 +86,6 @@ annobin_target_specific_loader_notes (void)
   ptr += sizeof (note64);
 
   annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
-		       false, NT_GNU_PROPERTY_TYPE_0);
+		       false, NT_GNU_PROPERTY_TYPE_0, NOTE_GNU_PROPERTY_SECTION_NAME);
   fflush (asm_out_file);
 }
