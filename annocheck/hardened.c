@@ -454,6 +454,13 @@ walk_notes (annocheck_data *     data,
 	  return false;
 	}
 
+      if (start > end)
+	{
+	  einfo (FAIL, "Corrupt annobin note, start address %#lx > end address %#lx",
+		 start, end);
+	  return true;
+	}
+
       if (e_type != ET_REL && ! ignore_gaps)
 	{
 	  /* Notes can occur in any order and may be spread across multiple note
@@ -996,14 +1003,12 @@ check_for_gaps (annocheck_data * data)
     {
       if (ranges[i].start <= current.end)
 	{
-	  assert (ranges[i].start >= current.start);
+	  if (ranges[i].start < current.start)
+	    current.start = ranges[i].start;
 
 	  if (ranges[i].end > current.end)
 	    /* ranges[i] overlaps current.  */
 	    current.end = ranges[i].end;
-	  else
-	    /* ranges[i] is contained by current.  */
-	    ;
 	}
       else if (ranges[i].start <= align (current.end, 16))
 	{

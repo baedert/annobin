@@ -780,7 +780,8 @@ annobin_emit_function_notes (const char *  func_name,
       if ((unsigned long) current_function_static_stack_size > stack_threshold)
 	{
 	  annobin_inform (1, "Recording stack usage of %lu for %s",
-			  current_function_static_stack_size, func_name);
+			  (unsigned long) current_function_static_stack_size,
+			  func_name);
 
 	  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE,
 				       current_function_static_stack_size,
@@ -1214,21 +1215,45 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   bool fortify_level_recorded = false;
   bool glibcxx_assertions_recorded = false;
 
-#define FORTIFY_OPTION "_FORTIFY_SOURCE="
+#define FORTIFY_OPTION "_FORTIFY_SOURCE"
 #define GLIBCXX_OPTION "_GLIBCXX_ASSERTIONS"
 
   for (i = save_decoded_options_count; i--;)
     {
-      if (save_decoded_options[i].opt_index == OPT_D)
+      if (save_decoded_options[i].opt_index == OPT_U)
 	{
 	  if (save_decoded_options[i].arg == NULL)
 	    continue;
 
-	  annobin_inform (2, "decoded arg %s", save_decoded_options[i].arg);
+	  annobin_inform (2, "decoded arg -U%s", save_decoded_options[i].arg);
 
 	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
 	    {
-	      int level = atoi (save_decoded_options[i].arg + strlen (FORTIFY_OPTION));
+	      if (! fortify_level_recorded)
+		{
+		  record_fortify_level (0);
+		  fortify_level_recorded = true;
+		}
+	    }
+	  else if (strncmp (save_decoded_options[i].arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
+	    {
+	      if (! glibcxx_assertions_recorded)
+		{
+		  record_glibcxx_assertions (false);
+		  glibcxx_assertions_recorded = true;
+		}
+	    }
+	}
+      else if (save_decoded_options[i].opt_index == OPT_D)
+	{
+	  if (save_decoded_options[i].arg == NULL)
+	    continue;
+
+	  annobin_inform (2, "decoded arg -D%s", save_decoded_options[i].arg);
+
+	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
+	    {
+	      int level = atoi (save_decoded_options[i].arg + strlen (FORTIFY_OPTION) + 1);
 
 	      if (level < 0 || level > 3)
 		{
@@ -1266,24 +1291,32 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	{
 	  if (! fortify_level_recorded)
 	    {
-	      const char * fort = strstr (cgo, FORTIFY_OPTION);
+	      int level = -1;
+	      const char * fort;
 
-	      if (fort != NULL)
+	      fort = cgo;
+	      while (fort = strstr (fort, FORTIFY_OPTION))
 		{
-		  int level = atoi (fort + strlen (FORTIFY_OPTION));
+		  const char * next_fort = fort + strlen (FORTIFY_OPTION);
 
+		  if (fort[-1] == 'U')
+		    level = 0;
+		  else
+		    level = atoi (next_fort + 1);
+
+		  fort = next_fort;
+		}
+
+	      if (level != -1)
+		{
 		  if (level < 0 || level > 3)
 		    {
-		      annobin_inform (0, "Unexpected value in -D" FORTIFY_OPTION "%.3s",
-				      fort + strlen (FORTIFY_OPTION));
+		      annobin_inform (0, "Unexpected value in -D" FORTIFY_OPTION);
 		      level = 0;
 		    }
 
-		  if (! fortify_level_recorded)
-		    {
-		      record_fortify_level (level);
-		      fortify_level_recorded = true;
-		    }
+		  record_fortify_level (level);
+		  fortify_level_recorded = true;
 		}
 	    }
 
@@ -1297,8 +1330,11 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 		  glibcxx_assertions_recorded = true;
 		}
 	    }
+
+	  /* FIXME: CHECK FOR UNDEFS....  */
 	}
     }
+
 #if 0 /* If not found - do not record anything.  Annocheck likes it better this way.  */
   if (! fortify_level_recorded)
     record_fortify_level (0);
@@ -1376,10 +1412,10 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	enabled = true;
 
       else if (strcmp (key, "help") == 0)
-	annobin_inform (0, help_string);
+	annobin_inform (0, "%s", help_string);
 
       else if (strcmp (key, "version") == 0)
-	annobin_inform (0, version_string);
+	annobin_inform (0, "%s", version_string);
 
       else if (strcmp (key, "verbose") == 0)
 	verbose_level ++;
@@ -1495,8 +1531,8 @@ plugin_init (struct plugin_name_args *   plugin_info,
 	      && strncmp (plugin_target, gcc_target, plugin_target_end - plugin_target))
 	    {
 	      annobin_inform (0, _("Error: plugin run on a %.*s compiler but built on a %.*s compiler"),
-			   plugin_target_end - plugin_target, plugin_target,
-			   gcc_target_end - gcc_target, gcc_target);
+			      (int) (plugin_target_end - plugin_target), plugin_target,
+			      (int) (gcc_target_end - gcc_target), gcc_target);
 	      fail = true;
 	    }
 	  else

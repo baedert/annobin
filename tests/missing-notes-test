@@ -35,6 +35,7 @@ $GCC -fplugin=$PLUGIN \
 
 $GCC -fplugin=$PLUGIN \
     $OPTS \
+    -U_FORTIFY_SOURCE \
     -shared \
  $srcdir/hello_lib.c \
      -o libhello.so
