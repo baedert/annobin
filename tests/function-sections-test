@@ -29,6 +29,7 @@ $GCC -fplugin=$PLUGIN \
 $GCC -fplugin=$PLUGIN \
      $OPTS \
      -O1 \
+     --save-temps \
  $srcdir/hello.c 
 
 $GCC -fplugin=$PLUGIN \

@@ -18,6 +18,10 @@
 #include <stdio.h>
 #include <intl.h>
 
+/* Needed to access some of GCC's internal structures.  */
+#include "cgraph.h"
+#include "target.h"
+
 /* The version of the annotation specification supported by this plugin.  */
 #define SPEC_VERSION  3
 
@@ -338,27 +342,10 @@ annobin_output_note (const char * name,
 
 	  if (desc2)
 	    {
-	      fprintf (asm_out_file, "\n");
-	      /* FIXME: Emitting these symbol references creates a link
-		 between the annobin notes section and the code section where
-		 they are defined.  This prevents linker garbage collection
-		 from discarding that code section, even if it is never used.
-		 (It does not affact linkonce sections as they have a
-		 different discard mechanism).
-
-		 The only way to fix this is to put these notes into a
-		 separate section of their own, and then to put this section
-		 and the code section together into a section group.  Then
-		 when the linker discards the code section it will also
-		 discard the note section, and the note reloc section that the
-		 assembler will create.  In order for this to work properly
-		 however the linker must also arrange that if the note section
-		 is not discarded, then it is inserted into the global
-		 gun_build_notes section at the correct place...  */
 	      if (annobin_is_64bit)
-		fprintf (asm_out_file, "\t.quad %s", (char *) desc2);
+		fprintf (asm_out_file, "\n\t.quad %s", (char *) desc2);
 	      else
-		fprintf (asm_out_file, "\t.dc.l %s", (char *) desc2);
+		fprintf (asm_out_file, "\n\t.dc.l %s", (char *) desc2);
 	    }
 
 	  fprintf (asm_out_file, "\t%s description (symbol name)\n", ASM_COMMENT_START);
@@ -719,6 +706,7 @@ annobin_emit_function_notes (const char *  func_name,
   if (force)
     record_global_notes (start_sym, end_sym, sec_name, FUNC);
 #endif
+
   if (flag_stack_protect != -1
       && (force
 	  || global_stack_prot_option != flag_stack_protect))
@@ -856,11 +844,29 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   func_section = DECL_SECTION_NAME (current_function_decl);
   if (func_section != NULL)
+    /* This is just so that we can always free func_section at the end of this code.  */
     func_section = concat (func_section, NULL);
 
-  if (func_section == NULL && flag_function_sections)
+  else if (flag_function_sections)
     func_section = concat (".text.", asm_name, NULL);
 
+  else if (targetm.asm_out.function_section)
+    {
+      struct cgraph_node * node = cgraph_node::get (current_function_decl);
+
+      if (node)
+	{
+	  section * sec;
+
+	  sec = targetm.asm_out.function_section (current_function_decl,
+						  node->frequency, 
+						  node->only_called_at_startup,
+						  node->only_called_at_exit);
+	  if (sec && sec->common.flags & SECTION_NAMED)
+	    func_section = concat (sec->named.name, NULL);
+	}
+    }
+  
   /* If the function is going to be in its own section, then we do not know
      where it will end up in memory.  In particular we cannot rely upon it
      being included in the memory range covered by the global notes.  So for

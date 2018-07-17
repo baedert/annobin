@@ -973,45 +973,71 @@ check_for_gaps (annocheck_data * data)
 
   assert (! ignore_gaps);
 
+  if (next_free_range < 2)
+    return;
+
   /* Sort the ranges array.  */
   qsort (ranges, next_free_range, sizeof ranges[0], compare_range);
 
+  hardened_note_data current = ranges[0];
+  
   /* Scan the ranges array.  */
   unsigned i;
   for (i = 1; i < next_free_range; i++)
     {
-      hardened_note_data gap;
-
-      gap.start = ranges[i-1].end;
-      gap.end   = ranges[i].start;
-
-      if (gap.start < gap.end
-	  && same_section (data, gap.start, gap.end))
+      if (ranges[i].start <= current.end)
 	{
-	  const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
+	  assert (ranges[i].start >= current.start);
 
-	  if (sym == NULL && gap.start != align (gap.start, 16))
+	  if (ranges[i].end > current.end)
+	    /* ranges[i] overlaps current.  */
+	    current.end = ranges[i].end;
+	  else
+	    /* ranges[i] is contained by current.  */
+	    ;
+	}
+      else if (ranges[i].start <= align (current.end, 16))
+	{
+	  /* Append ranges[i].  */
+	  assert (ranges[i].end >= current.end);
+	  current.end = ranges[i].end;
+	}
+      else
+	{
+	  hardened_note_data gap;
+
+	  gap.start = current.end;
+	  gap.end   = ranges[i].start;
+
+	  if (same_section (data, gap.start, gap.end))
 	    {
-	      sym = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
+	      const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
+
+	      if ((sym == NULL || strstr (sym, ".end"))
+		  && gap.start != align (gap.start, 16))
+		{
+		  sym = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
+		  if (sym)
+		    gap.start = align (gap.start, 16);
+		}
+
+	      if (sym && skip_check (TEST_MAX, sym))
+		continue;
+
+	      gap_found = true;
+	      if (! BE_VERBOSE)
+		break;
+
 	      if (sym)
-		gap.start = align (gap.start, 16);
+		einfo (VERBOSE, "%s: GAP:  (%lx..%lx probable component: %s) in annobin notes",
+		       data->filename, gap.start, gap.end, sym);
+	      else
+		einfo (VERBOSE, "%s: GAP:  (%lx..%lx) in annobin notes",
+		       data->filename, gap.start, gap.end);
 	    }
 
-	  if (sym && skip_check (TEST_MAX, sym))
-	    continue;
-
-	  gap_found = true;
-	  if (! BE_VERBOSE)
-	    break;
-
-	  /* Note - we ignore gaps at the start and end of the file.  These are
-	     going to be from the crt code which does not need to be checked.  */
-	  if (sym)
-	    einfo (VERBOSE, "%s: GAP:  (%lx..%lx probable component: %s) in annobin notes",
-		   data->filename, gap.start, gap.end, sym);
-	  else
-	    einfo (VERBOSE, "%s: GAP:  (%lx..%lx) in annobin notes",
-		   data->filename, gap.start, gap.end);
+	  /* We have found a gap, so reset the current range.  */
+	  current = ranges[i];
 	}
     }
 

@@ -935,27 +935,28 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, 
 
   for (symndx = 1; gelf_getsym (sym_data, symndx, & sym) != NULL; symndx++)
     {
-      if (GELF_ST_VISIBILITY (sym.st_other) == STV_HIDDEN)
-	continue;
-
+      /* As of version 3 of the protocol, start symbols might be biased by 2.  */
       if (sym.st_value >= addr && sym.st_value <= addr + 2)
 	{
-	  if (!prefer_func || ELF64_ST_TYPE (sym.st_info) == STT_FUNC)
+	  if (prefer_func && GELF_ST_TYPE (sym.st_info) == STT_FUNC)
 	    {
 	      use_sym = true;
 	      break;
 	    }
 
-	  memcpy (& saved_sym, & sym, sizeof sym);
-	  use_saved = true;
-	  continue;
-	}
-
-      /* As of version 3 of the protocol, start symbols are set at base address plus 2.  */
-      if (!prefer_func && sym.st_value == addr + 2)
-	{
-	  use_sym = true;
-	  break;
+	  if (! use_saved)
+	    {
+	      memcpy (& saved_sym, & sym, sizeof sym);
+	      use_saved = true;
+	    }
+	  else
+	    {
+	      /* Save this symbol if it is a better fit than the currently
+		 saved symbol.  */
+	      if (GELF_ST_VISIBILITY (sym.st_other) != STV_HIDDEN
+		  && GELF_ST_TYPE (sym.st_info) != STT_NOTYPE)
+		memcpy (& saved_sym, & sym, sizeof sym);
+	    }
 	}
     }
 
