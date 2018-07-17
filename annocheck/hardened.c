@@ -244,7 +244,12 @@ get_component_name (annocheck_data *       data,
   sym = annocheck_find_symbol_for_address_range (data, sec, note_data->start, note_data->end, prefer_func_symbol);
 
   if (sym == NULL)
-    res = asprintf (& buffer, "addr range: %#lx..%#lx", note_data->start, note_data->end);
+    {
+      if (note_data->start == note_data->end)
+	res = asprintf (& buffer, "address: %#lx", note_data->start);
+      else
+	res = asprintf (& buffer, "addr range: %#lx..%#lx", note_data->start, note_data->end);
+    }
   else
     res = asprintf (& buffer, "component: %s", sym);
 
@@ -273,7 +278,11 @@ skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
   if (component_name == NULL)
     return false;
 
-  if (streq (component_name, "component: elf_init.c"))
+  if (strstr (component_name, "component: "))
+    component_name += strlen ("component: ");
+
+  if (streq (component_name, "elf_init.c")
+      || streq (component_name, "init.c"))
     return true;
 
   /* We know that some glibc startup functions cannot be compiled
@@ -623,28 +632,28 @@ walk_notes (annocheck_data *     data,
 	    case RESULT_UNKNOWN:
 	      einfo (VERBOSE, "ICE: unexpecetd value for CF attribute (%x)", value);
 	      return true;
-	    case 4:
-	    case 8:
+	    case 4: /* CF_FULL.  */
+	    case 8: /* CF_FULL | CF_SET */
 	      value = RESULT_PASS;
 	      break;
-	    case 2:
-	    case 6:
+	    case 2: /* CF_BRANCH: Branch but not return.  */
+	    case 6: /* CF_BRANCH | CF_SET */
 	      if (e_machine == EM_386 || e_machine == EM_X86_64)
 		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
 		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
 	      break;
-	    case 3:
-	    case 7:
+	    case 3: /* CF_RETURN: Return but not branch.  */
+	    case 7: /* CF_RETURN | CF_SET */
 	      if (e_machine == EM_386 || e_machine == EM_X86_64)
 		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=return",
 		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
 	      value = RESULT_FAIL;
 	      break;
-	    case 1:
+	    case 1: /* CF_NONE: No protection. */
+	    case 5: /* CF_NONE | CF_SET */
 	      if (skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
 		return true;
-	    case 5:
 	      if (e_machine == EM_386 || e_machine == EM_X86_64)
 		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fcf-protection",
 		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
@@ -1042,7 +1051,10 @@ check_for_gaps (annocheck_data * data)
     }
 
   if (!gap_found)
-    return;
+    {
+      pass (data, "No gaps found");
+      return;
+    }
 
   if (! BE_VERBOSE)
     maybe (data, "Gaps were detected in the annobin coverage.  Run with -v to list");

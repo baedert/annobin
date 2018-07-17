@@ -965,10 +965,6 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   free ((void *) func_section);
   free ((void *) group_name);
   free ((void *) sec_name);
-  
-#if 0
-  annobin_inform (0, "START: bb %d label %p", crtl->has_bb_partition, crtl->subsections.cold_section_label);
-#endif
 }
 
 
@@ -977,10 +973,6 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 {
   if (! annobin_enable_static_notes || asm_out_file == NULL)
     return;
-
-#if 0
-  annobin_inform (0, "END: bb %d label %p", crtl->has_bb_partition, crtl->subsections.cold_section_label);
-#endif
 
   if (saved_end_sym)
     {
