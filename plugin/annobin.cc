@@ -804,6 +804,31 @@ annobin_emit_function_notes (const char *  func_name,
 #include "emit-rtl.h"
 #endif
 
+static const char *
+annobin_get_section_name (const_tree decl)
+{
+#if GCCPLUGIN_VERSION_MAJOR >= 5
+  return DECL_SECTION_NAME (current_function_decl);
+#else
+  /* Prior to gcc version 5 DECL_SECTION_NAME returned a tree.  */
+  const_tree name_decl = DECL_SECTION_NAME (current_function_decl);
+  if (name_decl == NULL_TREE)
+    return NULL;
+  return TREE_STRING_POINTER (name_decl);
+#endif
+}
+
+static struct cgraph_node *
+annobin_get_node (const_tree decl)
+{
+#if GCCPLUGIN_VERSION_MAJOR >= 5
+  return cgraph_node::get (decl);
+#else
+  /* Use old form for access node.  */
+  return cgraph_get_node (decl);
+#endif
+}
+
 /* Create any notes specific to the current function.  */
 
 static void
@@ -819,7 +844,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   bool         force;
   unsigned int count;
 
-  if (saved_end_sym != NULL)
+ if (saved_end_sym != NULL)
     annobin_inform (0, "XXX ICE: end sym %s not NULL\n", saved_end_sym);
 
   if (! annobin_enable_static_notes || asm_out_file == NULL)
@@ -843,7 +868,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   if (asm_name == NULL)
     asm_name = func_name;
 
-  func_section = DECL_SECTION_NAME (current_function_decl);
+  func_section = annobin_get_section_name (current_function_decl);
   if (func_section != NULL)
     /* This is just so that we can always free func_section at the end of this code.  */
     func_section = concat (func_section, NULL);
@@ -853,7 +878,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   else if (targetm.asm_out.function_section)
     {
-      struct cgraph_node * node = cgraph_node::get (current_function_decl);
+      struct cgraph_node * node = annobin_get_node (current_function_decl);
 
       if (node)
 	{
@@ -910,9 +935,11 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	 would be inherited by our symbol.  */
       if (func_section == NULL)
 	{
+	  fprintf (asm_out_file, "\t.pushsection .text\n");
 	  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", start_sym);
 	  fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
 	  fprintf (asm_out_file, "%s:\n", start_sym);
+	  fprintf (asm_out_file, "\t.popsection .text\n");
 	}
       else
 	{
@@ -925,6 +952,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
 	  /* Make sure that the code section is in our group.  */
 	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s\n", func_section, group_name);
+	  /* Add the necessary symbols.  */
 	  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", start_sym);
 	  fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
 	  fprintf (asm_out_file, "%s:\n", start_sym);
@@ -977,7 +1005,7 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 
   if (saved_end_sym)
     {
-      const char * dsn = DECL_SECTION_NAME (current_function_decl);
+      const char * dsn = annobin_get_section_name (current_function_decl);
 
       if (dsn)
 	{
@@ -996,42 +1024,6 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
       free ((void *) saved_end_sym);
       saved_end_sym = NULL;
     }
-
-#if 0
-  switch_to_section (unlikely_text_section ());
-  fprintf (asm_out_file, ".xxx\n");
-  
-  /* Determine if this function has a cold section.
-     Note - we cannot use gcc's cold_function_name variable as this
-     is not kept in sync with the current function.  */
-  
-  if (crtl->has_bb_partition)
-    {
-      /* If the function has a cold portion it will be emitted into a
-	 separate section.  So we must create a whole set of notes for
-	 them too.  */
-
-      const char * cold_name = current_function_name ();
-      const char * cold_start_sym;
-      const char * cold_end_sym;
-
-      annobin_inform (0, "func sec cold name %s\n", cold_name);
-      
-      cold_start_sym = concat (ANNOBIN_SYMBOL_PREFIX, ".cold.", cold_name, ".start", NULL);
-      cold_end_sym = concat (ANNOBIN_SYMBOL_PREFIX, ".cold.", cold_name, ".end", NULL);
-      
-      switch_to_section (unlikely_text_section ());
-      fprintf (asm_out_file, "\t.hidden %s\n", cold_start_sym);
-      fprintf (asm_out_file, "\t.equiv %s, %s\n", cold_start_sym, cold_name);
-      fprintf (asm_out_file, "\t.hidden %s\n", cold_end_sym);
-      fprintf (asm_out_file, "%s:\n", cold_end_sym);
-
-      annobin_emit_function_notes (cold_name, cold_start_sym, cold_end_sym, true);
-
-      free ((void *) cold_start_sym);
-      free ((void *) cold_end_sym);
-    }
-#endif
 }
 
 static void
@@ -1295,7 +1287,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	      const char * fort;
 
 	      fort = cgo;
-	      while (fort = strstr (fort, FORTIFY_OPTION))
+	      while ((fort = strstr (fort, FORTIFY_OPTION)) != NULL)
 		{
 		  const char * next_fort = fort + strlen (FORTIFY_OPTION);
 

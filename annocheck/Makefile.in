@@ -241,7 +241,7 @@ AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
 annocheck_SOURCES = annocheck.c hardened.c built-by.c annocheck.h
 annocheck_LDADD = -lelf -ldw -lrpm -lrpmio -liberty
-annocheck_CFLAGS = -O2 -ansi -g -Wshadow=global -Wall -Werror
+annocheck_CFLAGS = -O2 -ansi -g -Wall -Werror
 all: all-am
 
 .SUFFIXES:

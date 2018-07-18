@@ -403,7 +403,7 @@ walk_notes (annocheck_data *     data,
   if (note->n_type != NT_GNU_BUILD_ATTRIBUTE_OPEN
       && note->n_type != NT_GNU_BUILD_ATTRIBUTE_FUNC)
     {
-      einfo (FAIL, "Unrecognised annobin note type %d", note->n_type);
+      einfo (FAIL, "%s: Unrecognised annobin note type %d", data->filename, note->n_type);
       return false;
     }
 
@@ -412,7 +412,7 @@ walk_notes (annocheck_data *     data,
 
   if (note->n_namesz < 3)
     {
-      einfo (FAIL, "Corrupt annobin note, name size: %x", note->n_namesz);
+      einfo (FAIL, "%s: Corrupt annobin note, name size: %x", data->filename, note->n_namesz);
       return false;
     }
 
@@ -450,16 +450,20 @@ walk_notes (annocheck_data *     data,
 	}
       else
 	{
-	  einfo (FAIL, "Corrupt annobin note, desc size: %x", note->n_descsz);
+	  einfo (FAIL, "%s: Corrupt annobin note, desc size: %x",
+		 data->filename, note->n_descsz);
 	  return false;
 	}
 
       if (start > end)
 	{
-	  einfo (FAIL, "Corrupt annobin note, start address %#lx > end address %#lx",
-		 start, end);
+	  einfo (FAIL, "%s: Corrupt annobin note, start address %#lx > end address %#lx",
+		 data->filename, start, end);
 	  return true;
 	}
+
+      note_data->start = start;
+      note_data->end   = end;
 
       if (e_type != ET_REL && ! ignore_gaps)
 	{
@@ -468,9 +472,6 @@ walk_notes (annocheck_data *     data,
 	     gaps once we have examined all of the notes.  */
 	  record_range (start, end);
 	}
-
-      note_data->start = start;
-      note_data->end   = end;
     }
 
   /* We skip notes for empty ranges unless we are dealing with unrelocated object files.  */
