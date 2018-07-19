@@ -888,8 +888,12 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 						  node->frequency, 
 						  node->only_called_at_startup,
 						  node->only_called_at_exit);
-	  if (sec && sec->common.flags & SECTION_NAMED)
-	    func_section = concat (sec->named.name, NULL);
+	  if (sec)
+	    {
+	      sec->common.flags |= SECTION_OVERRIDE;
+	      if (sec->common.flags & SECTION_NAMED)
+		func_section = concat (sec->named.name, NULL);
+	    }
 	}
     }
   
@@ -939,7 +943,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", start_sym);
 	  fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
 	  fprintf (asm_out_file, "%s:\n", start_sym);
-	  fprintf (asm_out_file, "\t.popsection .text\n");
+	  fprintf (asm_out_file, "\t.popsection\n");
 	}
       else
 	{
@@ -1017,8 +1021,10 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	}
       else
 	{
+	  fprintf (asm_out_file, "\t.pushsection .text\n", dsn);
 	  fprintf (asm_out_file, "\t.hidden %s\n", saved_end_sym);
 	  fprintf (asm_out_file, "%s:\n", saved_end_sym);
+	  fprintf (asm_out_file, "\t.popsection\n", dsn);
 	}
 
       free ((void *) saved_end_sym);
