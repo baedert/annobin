@@ -202,7 +202,7 @@ annobin_output_note (const char * name,
 		     unsigned     descsz,
 		     bool         desc_is_string,
 		     unsigned     type,
-		     const char * section_name)
+		     const char * sec_name)
 {
   unsigned i;
 
@@ -215,7 +215,10 @@ annobin_output_note (const char * name,
 	annobin_inform (0, "Create function specific note for: %s: %s", desc1, name_description);
     }
 
-  fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n", section_name);
+  if (strchr (sec_name, ','))
+    fprintf (asm_out_file, "\t.pushsection %s\n", sec_name);
+  else
+    fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n", sec_name);
 
   if (name == NULL)
     {
@@ -396,10 +399,10 @@ annobin_output_static_note (const char *  buffer,
 			    const char *  start,
 			    const char *  end,
 			    unsigned      note_type,
-			    const char *  section_name)
+			    const char *  sec_name)
 {
   annobin_output_note (buffer, buffer_len, name_is_string, name_description,
-		       DESC_PARAMETERS (start, end), true, note_type, section_name);
+		       DESC_PARAMETERS (start, end), true, note_type, sec_name);
 }
 
 void
@@ -409,7 +412,7 @@ annobin_output_bool_note (const char    bool_type,
 			  const char *  start,
 			  const char *  end,
 			  unsigned      note_type,
-			  const char *  section_name)
+			  const char *  sec_name)
 {
   char buffer [6];
 
@@ -418,7 +421,7 @@ annobin_output_bool_note (const char    bool_type,
   /* Include the NUL byte at the end of the name "string".
      This is required by the ELF spec.  */
   annobin_output_static_note (buffer, strlen (buffer) + 1, false, name_description,
-			      start, end, note_type, section_name);
+			      start, end, note_type, sec_name);
 }
 
 void
@@ -428,7 +431,7 @@ annobin_output_string_note (const char    string_type,
 			    const char *  start,
 			    const char *  end,
 			    unsigned      note_type,
-			    const char *  section_name)
+			    const char *  sec_name)
 {
   unsigned int len = strlen (string);
   char * buffer;
@@ -440,7 +443,7 @@ annobin_output_string_note (const char    string_type,
   /* Be kind to readers of the assembler source, and do
      not put control characters into ascii strings.  */
   annobin_output_static_note (buffer, len + 5, ISPRINT (string_type), name_description,
-			      start, end, note_type, section_name);
+			      start, end, note_type, sec_name);
 
   free (buffer);
 }
@@ -452,7 +455,7 @@ annobin_output_numeric_note (const char     numeric_type,
 			     const char *   start,
 			     const char *   end,
 			     unsigned       note_type,
-			     const char *   section_name)
+			     const char *   sec_name)
 {
   unsigned i;
   char buffer [32];
@@ -489,7 +492,7 @@ annobin_output_numeric_note (const char     numeric_type,
     annobin_inform (0, "ICE: Unable to record numeric value in note %s\n", name_description);
 
   annobin_output_static_note (buffer, i + 1, false, name_description,
-			      start, end, note_type, section_name);
+			      start, end, note_type, sec_name);
 }
 
 static int
@@ -835,7 +838,6 @@ static void
 annobin_create_function_notes (void * gcc_data, void * user_data)
 {
   const char * sec_name = NULL;
-  const char * group_name = NULL;
   const char * func_section;
   const char * func_name;
   const char * asm_name;
@@ -890,6 +892,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 						  node->only_called_at_exit);
 	  if (sec)
 	    {
+	      /* Stop gcc from complaining about the section flags changing.  */
 	      sec->common.flags |= SECTION_OVERRIDE;
 	      if (sec->common.flags & SECTION_NAMED)
 		func_section = concat (sec->named.name, NULL);
@@ -907,15 +910,13 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   if (func_section != NULL)
     {
-      group_name = concat (func_section, ".group", NULL);
-      sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section, NULL);
-
-      /* Make sure that the note section, if created, will be part of our section group.  */
+      /* Include a group name in our section name.  */
       if (strstr (func_section, ".gnu.linkonce."))
-	fprintf (asm_out_file, "\t.pushsection %s, \"G\", %%note, %s, comdat\n", sec_name, group_name);
+	sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section, ", \"G\", %note, ",
+			   func_section, ".group, comdat", NULL);
       else
-	fprintf (asm_out_file, "\t.pushsection %s, \"G\", %%note, %s\n", sec_name, group_name);
-      fprintf (asm_out_file, "\t.popsection\n");
+	sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section, ", \"G\", %note, ",
+			   func_section, ".group", NULL);
     }
   else
     sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME,  NULL);
@@ -933,7 +934,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   count = annobin_note_count;
   annobin_emit_function_notes (func_name, start_sym, end_sym, sec_name, force);
-  
+
   if (annobin_note_count > count)
     {
       /* If we generated any notes then we must make sure that the start
@@ -955,25 +956,19 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       else
 	{
 	  /* Make sure that the code section is in our group.  */
-	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s\n", func_section, group_name);
-	  /* Add the necessary symbols.  */
+	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s.group\n", func_section, func_section);
+	  /* Add the start symbol.  */
 	  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", start_sym);
 	  fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
 	  fprintf (asm_out_file, "%s:\n", start_sym);
 	  fprintf (asm_out_file, "\t.popsection\n");
-
+#if 0
 	  /* If the function is in a linkonce section then it is possible that
 	     it will be removed by the linker.  In that case we could be left
 	     with a dangling reference from the annobin notes to the now
 	     deleted annobin symbols in the function section.  So we provide
 	     weak definitions of the symbols here.  We also make them
 	     hidden in order to indicate that they are not needed elsewhere.
-
-	     Note that linker garbage collection does not trigger this problem
-	     because the references generated by the notes prevent garbage
-	     collection from working.  The only way around this is to use
-	     section groups, but - FIXME - this needs more work.  See the
-	     comment in annobin_output_note() for more details.
 
 	     FIXME - Do we need to worry about COMDAT code sections ?  */
 	  if (strstr (func_section, ".gnu.linkonce."))
@@ -985,6 +980,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	      fprintf (asm_out_file, "\t.hidden %s\n", end_sym);
 	      fprintf (asm_out_file, "\t.popsection\n");
 	    }
+#endif
 	}
 
       saved_end_sym = end_sym;
@@ -996,7 +992,6 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   free ((void *) start_sym);
   free ((void *) func_section);
-  free ((void *) group_name);
   free ((void *) sec_name);
 }
 
@@ -1009,23 +1004,15 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 
   if (saved_end_sym)
     {
-      const char * dsn = annobin_get_section_name (current_function_decl);
+      const char * sn = annobin_get_section_name (current_function_decl);
 
-      if (dsn)
-	{
-	  /* The push/pop are probably not necessary, but let's be paranoid.  */
-	  fprintf (asm_out_file, "\t.pushsection %s\n", dsn);
-	  fprintf (asm_out_file, "\t.hidden %s\n", saved_end_sym);
-	  fprintf (asm_out_file, "%s:\n", saved_end_sym);
-	  fprintf (asm_out_file, "\t.popsection\n");
-	}
-      else
-	{
-	  fprintf (asm_out_file, "\t.pushsection .text\n", dsn);
-	  fprintf (asm_out_file, "\t.hidden %s\n", saved_end_sym);
-	  fprintf (asm_out_file, "%s:\n", saved_end_sym);
-	  fprintf (asm_out_file, "\t.popsection\n", dsn);
-	}
+      if (sn == NULL)
+	sn = ".text";
+
+      fprintf (asm_out_file, "\t.pushsection %s\n", sn);
+      fprintf (asm_out_file, "\t.hidden %s\n", saved_end_sym);
+      fprintf (asm_out_file, "%s:\n", saved_end_sym);
+      fprintf (asm_out_file, "\t.popsection\n");
 
       free ((void *) saved_end_sym);
       saved_end_sym = NULL;
