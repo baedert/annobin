@@ -872,7 +872,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
   func_section = annobin_get_section_name (current_function_decl);
   if (func_section != NULL)
-    /* This is just so that we can always free func_section at the end of this code.  */
+    /* This is just so that we can free func_section at the end of this code.  */
     func_section = concat (func_section, NULL);
 
   else if (flag_function_sections)
@@ -895,6 +895,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	      /* Stop gcc from complaining about the section flags changing.  */
 	      sec->common.flags |= SECTION_OVERRIDE;
 	      if (sec->common.flags & SECTION_NAMED)
+		/* This is just so that we can free func_section at the end of this code.  */
 		func_section = concat (sec->named.name, NULL);
 	    }
 	}
