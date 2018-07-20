@@ -909,6 +909,13 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
     {
       group_name = concat (func_section, ".group", NULL);
       sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section, NULL);
+
+      /* Make sure that the note section, if created, will be part of our section group.  */
+      if (strstr (func_section, ".gnu.linkonce."))
+	fprintf (asm_out_file, "\t.pushsection %s, \"G\", %%note, %s, comdat\n", sec_name, group_name);
+      else
+	fprintf (asm_out_file, "\t.pushsection %s, \"G\", %%note, %s\n", sec_name, group_name);
+      fprintf (asm_out_file, "\t.popsection\n");
     }
   else
     sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME,  NULL);
@@ -947,13 +954,6 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	}
       else
 	{
-	  /* Make sure that the note section is part of our section group.  */
-	  if (strstr (func_section, ".gnu.linkonce."))
-	    fprintf (asm_out_file, "\t.pushsection %s, \"G\", %%note, %s, comdat\n", sec_name, group_name);
-	  else
-	    fprintf (asm_out_file, "\t.pushsection %s, \"G\", %%note, %s\n", sec_name, group_name);
-	  fprintf (asm_out_file, "\t.popsection\n");
-
 	  /* Make sure that the code section is in our group.  */
 	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s\n", func_section, group_name);
 	  /* Add the necessary symbols.  */
