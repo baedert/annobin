@@ -9,12 +9,16 @@
 TESTS=compile-test \
       hardening-test \
       hardening-fail-test \
-      abi-test \
       missing-notes-test \
+      abi-test \
       function-sections-test \
       assembler-gap-test
 
-XFAIL_TESTS=hardening-fail-test
+XFAIL_TESTS=hardening-fail-test \
+      missing-notes-test 
+
 
 # FIXME: Add a test for merging notes...
 # FIXME: Add a test for examining archives...
+# FIXME: Add a test for examining rpms...
+# FIXME: Add a test for examining repositories...

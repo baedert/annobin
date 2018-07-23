@@ -2,8 +2,8 @@
 
 extern int big_stack (int);
 
-int ordinary_func (void) __attribute__((optimize("-O0"),__noinline__));
-int baz (void) __attribute__((optimize("-O0"),__noinline__));
+int ordinary_func (void) __attribute__((optimize("-O3"),__noinline__));
+int baz (void) __attribute__((optimize("-O3"),__noinline__));
 int bar (void) __attribute__((optimize("-fstack-protector-strong"),__noinline__));
 
 int

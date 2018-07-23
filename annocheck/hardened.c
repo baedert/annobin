@@ -42,29 +42,17 @@ static unsigned              num_allocated_ranges = 0;
 static unsigned              next_free_range = 0;
 #define RANGE_ALLOC_DELTA    16
 
-/* Possible results for a test.
-   RESULT_UNKNOWN is special because it is also used when parsing a note
-   value.  That is why it is negative.
-   Also RESULT_PASS is the last entry because when there are multiple
-   possible results for a test we store the lowest result in the result value.  */
-enum test_result
-{
-  RESULT_ICE = -2,
-  RESULT_UNKNOWN = -1,
-  RESULT_FAIL,
-  RESULT_MAYBE,
-  RESULT_PASS
-};
-
 /* This structure defines an individual test.  */
 
 typedef struct test
 {
-  bool	            enabled;	/* If false then do not run this test.  */
-  enum test_result  result;	/* Initialised in start(), checked in finish().  */
-  const char *      name;	/* Also used as part of the command line option to disable the test.  */
-  void (*           show_result)(annocheck_data *, enum test_result);
-  const char *      description;/* Used in the --help output to describe the test.  */
+  bool	            enabled;	  /* If false then do not run this test.  */
+  unsigned int      num_pass;
+  unsigned int      num_fail;
+  unsigned int      num_maybe;
+  const char *      name;	  /* Also used as part of the command line option to disable the test.  */
+  const char *      description;  /* Used in the --help output to describe the test.  */
+  void (*           show_result)(annocheck_data *, struct test *);
 } test;
 
 enum test_index
@@ -90,26 +78,26 @@ enum test_index
   TEST_MAX
 };
 
-static void show_BIND_NOW           (annocheck_data *, enum test_result);
-static void show_CF_PROTECTION      (annocheck_data *, enum test_result);
-static void show_DYNAMIC_SEGMENT    (annocheck_data *, enum test_result);
-static void show_FORTIFY            (annocheck_data *, enum test_result);
-static void show_GLIBCXX_ASSERTIONS (annocheck_data *, enum test_result);
-static void show_GNU_RELRO          (annocheck_data *, enum test_result);
-static void show_GNU_STACK          (annocheck_data *, enum test_result);
-static void show_OPTIMIZATION       (annocheck_data *, enum test_result);
-static void show_PIC                (annocheck_data *, enum test_result);
-static void show_RUN_PATH           (annocheck_data *, enum test_result);
-static void show_RWX_SEG            (annocheck_data *, enum test_result);
-static void show_STACK_CLASH        (annocheck_data *, enum test_result);
-static void show_STACK_PROT         (annocheck_data *, enum test_result);
-static void show_STACK_REALIGN      (annocheck_data *, enum test_result);
-static void show_TEXTREL            (annocheck_data *, enum test_result);
-static void show_THREADS            (annocheck_data *, enum test_result);
-static void show_WRITEABLE_GOT      (annocheck_data *, enum test_result);
+static void show_BIND_NOW           (annocheck_data *, test *);
+static void show_CF_PROTECTION      (annocheck_data *, test *);
+static void show_DYNAMIC_SEGMENT    (annocheck_data *, test *);
+static void show_FORTIFY            (annocheck_data *, test *);
+static void show_GLIBCXX_ASSERTIONS (annocheck_data *, test *);
+static void show_GNU_RELRO          (annocheck_data *, test *);
+static void show_GNU_STACK          (annocheck_data *, test *);
+static void show_OPTIMIZATION       (annocheck_data *, test *);
+static void show_PIC                (annocheck_data *, test *);
+static void show_RUN_PATH           (annocheck_data *, test *);
+static void show_RWX_SEG            (annocheck_data *, test *);
+static void show_STACK_CLASH        (annocheck_data *, test *);
+static void show_STACK_PROT         (annocheck_data *, test *);
+static void show_STACK_REALIGN      (annocheck_data *, test *);
+static void show_TEXTREL            (annocheck_data *, test *);
+static void show_THREADS            (annocheck_data *, test *);
+static void show_WRITEABLE_GOT      (annocheck_data *, test *);
 
 #define TEST(name,upper,description) \
-  [ TEST_##upper ] = { true, 0, #name, show_ ## upper, description }
+  [ TEST_##upper ] = { true, 0, 0, 0, #name, description, show_ ## upper }
 
 /* Array of tests to run.  Default to enabling them all.
    The result field is initialised in the start() function.  */
@@ -141,11 +129,15 @@ start (annocheck_data * data)
   /* (Re) Set the results for the tests.  */
   int i;
   for (i = 0; i < TEST_MAX; i++)
-    tests [i].result = RESULT_UNKNOWN;
+    {
+      tests [i].num_pass = 0;
+      tests [i].num_fail = 0;
+      tests [i].num_maybe = 0;
+    }
 
   /* Initialise other per-file variables.  */
   debuginfo_file = false;
-  gcc_version = RESULT_UNKNOWN;
+  gcc_version = -1;
   if (num_allocated_ranges)
     {
       free (ranges);
@@ -199,9 +191,9 @@ interesting_sec (annocheck_data *     data,
   if (streq (sec->secname, ".stack"))
     {
       if ((sec->shdr.sh_flags & (SHF_WRITE | SHF_EXECINSTR)) == SHF_WRITE)
-	tests[TEST_GNU_STACK].result = RESULT_PASS;
+	++ tests[TEST_GNU_STACK].num_pass;
       else
-	tests[TEST_GNU_STACK].result = RESULT_FAIL;
+	++ tests[TEST_GNU_STACK].num_fail;
     }
 
   /* Note the permissions on GOT/PLT relocation sections.  */
@@ -211,9 +203,10 @@ interesting_sec (annocheck_data *     data,
       || streq  (sec->secname, ".rela.plt"))
     {
       if (sec->shdr.sh_flags & SHF_WRITE)
-	tests[TEST_WRITEABLE_GOT].result = RESULT_FAIL;
+	++ tests[TEST_WRITEABLE_GOT].num_fail;
     }
 
+  /* These types of section need further processing.  */
   return sec->shdr.sh_type == SHT_DYNAMIC
     || sec->shdr.sh_type == SHT_NOTE
     || sec->shdr.sh_type == SHT_STRTAB;
@@ -273,7 +266,7 @@ stack_prot_type (uint value)
 }
 
 static bool
-skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
+skip_check (enum test_index check, const char * component_name)
 {
   if (component_name == NULL)
     return false;
@@ -283,7 +276,10 @@ skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
 
   if (streq (component_name, "elf_init.c")
       || streq (component_name, "init.c"))
-    return true;
+    {
+      einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
+      return true;
+    }
 
   /* We know that some glibc startup functions cannot be compiled
      with stack protection enabled.  So do not complain about them.  */
@@ -299,7 +295,10 @@ skip_check (enum test_index check ATTRIBUTE_UNUSED, const char * component_name)
 
   for (i = ARRAY_SIZE (skip_these_funcs); i--;)
     if (streq (component_name, skip_these_funcs[i]))
-      return true;
+      {
+	einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
+	return true;
+      }
 
   return false;
 }
@@ -389,6 +388,43 @@ compare_range (const void * r1, const void * r2)
   return 0;
 }
 
+/* Wrapper for einfo that avoids calling get_component_name()
+   unless we know that the string will be needed.  */
+
+static void
+report_i (einfo_type           type, 
+	  const char *         format,
+	  annocheck_data *     data,
+	  annocheck_section *  sec,
+	  hardened_note_data * note,
+	  bool                 prefer_func,
+	  uint                 value)
+{
+  if (type == VERBOSE2 && ! BE_VERY_VERBOSE)
+    return;
+  if (type == VERBOSE && ! BE_VERBOSE)
+    return;
+
+  einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
+}
+	
+static void
+report_s (einfo_type           type, 
+	  const char *         format,
+	  annocheck_data *     data,
+	  annocheck_section *  sec,
+	  hardened_note_data * note,
+	  bool                 prefer_func,
+	  const char *         value)
+{
+  if (type == VERBOSE2 && ! BE_VERY_VERBOSE)
+    return;
+  if (type == VERBOSE && ! BE_VERBOSE)
+    return;
+
+  einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
+}
+	
 static bool
 walk_notes (annocheck_data *     data,
 	    annocheck_section *  sec,
@@ -490,7 +526,7 @@ walk_notes (annocheck_data *     data,
     pos += strlen (namedata + pos) + 1;
 
   const char *  string = namedata + pos;
-  uint          value = RESULT_UNKNOWN;
+  uint          value = -1;
 
   switch (attr_type)
     { 
@@ -526,7 +562,7 @@ walk_notes (annocheck_data *     data,
   switch (* attr)
     {
     case GNU_BUILD_ATTRIBUTE_TOOL:
-      if (value != RESULT_UNKNOWN)
+      if (value != -1)
 	einfo (VERBOSE, "ICE: The tool note should have a string attribute");
       else
 	{
@@ -535,14 +571,12 @@ walk_notes (annocheck_data *     data,
 	  if (gcc)
 	    {
 	      /* FIXME: This assumes that the tool string looks like: "gcc 7.x.x......"  */
-	      unsigned long version = strtoul (gcc + 4, NULL, 10);
+	      unsigned int version = (unsigned int) strtoul (gcc + 4, NULL, 10);
 
-	      einfo (VERBOSE2, "%s: (%s) built-by gcc version %lu",
-		     data->filename,
-		     get_component_name (data, sec, note_data, prefer_func_name),
-		     version);
+	      report_i (VERBOSE2, "%s: (%s) built-by gcc version %u",
+			data, sec, note_data, prefer_func_name, version);
 
-	      if (gcc_version == RESULT_UNKNOWN)
+	      if (gcc_version == -1)
 		gcc_version = version;
 	      else if (gcc_version != version)
 		{
@@ -559,124 +593,124 @@ walk_notes (annocheck_data *     data,
       /* Convert the pic value into a pass/fail result.  */
       switch (value)
 	{
-	case RESULT_UNKNOWN:
-	  einfo (VERBOSE, "ICE: unexpecetd value for PIC attribute (%x)", value);
-	  return true;
-	case 0:
-	  value = RESULT_FAIL;
+	case -1:
+	default:
+	  report_i (VERBOSE, "%s: mayb: (%s): unexpected value for PIC note (%x)",
+		    data, sec, note_data, prefer_func_name, value);
+	  tests[TEST_PIC].num_maybe ++;
 	  break;
+
+	case 0:
+	  report_s (INFO, "%s: fail: (%s): compiled without -fPIC/-fPIE",
+		  data, sec, note_data, prefer_func_name, NULL);
+	  tests[TEST_PIC].num_fail ++;
+	  break;
+
 	case 1:
 	case 2:
 	  /* Compiled wth -fpic not -fpie.  */
 	  if (e_type == ET_EXEC)
 	    {
-	      einfo (VERBOSE, "%s: Warning: executable compiled with -fPIC rather than -fPIE",
-		     data->filename);
-	      value = RESULT_FAIL;
+	      report_s (INFO, "%s: fail: (%s): compiled with -fPIC rather than -fPIE",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_PIC].num_fail ++;
 	    }
 	  else
-	    value = RESULT_PASS;
+	    {
+	      report_s (VERBOSE2, "%s: pass: (%s): compiled with -fPIC/-fPIE",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_PIC].num_pass ++;
+	    }
 	  break;
+
 	case 3:
 	case 4:
-	  value = RESULT_PASS;
-	  break;
-	default:
-	  value = RESULT_ICE;
+	  report_s (VERBOSE2, "%s: pass: (%s): compiled with -fPIE",
+		  data, sec, note_data, prefer_func_name, NULL);
+	  tests[TEST_PIC].num_pass ++;
 	  break;
 	}
-
-      if (tests[TEST_PIC].result == RESULT_UNKNOWN)
-	tests[TEST_PIC].result = value;
-      else if (value < tests[TEST_PIC].result)
-	tests[TEST_PIC].result = value;
       break;
 
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
-      if (value == RESULT_UNKNOWN)
-	{
-	  einfo (VERBOSE, "ICE: unexpecetd value for STACK PROT attribute (%x)", value);
-	  return true;
-	}
-
       switch (value)
 	{
+	case -1:
+	default:
+	  report_i (VERBOSE, "%s: mayb: (%s): unexpected value for stack protection note (%x)",
+		  data, sec, note_data, prefer_func_name, value);
+	  tests[TEST_STACK_PROT].num_maybe ++;
+	  break;
+	  
 	case 0: /* NONE */
 	  if (skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
 	    return true;
-	  einfo (VERBOSE, "%s: fail: (%s): No stack protection enabled",
-		 data->filename, get_component_name (data, sec, note_data, prefer_func_name));
-	  value = RESULT_FAIL;
+	  report_s (INFO, "%s: fail: (%s): No stack protection enabled",
+		  data, sec, note_data, prefer_func_name, NULL);
+	  tests[TEST_STACK_PROT].num_fail ++;
 	  break;
+
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
 	case 4: /* EXPLICIT */
-	  einfo (VERBOSE, "%s: fail: (%s): Insufficient stack protection: %s",
-		 data->filename, get_component_name (data, sec, note_data, prefer_func_name),
-		 stack_prot_type (value));
-	  value = RESULT_FAIL;
+	  report_s (INFO, "%s: fail: (%s): Insufficient stack protection: %s",
+		  data, sec, note_data, prefer_func_name, stack_prot_type (value));
+	  tests[TEST_STACK_PROT].num_fail ++;
 	  break;
+
 	case 2: /* ALL */
 	case 3: /* STRONG */
-	  value = RESULT_PASS;
+	  report_s (VERBOSE2, "%s: pass: (%s): %s enabled",
+		  data, sec, note_data, prefer_func_name, stack_prot_type (value));
+	  tests[TEST_STACK_PROT].num_pass ++;
 	  break;
-	default:
-	  einfo (VERBOSE, "ICE: Unexpected stack protection level of %d", value);
-	  value = RESULT_ICE;
-	  return true;
 	}
-
-      if (tests[TEST_STACK_PROT].result == RESULT_UNKNOWN)
-	tests[TEST_STACK_PROT].result  = value;
-      else if (value < tests[TEST_STACK_PROT].result)
-	tests[TEST_STACK_PROT].result = value;
-
       break;
 
     case 'c':
       if (streq (attr, "cf_protection"))
 	{
+	  if (e_machine != EM_386 && e_machine != EM_X86_64)
+	    break;
+
 	  switch (value)
 	    {
-	    case RESULT_UNKNOWN:
-	      einfo (VERBOSE, "ICE: unexpecetd value for CF attribute (%x)", value);
-	      return true;
+	    case -1:
+	    default:
+	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for cf-protection note (%x)",
+		      data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_CF_PROTECTION].num_maybe ++;
+	      break;
+
 	    case 4: /* CF_FULL.  */
 	    case 8: /* CF_FULL | CF_SET */
-	      value = RESULT_PASS;
+	      report_i (VERBOSE2, "%s: pass: (%s): cf-protection enabled (%x)",
+		      data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_CF_PROTECTION].num_pass ++;
 	      break;
+
 	    case 2: /* CF_BRANCH: Branch but not return.  */
 	    case 6: /* CF_BRANCH | CF_SET */
-	      if (e_machine == EM_386 || e_machine == EM_X86_64)
-		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
-		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
-	      value = RESULT_FAIL;
+	      report_s (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
+
 	    case 3: /* CF_RETURN: Return but not branch.  */
 	    case 7: /* CF_RETURN | CF_SET */
-	      if (e_machine == EM_386 || e_machine == EM_X86_64)
-		einfo (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=return",
-		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
-	      value = RESULT_FAIL;
+	      report_s (INFO, "%s: fail: (%s): Only compiled with -fcf-protection=return",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
+
 	    case 1: /* CF_NONE: No protection. */
 	    case 5: /* CF_NONE | CF_SET */
 	      if (skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
 		return true;
-	      if (e_machine == EM_386 || e_machine == EM_X86_64)
-		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fcf-protection",
-		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
-	      value = RESULT_FAIL;
-	      break;
-	    default:
-	      einfo (INFO, "%s: ICE:  Unexpected value for cf-protection: %d", data->filename, value);
-	      value = RESULT_ICE;
+	      report_s (INFO, "%s: fail: (%s): Compiled without -fcf-protection",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
 	    }
-
-	  if (tests[TEST_CF_PROTECTION].result == RESULT_UNKNOWN)
-	    tests[TEST_CF_PROTECTION].result = value;
-	  else if (value < tests[TEST_CF_PROTECTION].result)
-	    tests[TEST_CF_PROTECTION].result = value;
 	}
       break;
 
@@ -685,65 +719,65 @@ walk_notes (annocheck_data *     data,
 	{
 	  switch (value)
 	    {
-	    case RESULT_UNKNOWN:
-	      einfo (VERBOSE, "ICE: unexpecetd value for FORTIFY attribute (%x)", value);
-	      /* Fall through.  */
+	    case -1:
+	    default:
+	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for fortify note (%x)",
+		      data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_FORTIFY].num_maybe ++;
+	      break;
+
 	    case 0xff:
-	      /* Old annobin plugins used to record a value of -1 for "unknown".  */
-	      return true;
+	      report_s (VERBOSE, "%s: mayb: (%s): -D_FORTIFY_SOURCE setting not recorded",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_FORTIFY].num_maybe ++;
+	      break;
 
 	    case 0:
 	      if (skip_check (TEST_FORTIFY, get_component_name (data, sec, note_data, prefer_func_name)))
 		return true;
+	      /* Fall through.  */
 	    case 1:
-	      einfo (VERBOSE, "%s: fail: (%s): Insufficient value for -D_FORTIFY_SOURCE: %d",
-		     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
-		     value);
-	      value = RESULT_FAIL;
+	      report_i (INFO, "%s: fail: (%s): Insufficient value for -D_FORTIFY_SOURCE: %d",
+		      data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_FORTIFY].num_fail ++;
 	      break;
 
 	    case 2:
-	      value = RESULT_PASS;
-	      break;
-
-	    default:
-	      einfo (VERBOSE, "ICE: Unexpected FORTIFY level of %d", value);
-	      value = RESULT_ICE;
+	      report_s (VERBOSE2, "%s: pass: (%s): -D_FORTIFY_SOURCE=2",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_FORTIFY].num_pass ++;
 	      break;
 	    }	      
-	      
-	  if (tests[TEST_FORTIFY].result == RESULT_UNKNOWN)
-	    tests[TEST_FORTIFY].result = value;
-	  else if (value < tests[TEST_FORTIFY].result)
-	    tests[TEST_FORTIFY].result = value;
 	}
       break;
 
     case 'G':
       if (streq (attr, "GOW"))
 	{
-	  if (value == RESULT_UNKNOWN)
+	  if (value == -1)
 	    {
-	      einfo (VERBOSE, "ICE: unexpecetd value for GOW attribute (%x)", value);
-	      return true;
+	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for optimize note (%x)",
+		      data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_OPTIMIZATION].num_maybe ++;
 	    }
-
-	  value = (value >> 9) & 3;
-
-	  if (value == 0 || value == 1)
+	  else
 	    {
-	      einfo (VERBOSE, "%s: fail: (%s): Insufficient optimization level: -O%d",
-		     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
-		     value);
-	      value = RESULT_FAIL;
-	    }
-	  else /* value == 2 || value == 3 */
-	    value = RESULT_PASS;
+	      value = (value >> 9) & 3;
 
-	  if (tests[TEST_OPTIMIZATION].result == RESULT_UNKNOWN)
-	    tests[TEST_OPTIMIZATION].result = value;
-	  else if (value < tests[TEST_OPTIMIZATION].result)
-	    tests[TEST_OPTIMIZATION].result = value;
+	      if (value == 0 || value == 1)
+		{
+		  report_i (INFO, "%s: fail: (%s): Insufficient optimization level: -O%d",
+			  data, sec, note_data, prefer_func_name, value);
+		  tests[TEST_OPTIMIZATION].num_fail ++;
+		}
+	      else /* value == 2 || value == 3 */
+		{
+		  report_i (VERBOSE2, "%s: pass: (%s): Sufficient optimization level: -O%d",
+			  data, sec, note_data, prefer_func_name, value);
+		  tests[TEST_OPTIMIZATION].num_pass ++;
+		}
+	    }
+	  break;
 	}
       else if (streq (attr, "GLIBCXX_ASSERTIONS"))
 	{
@@ -752,69 +786,78 @@ walk_notes (annocheck_data *     data,
 	    case 0:
 	      if (skip_check (TEST_GLIBCXX_ASSERTIONS, get_component_name (data, sec, note_data, prefer_func_name)))
 		return true;
-	      einfo (VERBOSE, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
-		     data->filename, get_component_name (data, sec, note_data, prefer_func_name));
-	      value = RESULT_FAIL;
+	      report_s (INFO, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS", 
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_GLIBCXX_ASSERTIONS].num_fail ++;
 	      break;
-	    case 1:
-	      value = RESULT_PASS;
-	      break;
-	    default:
-	      einfo (VERBOSE, "ICE: Unexpected GLIBCXX_ASSERTIONS value: %d", value);
-	      return true;
-	    }
 
-	  if (tests[TEST_GLIBCXX_ASSERTIONS].result == RESULT_UNKNOWN)
-	    tests[TEST_GLIBCXX_ASSERTIONS].result = value;
-	  else if (value < tests[TEST_GLIBCXX_ASSERTIONS].result)
-	    tests[TEST_GLIBCXX_ASSERTIONS].result = value;
+	    case 1:
+	      report_s (VERBOSE2, "%s: pass: (%s): Compiled with -D_GLIBCXX_ASSERTIONS", 
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_GLIBCXX_ASSERTIONS].num_pass ++;
+	      break;
+
+	    default:
+	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for glibcxx_assertions note (%x)",
+		      data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_GLIBCXX_ASSERTIONS].num_maybe ++;
+	      break;
+	    }
 	}
       break;
 
     case 's':
       if (streq (attr, "stack_clash"))
 	{
+	  if (e_machine == EM_ARM)
+	    break;
+
 	  switch (value)
 	    {
 	    case 0:
-	      if (e_machine != EM_ARM)
-		einfo (VERBOSE, "%s: fail: (%s): Compiled without -fstack-clash-protection",
-		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
-	      tests[TEST_STACK_CLASH].result = RESULT_FAIL;
+	      report_s (INFO, "%s: fail: (%s): Compiled without -fstack-clash-protection",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_STACK_CLASH].num_fail ++;
 	      break;
+
 	    case 1:
-	      if (tests[TEST_STACK_CLASH].result == RESULT_UNKNOWN)
-		tests[TEST_STACK_CLASH].result = RESULT_PASS;
+	      report_s (VERBOSE2, "%s: pass: (%s): Compiled with -fstack-clash-protection",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_STACK_CLASH].num_pass ++;
 	      break;
+
 	    default:
-	      if (e_machine != EM_ARM)
-		einfo (VERBOSE, "ICE: Unexpected stack-clash value: %d", value);
-	      tests[TEST_STACK_CLASH].result = RESULT_ICE;
-	      return true;
+	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for stack-clash note (%x)",
+		      data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_STACK_CLASH].num_maybe ++;
+	      break;
 	    }
 	}
       else if (streq (attr, "stack_realign"))
 	{
+	  if (e_machine != EM_386)
+	    break;
+
 	  switch (value)
 	    {
-	    case RESULT_UNKNOWN:
-	      einfo (VERBOSE, "ICE: unexpecetd value for stack realign attribute (%x)", value);
-	      return true;
-	    case 0:
-	      if (e_machine == EM_386)
-		einfo (VERBOSE, "%s: fail: (%s): Stack realignment not enabled",
-		       data->filename, get_component_name (data, sec, note_data, prefer_func_name));
-	      value = RESULT_FAIL;
+	    case -1:
+	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for stack realign note (%x)",
+		      data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_STACK_REALIGN].num_maybe ++;
 	      break;
+
+	    case 0:
+	      report_s (INFO, "%s: fail: (%s): Compiled without -fstack-realign",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_STACK_REALIGN].num_fail ++;
+	      break;
+
 	    case 1:
-	      value = RESULT_PASS;
+	      report_s (VERBOSE2, "%s: pass: (%s): Compiled with -fstack-realign",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_STACK_REALIGN].num_pass ++;
 	      break;
 	    }
-
-	  if (tests[TEST_STACK_REALIGN].result == RESULT_UNKNOWN)
-	    tests[TEST_STACK_REALIGN].result = value;
-	  else if (value < tests[TEST_STACK_REALIGN].result)
-	    tests[TEST_STACK_REALIGN].result = value;
 	}
       break;
       
@@ -850,7 +893,7 @@ check_string_section (annocheck_data *    data,
      This is not as accurate as checking for a function symbol with this name,
      but it is a lot faster.  */
   if (strstr ((const char *) sec->data->d_buf, "__pthread_register_cancel"))
-    tests[TEST_THREADS].result = RESULT_FAIL;
+    tests[TEST_THREADS].num_fail ++;
 
   return true;
 }
@@ -887,18 +930,18 @@ check_dynamic_section (annocheck_data *    data,
 	break;
 
       if (dyn->d_tag == DT_BIND_NOW)
-	tests[TEST_BIND_NOW].result = RESULT_PASS;
+	tests[TEST_BIND_NOW].num_pass ++;
 
       else if (dyn->d_tag == DT_FLAGS
 	       && dyn->d_un.d_val & DF_BIND_NOW)
-	tests[TEST_BIND_NOW].result = RESULT_PASS;
+	tests[TEST_BIND_NOW].num_pass ++;
 
       if (dyn->d_tag == DT_TEXTREL)
-	tests[TEST_TEXTREL].result = RESULT_FAIL;
+	tests[TEST_TEXTREL].num_fail ++;
 
       if (dyn->d_tag == DT_RPATH || dyn->d_tag == DT_RUNPATH)
 	if (not_rooted_at_usr (elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val)))
-	  tests[TEST_RUN_PATH].result = RESULT_FAIL;
+	  tests[TEST_RUN_PATH].num_fail ++;
     }
 
   return true;
@@ -931,15 +974,15 @@ interesting_seg (annocheck_data *    data,
   switch (seg->phdr->p_type)
     {
     case PT_GNU_RELRO:
-      tests[TEST_GNU_RELRO].result = RESULT_PASS;
+      tests[TEST_GNU_RELRO].num_pass ++;
       break;
 
     case PT_GNU_STACK:
-      tests[TEST_GNU_STACK].result = RESULT_PASS;
+      tests[TEST_GNU_STACK].num_pass ++;
       break;
 
     case PT_DYNAMIC:
-      tests[TEST_DYNAMIC_SEGMENT].result = RESULT_PASS;
+      tests[TEST_DYNAMIC_SEGMENT].num_pass ++;
       break;
 
     default:
@@ -951,7 +994,7 @@ interesting_seg (annocheck_data *    data,
     {
       einfo (VERBOSE, "%s: fail: seg %d has Read, Write and eXecute flags\n",
 	     data->filename, seg->number);
-      tests[TEST_RWX_SEG].result = RESULT_FAIL;
+      tests[TEST_RWX_SEG].num_fail ++;
     }
 
   return false;
@@ -974,13 +1017,7 @@ maybe (annocheck_data * data, const char * message)
 static void
 pass (annocheck_data * data, const char * message)
 {
-  einfo (VERBOSE, "%s: pass: %s", data->filename, message);
-}
-
-static void
-ice (annocheck_data * data, const char * message)
-{
-  einfo (INFO, "%s: internal error: %s", data->filename, message);
+  einfo (VERBOSE2, "%s: pass: %s", data->filename, message);
 }
 
 static void
@@ -1044,10 +1081,10 @@ check_for_gaps (annocheck_data * data)
 		break;
 
 	      if (sym)
-		einfo (VERBOSE, "%s: GAP:  (%lx..%lx probable component: %s) in annobin notes",
+		einfo (VERBOSE, "%s: gap:  (%lx..%lx probable component: %s) in annobin notes",
 		       data->filename, gap.start, gap.end, sym);
 	      else
-		einfo (VERBOSE, "%s: GAP:  (%lx..%lx) in annobin notes",
+		einfo (VERBOSE, "%s: gap:  (%lx..%lx) in annobin notes",
 		       data->filename, gap.start, gap.end);
 	    }
 
@@ -1069,258 +1106,389 @@ check_for_gaps (annocheck_data * data)
 }
 
 static void
-show_BIND_NOW (annocheck_data * data, enum test_result result)
+show_BIND_NOW (annocheck_data * data, test * results)
 {
   /* Only executables need to have their binding checked.  */
   if (e_type != ET_EXEC)
     return;
 
-  switch (result)
-    {
-    case RESULT_PASS: pass (data, "Linked with -Wl,-z,now"); break;
-    case RESULT_UNKNOWN: fail (data, "Not linked with -Wl,-z,now"); break;
-    default: ice (data, "running bind now test"); break;
-    }
+  if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "Not linked with -Wl,-z,now");
+  else
+    pass (data, "Linked with -Wl,-z,now");
 }
 
 static void
-show_DYNAMIC_SEGMENT (annocheck_data * data, enum test_result result)
+show_DYNAMIC_SEGMENT (annocheck_data * data, test * results)
 {
   /* Relocateable object files do not have dynamic segments.  */
   if (e_type == ET_REL)
     return;
 
-  switch (result)
-    {
-    case RESULT_PASS: pass (data, "Dynamic segment is present"); break;
-    case RESULT_UNKNOWN: maybe (data, "Dynamic segment is absent"); break;
-    default: ice (data, "running dynamic segment test"); break;
-    }
+  if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
+    maybe (data, "Dynamic segment is absent");
+  else
+    pass (data, "Dynamic segment is present");
 }
 
 static void
-show_GNU_RELRO (annocheck_data * data, enum test_result result)
+show_GNU_RELRO (annocheck_data * data, test * results)
 {
   /* Relocateable object files are not yet linked.  */
   if (e_type == ET_REL)
     return;
 
-  switch (result)
-    {
-    case RESULT_PASS: pass (data, "Linked with -Wl,-z,relro"); break;
-    case RESULT_UNKNOWN: fail (data, "Not linked with -Wl,-z,relro"); break;
-    default: ice (data, "running gnu relro test"); break;
-    }
+  if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "Linked without -Wl,-z,relro");
+  else
+    pass (data, "Linked with -Wl,-z,relro");
 }
 
 static void
-show_GNU_STACK (annocheck_data * data, enum test_result result)
+show_GNU_STACK (annocheck_data * data, test * results)
 {
-  /* Relocateable object files do not have a stack.  */
+  /* Relocateable object files do not have a stack section.  */
   if (e_type == ET_REL)
     return;
 
-  switch (result)
-    {
-    case RESULT_PASS: pass (data, "Stack not executable"); break;
-    case RESULT_UNKNOWN: fail (data, "Executable stack found ?"); break;
-    default: ice (data, "running gnu stack test"); break;
-    }
+  if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "Executable stack found");
+  else
+    pass (data, "Stack not executable");
 }
 
 static void
-show_RWX_SEG (annocheck_data * data, enum test_result result)
+show_RWX_SEG (annocheck_data * data, test * results)
 {
   /* Relocateable object files do not have segments.  */
   if (e_type == ET_REL)
     return;
 
-  switch (result)
-    {
-    case RESULT_FAIL: fail (data, "RWX segment found"); break;
-    case RESULT_UNKNOWN: pass (data, "No RWX segments found"); break;
-    default: ice (data, "running RWX segment test"); break;
-    }
+  if (results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "A segment with RWX permissions was found");
+  else
+    pass (data, "No RWX segments found");
 }
 
 static void
-show_PIC (annocheck_data * data, enum test_result result)
-{
-  switch (result)
-    {
-    case RESULT_UNKNOWN: maybe (data, "PIC/PIE setting not recorded"); break;
-    case RESULT_FAIL:    fail (data, "Compiled without any PIC option"); break;
-    case RESULT_PASS:    pass (data, "Compiled with PIC/PIE"); break;
-    default:             ice (data, "Unknown PIC level"); break;
-    }
-}
-
-static void
-show_STACK_PROT (annocheck_data * data, enum test_result result)
-{
-  switch (result)
-    {
-    case RESULT_UNKNOWN: fail (data, "Stack protection status is not recorded");  break;
-    case RESULT_PASS:    pass (data, "Strong stack protection is enabled"); break;
-    case RESULT_FAIL:    fail (data, "Stack protection is insufficient"); break;
-    default:             ice (data, "stack protection has an unknown value"); break;
-    }
-}
-
-static void
-show_STACK_CLASH (annocheck_data * data, enum test_result result)
-{
-  /* The ARM does not have stack clash protection support.  */
-  if (e_machine == EM_ARM)
-    return;
-
-  switch (result)
-    {
-    case RESULT_UNKNOWN:
-      if (gcc_version >= 7)
-	maybe (data, "-fstack-clash-protection not recorded");
-      break;
-    case RESULT_FAIL:
-      fail (data, "-fstack-clash-protection not used");
-      break;
-    case RESULT_PASS:
-      pass (data, "Compiled with -fstack-clash-protection");
-      break;
-    default:
-      ice (data, "stack-clash notes are incorrect");
-      break;
-    }
-}
-
-static void
-show_TEXTREL (annocheck_data * data, enum test_result result)
+show_TEXTREL (annocheck_data * data, test * results)
 {
   /* Relocateable object files can have text relocations.  */
   if (e_type == ET_REL)
     return;
 
-  switch (result)
-    {
-    case RESULT_FAIL: fail (data, "Text relocations found"); break;
-    case RESULT_UNKNOWN: pass (data, "No text relocations found"); break;
-    default: ice (data, "running textrel test"); break; break;
-    }
+  if (results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "Text relocations found");
+  else
+    pass (data, "No text relocations found");
 }
 
 static void
-show_FORTIFY (annocheck_data * data, enum test_result result)
-{
-  switch (result)
-    {
-    case RESULT_UNKNOWN: fail (data, "-D_FORTIFY_SOURCE level not recorded"); break;
-    case RESULT_PASS:    pass (data, "-D_FORTIFY_SOURCE=2 specified"); break;
-    case RESULT_FAIL:    fail (data, "-D_FORTIFY_SOURCE level too small"); break;
-    default:             ice (data, "running fortify test");
-      break;
-    }
-}
-
-static void
-show_CF_PROTECTION (annocheck_data * data, enum test_result result)
-{
-  if (e_machine != EM_386 && e_machine != EM_X86_64)
-    return;
-
-  switch (result)
-    {
-    case RESULT_UNKNOWN:
-      if (gcc_version >= 8)
-	maybe (data, "-fcf-protection not recorded");
-      break;
-    case RESULT_FAIL:
-      fail (data, "-fcf-protection not enabled");
-      break;      
-    case RESULT_PASS:
-      pass (data, "Compiled with -fcf-protection=full");
-      break;
-    default:
-      ice (data, "cf_protection notes are incorrect");
-      break;
-    }
-}
-
-static void
-show_GLIBCXX_ASSERTIONS (annocheck_data * data, enum test_result result)
-{
-  switch (result)
-    {
-    case RESULT_UNKNOWN: maybe (data, "-D_GLIBCXX_ASSERTIONS not recorded"); break;
-    case RESULT_FAIL:    fail (data, "-D_GLIBCXX_ASSERTIONS not used"); break;
-    case RESULT_PASS:    pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS"); break;
-    default:             ice (data, "glibcxx_assertion notes incorrect"); break;
-    }
-}
-
-static void
-show_STACK_REALIGN (annocheck_data * data, enum test_result result)
-{
-  if (e_machine != EM_386)
-    return;
-
-  switch (result)
-    {
-    case RESULT_UNKNOWN: maybe (data, "-mstackrealign not recorded"); break;
-    case RESULT_FAIL:    fail (data, "Compiled without -mstackrealign"); break;
-    case RESULT_PASS:    pass (data, "Compiled wit -mstackrealign"); break;
-    default:             ice (data, "-mstackrealign notes are incorrect"); break;
-    }
-}
-
-static void
-show_RUN_PATH (annocheck_data * data, enum test_result result)
+show_RUN_PATH (annocheck_data * data, test * results)
 {
   /* Relocateable object files do not need a runtime path.  */
   if (e_type == ET_REL)
     return;
 
-  switch (result)
-    {
-    case RESULT_FAIL:    fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr"); break;
-    case RESULT_UNKNOWN: pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr"); break;
-    default:             ice (data, "running run path test"); break;
-    }
+  if (results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
+  else
+    pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr");
 }
 
 static void
-show_THREADS (annocheck_data * data, enum test_result result)
+show_THREADS (annocheck_data * data, test * results)
 {
-  switch (result)
-    {
-    case RESULT_FAIL:    fail (data, "Thread cancellation not hardened.  (Compiled without -fexceptions)"); break;
-    case RESULT_UNKNOWN: pass (data, "No thread cancellation problems"); break;
-    default:             ice (data, "running thread cancellation test"); break;
-    }
+  if (results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "Thread cancellation not hardened.  (Compiled without -fexceptions)");
+  else
+    pass (data, "No thread cancellation problems");
 }
 
 static void
-show_WRITEABLE_GOT (annocheck_data * data, enum test_result result)
+show_WRITEABLE_GOT (annocheck_data * data, test * results)
 {
   /* Relocateable object files do not have a GOT.  */
   if (e_type == ET_REL)
     return;
 
-  switch (result)
+  if (results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "Relocations for the GOT/PLT sections are writeable");
+  else
+    pass (data, "GOT/PLT relocations are read only"); 
+}
+
+static void
+show_OPTIMIZATION (annocheck_data * data, test * results)
+{
+  if (results->num_fail > 0)
     {
-    case RESULT_FAIL:    fail (data, "Relocations for the GOT/PLT sections are writeable"); break;
-    case RESULT_UNKNOWN: pass (data, "GOT/PLT relocations are read only"); break;
-    default:             ice (data, "running writeable got test"); break;
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	fail (data, "Parts of the binary were compiled without sufficient optimization");
+      else
+	fail (data, "The binary was compiled without sufficient optimization");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    maybe (data, "Some parts of the binary do not record their optimization setting.  Run with -v to see where");
+	  else
+	    maybe (data, "Some parts of the binary do not record their optimization setting");
+	}
+      else
+	maybe (data, "The optimization setting was not recorded");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with sufficient optimization");
+    }
+  else
+    {
+      maybe (data, "The optimization setting was not recorded");
     }
 }
 
 static void
-show_OPTIMIZATION (annocheck_data * data, enum test_result result)
+show_PIC (annocheck_data * data, test * results)
 {
-  switch (result)
+  if (results->num_fail > 0)
     {
-    case RESULT_UNKNOWN: fail (data, "Optimization level not recorded"); break;
-    case RESULT_FAIL:    fail (data, "Insufficient compiler optimization"); break;
-    case RESULT_PASS:    pass (data, "Sufficient compiler optimization used"); break;
-    default:             ice (data, "running optimization test"); break;
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	fail (data, "Parts of the binary were compiled without the proper PIC option");
+      else
+	fail (data, "The binary was compiled without -fPIC/-fPIE specified");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    maybe (data, "Some parts of the binary do not record the PIC/PIE setting.  Run with -v to see where");
+	  else
+	    maybe (data, "Some parts of the binary do not record the PIC/PIE setting");
+	}
+      else
+	maybe (data, "The PIC/PIE setting was not recorded");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with PIC/PIE");
+    }
+  else
+    {
+      maybe (data, "The PIC/PIE setting was not recorded");
+    }
+}
+
+static void
+show_STACK_PROT (annocheck_data * data, test * results)
+{
+  if (results->num_fail > 0)
+    {
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	fail (data, "Parts of the binary were compiled without suffcient stack protection");
+      else
+	fail (data, "The binary was compiled without -fstack-protector-strong");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    maybe (data, "Some parts of the binary do not record the stack protection setting.  Run with -v to see where");
+	  else
+	    maybe (data, "Some parts of the binary do not record the stack protection setting");
+	}
+      else
+	maybe (data, "The stack protections setting was not recorded");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with sufficient stack protection");
+    }
+  else
+    {
+      maybe (data, "The stack protection setting was not recorded");
+    }
+}
+
+static void
+show_STACK_CLASH (annocheck_data * data, test * results)
+{
+  /* The ARM does not have stack clash protection support.  */
+  if (e_machine == EM_ARM)
+    return;
+
+  /* GCC 6 and earlier did not support stack clash protection.  */
+  if (gcc_version < 7)
+    return;
+
+  if (results->num_fail > 0)
+    {
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	fail (data, "Parts of the binary were compiled without stack clash protection");
+      else
+	fail (data, "The binary was compiled without -fstack-clash-protection");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    maybe (data, "Some parts of the binary do not record -fstack-clash-protection.  Run with -v to see where");
+	  else
+	    maybe (data, "Some parts of the binary do not record -fstack-clash-protection");
+	}
+      else
+	maybe (data, "The stack clash protections setting was not recorded");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with -fstack-clash-protection");
+    }
+  else
+    {
+      maybe (data, "The -fstack-clash-protection setting was not recorded");
+    }
+}
+
+static void
+show_FORTIFY (annocheck_data * data, test * results)
+{
+  if (results->num_fail > 0)
+    {
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2");
+      else
+	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    maybe (data, "Some parts of the binary do not record if -D_FORTIFY_SOURCE=2 was used.  Run with -v to see where");
+	  else
+	    maybe (data, "Some parts of the binary do not record if -D_FORTIFY_SOURCE=2 was used");
+	}
+      else
+	maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with -D_FORTIFY_SOURCE=2");
+    }
+  else
+    {
+      maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
+    }
+}
+
+static void
+show_CF_PROTECTION (annocheck_data * data, test * results)
+{
+  if (e_machine != EM_386 && e_machine != EM_X86_64)
+    return;
+
+  /* GCC 7 and earlier did not support stack clash protection.  */
+  if (gcc_version < 8)
+    return;
+
+  if (results->num_fail > 0)
+    {
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	fail (data, "Parts of the binary were compiled without sufficient -fcf-protection");
+      else
+	fail (data, "The binary was compiled without sufficient -fcf-protection");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    maybe (data, "Some parts of the binary do not record whether -fcf-protection was used.  Run with -v to see where");
+	  else
+	    maybe (data, "Some parts of the binary do not record whether -fcf-protection was used");
+	}
+      else
+	maybe (data, "The -fcf-protection option was not seen");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with -fcf-protection");
+    }
+  else
+    {
+      maybe (data, "The -fcf-protection option was not seen");
+    }
+}
+
+static void
+show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
+{
+  if (results->num_fail > 0)
+    {
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS");
+      else
+	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    maybe (data, "Some parts of the binary do not record whether -D_GLIBCXX_ASSERTIONS was used.  Run with -v to see where");
+	  else
+	    maybe (data, "Some parts of the binary do not record whether -D_GLIBCXX_ASSERTIONS was used");
+	}
+      else
+	maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
+    }
+  else
+    {
+      maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
+    }
+}
+
+static void
+show_STACK_REALIGN (annocheck_data * data, test * results)
+{
+  if (e_machine != EM_386)
+    return;
+
+  if (results->num_fail > 0)
+    {
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	fail (data, "Parts of the binary were compiled without -mstack-realign");
+      else
+	fail (data, "The binary was compiled without -mstack-realign");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    maybe (data, "Some parts of the binary do not record whether -mstack_realign was used.  Run with -v to see where");
+	  else
+	    maybe (data, "Some parts of the binary do not record whether -mstack_realign was used");
+	}
+      else
+	maybe (data, "The -mstack-realign option was not seen");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with -mstack_realign");
+    }
+  else
+    {
+      maybe (data, "The -mstack-realign option was not seen");
     }
 }
 
@@ -1338,7 +1506,7 @@ finish (annocheck_data * data)
     {
       if (tests[i].enabled)
 	{
-	  tests[i].show_result (data, tests[i].result);
+	  tests[i].show_result (data, tests + i);
 	  einfo (VERBOSE2, " Use --skip-%s to disable this test", tests[i].name);
 	}
     }

@@ -214,12 +214,13 @@ top_srcdir = @top_srcdir@
 TESTS = compile-test \
       hardening-test \
       hardening-fail-test \
-      abi-test \
       missing-notes-test \
+      abi-test \
       function-sections-test \
       assembler-gap-test
 
-XFAIL_TESTS = hardening-fail-test
+XFAIL_TESTS = hardening-fail-test \
+      missing-notes-test
 all: all-am
 
 .SUFFIXES:

@@ -15,34 +15,47 @@
 rm -f hello.o hello2.o hello3.o libhello.so missing-notes-test.exe
 
 GCC=gcc
-READELF=readelf
 
 PLUGIN=../plugin/.libs/annobin.so
-OPTS="-c -g -fPIC -O3 -D_FORTIFY_SOURCE=2"
 
-$GCC -fplugin=$PLUGIN \
-     $OPTS \
-     -fno-stack-protector \
- $srcdir/hello.c 
+OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
+EXTRA_OPTS="-fcf-protection -mstackrealign"
 
-$GCC -O3 \
-     $OPTS \
- $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
+if [ $? != 0 ];
+then
+    echo "Compiler might not support -fcf-protection, retrying without it"
+    EXTRA_OPTS="-mstackrealign"
+    $GCC -fplugin=$PLUGIN -g $OPTS  $EXTRA_OPTS $srcdir/hello_hard.c 
+    if [ $? != 0 ];
+    then
+	echo "Compiler might not support -mstackrealign, retrying without it"
+	EXTRA_OPTS="-fcf-protection"
+	$GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+	if [ $? != 0 ];
+	then
+	    echo "Compiler might not support either -fcf-protection or -mstackrealign, retrying without both"
+	    EXTRA_OPTS=""
+	    $GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+	    if [ $? != 0 ];
+	    then
+		echo "Failed :-("
+		exit 1
+	    fi
+	fi
+    fi
+fi
 
-$GCC -fplugin=$PLUGIN \
-     $OPTS \
- $srcdir/hello3.c \
+$GCC -fplugin=$PLUGIN $OPTS $EXTRA_OPTS $srcdir/hello.c 
 
-$GCC -fplugin=$PLUGIN \
-    $OPTS \
-    -U_FORTIFY_SOURCE \
-    -shared \
- $srcdir/hello_lib.c \
-     -o libhello.so
+# NB/ This file is compiled without the plugin enabled!
+$GCC $OPTS $EXTRA_OPTS $srcdir/hello2.c 
 
-$GCC -fplugin=$PLUGIN \
-     -L . \
- hello.o hello2.o hello3.o -lhello -o missing-notes-test.exe
+$GCC -fplugin=$PLUGIN $OPTS $EXTRA_OPTS $srcdir/hello3.c
+
+$GCC -fplugin=$PLUGIN $OPTS $EXTRA_OPTS -shared $srcdir/hello_lib.c -o libhello.so
+
+$GCC -L . -Wl,-z,now -Wl,-z,relro hello.o hello2.o hello3.o -lhello -o missing-notes-test.exe
 
 # FIXME - we should check that the notes were parsed correctly...
-$READELF --notes --wide missing-notes-test.exe > /dev/null
+../annocheck/annocheck -v missing-notes-test.exe

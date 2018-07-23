@@ -81,6 +81,8 @@ static unsigned int   global_GOWall_options = 0;
 static int            global_stack_prot_option = 0;
 static int            global_pic_option = 0;
 static int            global_short_enums = 0;
+static int            current_fortify_level = -1;
+static int            current_glibcxx_assertions = -1;
 static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
 static char *         annobin_current_filename = NULL;
@@ -687,6 +689,33 @@ function_asm_name (void)
   return id;
 }
 
+static void
+record_fortify_level (int level, int type)
+{
+  char buffer [128];
+  unsigned len = sprintf (buffer, "GA%cFORTIFY", NUMERIC);
+
+  buffer[++len] = level;
+  buffer[++len] = 0;
+  annobin_output_note (buffer, len + 1, false, "FORTIFY SOURCE level",
+		       NULL, NULL, 0, false, type, GNU_BUILD_ATTRS_SECTION_NAME);
+  annobin_inform (1, "Record a FORTIFY SOURCE level of %d", level);
+
+  current_fortify_level = level;
+}
+
+static void
+record_glibcxx_assertions (bool on, int type)
+{
+  char buffer [128];
+  unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS", on ? BOOL_T : BOOL_F);
+
+  annobin_output_note (buffer, len + 1, false, on ? "_GLIBCXX_ASSERTIONS defined" : "_GLIBCXX_ASSERTIONS not defined",
+		       NULL, NULL, 0, false, type, GNU_BUILD_ATTRS_SECTION_NAME);
+  annobin_inform (1, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
+  current_glibcxx_assertions = on;
+}
+
 static const char * saved_end_sym;
 
 static void
@@ -704,11 +733,6 @@ annobin_emit_function_notes (const char *  func_name,
      futher notes that we gebenerate.  */
   if (annobin_note_count > count)
     start_sym = end_sym = NULL;
-
-#if 0
-  if (force)
-    record_global_notes (start_sym, end_sym, sec_name, FUNC);
-#endif
 
   if (flag_stack_protect != -1
       && (force
@@ -798,14 +822,13 @@ annobin_emit_function_notes (const char *  func_name,
       if ((unsigned long) current_function_static_stack_size > annobin_max_stack_size)
 	annobin_max_stack_size = current_function_static_stack_size;
     }
-}
 
-#if 0
-/* These includes are needed in order to be able to access crtl->  */
-#include "rtl.h"
-#include "memmodel.h"
-#include "emit-rtl.h"
-#endif
+  if (force)
+    {
+      record_fortify_level (current_fortify_level, FUNC);
+      record_glibcxx_assertions (current_glibcxx_assertions, FUNC);
+    }
+}
 
 static const char *
 annobin_get_section_name (const_tree decl)
@@ -1035,30 +1058,6 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 }
 
 static void
-record_fortify_level (int level)
-{
-  char buffer [128];
-  unsigned len = sprintf (buffer, "GA%cFORTIFY", NUMERIC);
-
-  buffer[++len] = level;
-  buffer[++len] = 0;
-  annobin_output_note (buffer, len + 1, false, "FORTIFY SOURCE level",
-		       NULL, NULL, 0, false, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
-  annobin_inform (1, "Record a FORTIFY SOURCE level of %d", level);
-}
-
-static void
-record_glibcxx_assertions (bool on)
-{
-  char buffer [128];
-  unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS", on ? BOOL_T : BOOL_F);
-
-  annobin_output_note (buffer, len + 1, false, on ? "_GLIBCXX_ASSERTIONS defined" : "_GLIBCXX_ASSERTIONS not defined",
-		       NULL, NULL, 0, false, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
-  annobin_inform (1, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
-}
-
-static void
 annobin_create_global_notes (void * gcc_data, void * user_data)
 {
   int i;
@@ -1212,8 +1211,6 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   /* Look for -D _FORTIFY_SOURCE=<n> and -D_GLIBCXX_ASSERTIONS on the
      original gcc command line.  Scan backwards so that we record the
      last version of the option, should multiple versions be set.  */
-  bool fortify_level_recorded = false;
-  bool glibcxx_assertions_recorded = false;
 
 #define FORTIFY_OPTION "_FORTIFY_SOURCE"
 #define GLIBCXX_OPTION "_GLIBCXX_ASSERTIONS"
@@ -1229,19 +1226,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
 	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
 	    {
-	      if (! fortify_level_recorded)
-		{
-		  record_fortify_level (0);
-		  fortify_level_recorded = true;
-		}
+	      if (current_fortify_level == -1)
+		record_fortify_level (0, OPEN);
 	    }
 	  else if (strncmp (save_decoded_options[i].arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
 	    {
-	      if (! glibcxx_assertions_recorded)
-		{
-		  record_glibcxx_assertions (false);
-		  glibcxx_assertions_recorded = true;
-		}
+	      if (current_glibcxx_assertions == -1)
+		record_glibcxx_assertions (false, OPEN);
 	    }
 	}
       else if (save_decoded_options[i].opt_index == OPT_D)
@@ -1262,25 +1253,19 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 		  level = 0;
 		}
 
-	      if (! fortify_level_recorded)
-		{
-		  record_fortify_level (level);
-		  fortify_level_recorded = true;
-		}
+	      if (current_fortify_level == -1)
+		record_fortify_level (level, OPEN);
 	    }
 
 	  else if (strncmp (save_decoded_options[i].arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
 	    {
-	      if (! glibcxx_assertions_recorded)
-		{
-		  record_glibcxx_assertions (true);
-		  glibcxx_assertions_recorded = true;
-		}
+	      if (current_glibcxx_assertions == -1)
+		record_glibcxx_assertions (true, OPEN);
 	    }
 	}
     }
 
-  if (! fortify_level_recorded || ! glibcxx_assertions_recorded)
+  if (current_fortify_level == -1 || current_glibcxx_assertions == -1)
     {
       /* Not all gcc command line options get passed on to cc1 (or cc1plus).
 	 So if we have not see one of the options that interests us we check
@@ -1289,12 +1274,11 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
       if (cgo != NULL)
 	{
-	  if (! fortify_level_recorded)
+	  if (current_fortify_level == -1)
 	    {
 	      int level = -1;
-	      const char * fort;
+	      const char * fort = cgo;
 
-	      fort = cgo;
 	      while ((fort = strstr (fort, FORTIFY_OPTION)) != NULL)
 		{
 		  const char * next_fort = fort + strlen (FORTIFY_OPTION);
@@ -1315,33 +1299,36 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 		      level = 0;
 		    }
 
-		  record_fortify_level (level);
-		  fortify_level_recorded = true;
+		  record_fortify_level (level, OPEN);
 		}
 	    }
 
-	  if (! glibcxx_assertions_recorded)
+	  if (current_glibcxx_assertions == -1)
 	    {
-	      if (strstr (cgo, GLIBCXX_OPTION) != NULL)
-		{
-		  /* FIXME: We are assuming that the user has specified
-		     -D_GLIBCXX_ASSERTIONS and not -U_GLIBCXX_ASSERTIONS.  */
-		  record_glibcxx_assertions (true);
-		  glibcxx_assertions_recorded = true;
-		}
-	    }
+	      int on = -1;
+	      const char * glca = cgo;
 
-	  /* FIXME: CHECK FOR UNDEFS....  */
+	      while ((glca = strstr (glca, GLIBCXX_OPTION)) != NULL)
+		{
+		  if (glca[-1] == 'U')
+		    on = false;
+		  else
+		    on = true;
+
+		  glca = glca + strlen (GLIBCXX_OPTION);
+		}
+
+	      if (on != -1)
+		record_glibcxx_assertions (on, OPEN);
+	    }
 	}
     }
 
-#if 0 /* If not found - do not record anything.  Annocheck likes it better this way.  */
-  if (! fortify_level_recorded)
-    record_fortify_level (0);
-
-  if (! glibcxx_assertions_recorded)
-    record_glibcxx_assertions (false);
-#endif
+  if (current_fortify_level == -1)
+    record_fortify_level (-1, OPEN);
+  if (current_glibcxx_assertions == -1)
+    record_glibcxx_assertions (0, OPEN);
+    
   /* Record the PIC status.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
 			       "numeric: PIC", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
