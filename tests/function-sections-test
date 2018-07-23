@@ -76,4 +76,4 @@ $GCC -pie \
 
 # FIXME - we should check that the notes were parsed correctly...
 # FIXME - we should check for gaps.
-../annocheck/annocheck function-sections-test.exe
+../annocheck/annocheck --ignore-gaps function-sections-test.exe

@@ -26,6 +26,7 @@ static bool ignore_gaps = false;
 /* These are initialised on a per-input-file basis by start().  */
 static int  e_type;
 static int  e_machine;
+static bool is_little_endian;
 static bool debuginfo_file;
 static int  num_fails;
 static int  num_maybes;
@@ -154,6 +155,7 @@ start (annocheck_data * data)
 
       e_type = hdr->e_type;
       e_machine = hdr->e_machine;
+      is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
     }
   else
     {
@@ -161,6 +163,7 @@ start (annocheck_data * data)
       
       e_type = hdr->e_type;
       e_machine = hdr->e_machine;
+      is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
     }
 }
 
@@ -466,23 +469,45 @@ walk_notes (annocheck_data *     data,
 	  int i;
 	  int shift;
 
-	  for (shift = i = 0; i < 8; i++)
+	  if (is_little_endian)
 	    {
-	      ulong byte;
+	      for (shift = i = 0; i < 8; i++)
+		{
+		  ulong byte = descdata[i];
 
-	      byte = descdata[i];
-	      start |= byte << shift;
+		  start |= byte << shift;
+		  byte = descdata[i + 8];
+		  end |= byte << shift;
 
-	      byte = descdata[i + 8];
-	      end |= byte << shift;
+		  shift += 8;
+		}
+	    }
+	  else
+	    {
+	      for (shift = 0, i = 7; i >= 0; i--)
+		{
+		  ulong byte = descdata[i];
 
-	      shift += 8;
+		  start |= byte << shift;
+		  byte = descdata[i + 8];
+		  end |= byte << shift;
+
+		  shift += 8;
+		}
 	    }
 	}
       else if (note->n_descsz == 8)
 	{
-	  start = descdata[0] | (descdata[1] << 8) | (descdata[2] << 16) | (descdata[3] << 24);
-	  end   = descdata[4] | (descdata[5] << 8) | (descdata[6] << 16) | (descdata[7] << 24);
+	  if (is_little_endian)
+	    {
+	      start = descdata[0] | (descdata[1] << 8) | (descdata[2] << 16) | (descdata[3] << 24);
+	      end   = descdata[4] | (descdata[5] << 8) | (descdata[6] << 16) | (descdata[7] << 24);
+	    }
+	  else
+	    {
+	      start = descdata[3] | (descdata[2] << 8) | (descdata[1] << 16) | (descdata[0] << 24);
+	      end   = descdata[7] | (descdata[6] << 8) | (descdata[5] << 16) | (descdata[4] << 24);
+	    }
 	}
       else
 	{
@@ -493,8 +518,8 @@ walk_notes (annocheck_data *     data,
 
       if (start > end)
 	{
-	  einfo (FAIL, "%s: Corrupt annobin note, start address %#lx > end address %#lx",
-		 data->filename, start, end);
+	  einfo (FAIL, "%s: Corrupt annobin note, start address %#lx > end address %#lx (%d)",
+		 data->filename, start, end, is_little_endian);
 	  return true;
 	}
 
@@ -542,8 +567,17 @@ walk_notes (annocheck_data *     data,
 	  {
 	    uint byte = (* string ++) & 0xff;
 
-	    value |= byte << shift;
-	    shift += 8;
+	    if (is_little_endian)
+	      {
+		value |= byte << shift;
+		shift += 8;
+	      }
+	    else
+	      {
+		value <<= shift;
+		value |= byte;
+		shift += 8;
+	      }
 	  }
       }
       break;
