@@ -567,17 +567,11 @@ walk_notes (annocheck_data *     data,
 	  {
 	    uint byte = (* string ++) & 0xff;
 
-	    if (is_little_endian)
-	      {
-		value |= byte << shift;
-		shift += 8;
-	      }
-	    else
-	      {
-		value <<= shift;
-		value |= byte;
-		shift += 8;
-	      }
+	    /* Note - the watermark protocol dictates that numeric values are
+	       always stored in little endian format, even if the target uses
+	       big-endian.  */
+	    value |= byte << shift;
+	    shift += 8;
 	  }
       }
       break;
