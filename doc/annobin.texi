@@ -1110,7 +1110,7 @@ run on files whose names starts with a dash.
 @c man title run-on-binries  Checking Archives
 
 @smallexample
-@c man begin SYNOPSIS run-on-binaries
+@c man begin SYNOPSIS run-on-binaries-in
 run-on-binaries-in
   [@b{--help}]
   [@b{--version}]
@@ -1128,7 +1128,7 @@ run-on-binaries-in
 @c man end
 @end smallexample
 
-@c man begin DESCRIPTION run-on-binaries
+@c man begin DESCRIPTION run-on-binaries-in
 
 The @file{run-on-binaries-in} script allows other scripts, or
 programs, to be run on the executable files contained inside archives.

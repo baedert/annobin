@@ -900,7 +900,7 @@ static bool
 check_note_section (annocheck_data *    data,
 		    annocheck_section * sec)
 {
-  if (strneq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME, strlen (GNU_BUILD_ATTRS_SECTION_NAME)))
+  if (const_strneq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
     {
       hardened_note_data hard_data;
 
@@ -926,14 +926,17 @@ check_string_section (annocheck_data *    data,
   return true;
 }
 
-/* Returns TRUE iff STR contains a search path that does not start with /usr.  */
+/* Returns TRUE iff STR contains a search path that does not start with /usr.
+   We also allow $ORIGIN as that is allowed for non-suid binaries.  The
+   $LIB and $PLATFORM pseudo-variables should always be used with a /usr
+   prefix, so we do not need to check for them.  */
 
 static bool
 not_rooted_at_usr (const char * str)
 {
   while (str)
     {
-      if (! const_strneq (str, "/usr"))
+      if (! const_strneq (str, "/usr") && ! const_strneq (str, "$ORIGIN"))
 	return true;
       str = strchr (str, ':');
       if (str)
@@ -1580,7 +1583,7 @@ usage (void)
 static bool
 process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
-  if (strneq (arg, "--skip-", 7))
+  if (const_strneq (arg, "--skip-"))
     {
       arg += 7;
 

@@ -14,7 +14,7 @@ info_TEXINFOS = annobin.texi
 annobin_TEXINFOS = fdl.texi
 
 # Man page creation.
-man_MANS = annobin.1 built-by.1 check-abi.1 hardened.1 run-on-binaries.1 annocheck.1
+man_MANS = annobin.1 built-by.1 check-abi.1 hardened.1 run-on-binaries-in.1 annocheck.1
 
 MANCONF = -Dman
 
@@ -57,9 +57,9 @@ hardened.1:	$(srcdir)/$(info_TEXINFOS)
 		mv -f $@.T$$$$ $@) || (rm -f $@.T$$$$ && exit 1)
 	rm -f hardened.pod
 
-run-on-binaries.1:	$(srcdir)/$(info_TEXINFOS)
+run-on-binaries-in.1:	$(srcdir)/$(info_TEXINFOS)
 	touch $@
-	-$(TEXI2POD) $(MANCONF) -Drun-on-binaries < $(srcdir)/$(info_TEXINFOS) > run-on-binaries.pod
-	-($(POD2MAN) run-on-binaries.pod | sed -e '/^.if n .na/d' > $@.T$$$$ && \
+	-$(TEXI2POD) $(MANCONF) -Drun-on-binaries-in < $(srcdir)/$(info_TEXINFOS) > run-on-binaries-in.pod
+	-($(POD2MAN) run-on-binaries-in.pod | sed -e '/^.if n .na/d' > $@.T$$$$ && \
 		mv -f $@.T$$$$ $@) || (rm -f $@.T$$$$ && exit 1)
-	rm -f run-on-binaries.pod
+	rm -f run-on-binaries-in.pod
