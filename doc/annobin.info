@@ -406,6 +406,7 @@ tools are implemented:
 
 * Hardened::  Was the application built with the correct security options ?
 * Built-By::  Which tool(s) were used to build the application ?
+* Section-Size::  What is the cumulative size of specific sections in a set of files ?
 
    The 'annocheck' program is able to scan inside rpm files and
 libraries.  It will automatically recurse into any directories that are
@@ -471,11 +472,11 @@ File: annobin.info,  Node: Hardened,  Next: Built-By,  Up: Annocheck
        [-enable-hardened]
        FILE...
 
-   The 'hardened' tool checks that the specified files were compiled
-with the required security hardening options, as outlined in the
-elf-policy document.  It runs a series of tests checking compilation
-options and link time options.  These tests are outlined below, along
-with the command line option that can be used to disable each test.
+   The HARDENED tool checks that the specified files were compiled with
+the required security hardening options, as outlined in the elf-policy
+document.  It runs a series of tests checking compilation options and
+link time options.  These tests are outlined below, along with the
+command line option that can be used to disable each test.
 
 'BIND_NOW'
      Lazy binding must not have been enabled via the linker option '-z
@@ -559,13 +560,14 @@ with the command line option that can be used to disable each test.
      Disable the tool.
 
 
-File: annobin.info,  Node: Built-By,  Prev: Hardened,  Up: Annocheck
+File: annobin.info,  Node: Built-By,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
 
 4.2 The builder checker.
 ========================
 
 
      annocheck
+       --enable-builtby
        [-all]
        [-tool=NAME]
        [-nottool=NAME]
@@ -597,6 +599,34 @@ behaviour:
      which were not built by a specific tool.  This can be useful when
      scanning a directory full of files searching for those that were
      not built by a particular compiler.
+
+
+File: annobin.info,  Node: Section-Size,  Prev: Built-By,  Up: Annocheck
+
+4.3 The section size recorder
+=============================
+
+
+     annocheck
+       -section-size=NAME
+       [-human]
+       FILE...
+
+   The SECTION-SIZE tool records the size of named sections within a
+list of files and then reports the accumulated size at the end.  Since
+it is part of the 'annocheck' framework, it is able to handle
+directories and rpms files as well as ordinary binary files.
+
+   The '--section-size=NAME' option enables the tool and tells it to
+record the size of section NAME.  The option can be repeated multiple
+times to record the sizes of multiple sections.  It may also be useful
+to add the '--disable-hardened' option to the command line as otherwise
+the security hardening will be run at the same time.
+
+   If the '--verbose' option is enabled, then the tool will also report
+the size of the named section(s) in each file it encounters.  If the
+'--human' option is enabled then sizes will be rounded down to the
+nearest byte, kibibyte, mebibyte or gibibyte, as appropriate.
 
 
 File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Annocheck,  Up: Top
@@ -1539,13 +1569,14 @@ Node: The GOW Encoding12012
 Node: The CF Encoding13460
 Node: The ENUM Encoding14532
 Node: Annocheck14889
-Node: Hardened16649
-Node: Built-By20508
-Node: Legacy Scripts21852
-Node: Who Built Me22619
-Node: ABI Checking25379
-Node: Hardening Checks27493
-Node: Checking Archives31579
-Node: GNU FDL34001
+Node: Hardened16736
+Node: Built-By20593
+Node: Section-Size21982
+Node: Legacy Scripts23064
+Node: Who Built Me23831
+Node: ABI Checking26591
+Node: Hardening Checks28705
+Node: Checking Archives32791
+Node: GNU FDL35213
 
 End Tag Table

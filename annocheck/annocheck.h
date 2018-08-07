@@ -94,12 +94,13 @@ typedef struct annocheck_segment
 
 typedef struct checker
 {
+  /* Name of the checker.  Must be unique amoungst all registered checkers.  */
   const char * name;
 
   /* Called before starting the check of a file.
      Can be NULL.
      The section_headers and segment_headers fields will not have been initialised.  */
-  void (* start) (annocheck_data * DATA);
+  void (* start_file) (annocheck_data * DATA);
 
   /* Called to see if the checker is interested in the particular section.
      Can be NULL.  If NULL, all sections are ignored.
@@ -110,7 +111,7 @@ typedef struct checker
 			    annocheck_section *  SECTION);
 
   /* Called to check a section.
-     If interesting_sec is not NULL, then this field cannot be NULL.
+     If interesting_sec is not NULL and can return TRUE, then this field cannot be NULL.
      If FALSE is returned the check is considered to have failed.
      Note - SECTION->data will be initialised at this point.  */
   bool (* check_sec) (annocheck_data *     DATA,
@@ -125,7 +126,7 @@ typedef struct checker
 			    annocheck_segment * SEG);
 
   /* Called to check a segment.
-     If interesting_seg is not NULL, then this field cannot be NULL.
+     If interesting_seg is not NULL and can return TRUE, then this field cannot be NULL.
      If FALSE is returned the check is considered to have failed.
      the SEG->DATA field will have been initialised.  */
   bool (* check_seg) (annocheck_data *    DATA,
@@ -133,8 +134,8 @@ typedef struct checker
 
   /* Called at the end of checking a file.
      Can be NULL.
-     Returns a success/fail status for the entire scan.  */
-  bool (* finish) (annocheck_data * DATA);
+     Returns a success/fail status for the entire of that file.  */
+  bool (* end_file) (annocheck_data * DATA);
 
   /* Called to allow the callback a chance to handle its own command line arguments.
      Can be NULL.  */
@@ -150,8 +151,23 @@ typedef struct checker
      Can be NULL.
      Should use einfo to display its information.  */
   void (* version) (void);
-  
-  /* Pointer to internal data used by the checksec framework.
+
+  /* Called at the start of a scan of a set of input files, but after PROCESS_ARG
+     has been called.
+     If END_SCAN is NULL then this field can be NULL.
+     LEVEL is the recursion level for annocheck.  Level 0 is the top level.
+     DATAFILE is the pathname of a file that can be used to pass data between iterations.
+     The file is unique and consistent for each checker.  */
+  void (* start_scan) (uint LEVEL, const char * DATAFILE);
+
+  /* Called at the end of the scan of all of the input files.
+     Can be NULL.
+     LEVEL is the recursion level for annocheck.  Level 0 is the top level.
+     DATAFILE is the pathname of a file that can be used to pass data between iterations.
+     The file is unique and consistent for each checker.  */
+  void (* end_scan) (uint LEVEL, const char * DATAFILE);
+
+  /* Pointer to internal data used by the annocheck framework.
      This field should not be used by the checker.  */
   void * internal;
 

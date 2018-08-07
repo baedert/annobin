@@ -57,7 +57,7 @@ $GCC -fplugin=$PLUGIN \
  $srcdir/hello_lib.c \
      -o libhello.so
 
-$GCC -fplugin=$PLUGIN \
+$GCC \
      -L . -pie \
      -Wl,-z,now,-z,relro \
  hello.o hello2.o hello3.o -lhello -o compile-test.exe

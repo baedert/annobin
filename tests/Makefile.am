@@ -12,7 +12,9 @@ TESTS=compile-test \
       missing-notes-test \
       abi-test \
       function-sections-test \
-      assembler-gap-test
+      assembler-gap-test \
+      dynamic-notes-test \
+      section-size-test
 
 XFAIL_TESTS=hardening-fail-test \
       missing-notes-test 

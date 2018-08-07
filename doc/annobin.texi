@@ -480,6 +480,7 @@ Currently the following tools are implemented:
 @menu
 * Hardened::  Was the application built with the correct security options ?
 * Built-By::  Which tool(s) were used to build the application ?
+* Section-Size::  What is the cumulative size of specific sections in a set of files ?
 @end menu
 
 The @command{annocheck} program is able to scan inside rpm files and
@@ -555,7 +556,7 @@ annocheck
 @end smallexample
 
 @c man begin DESCRIPTION annocheck
-The @code{hardened} tool checks that the specified files were compiled
+The @var{hardened} tool checks that the specified files were compiled
 with the required security hardening options, as outlined in the
 elf-policy document.  It runs a series of tests checking compilation
 options and link time options.  These tests are outlined below, along
@@ -668,6 +669,7 @@ Disable the tool.
 @c man begin SYNOPSIS annocheck
 
 annocheck
+  --enable-builtby
   [@b{--all}]
   [@b{--tool=}@var{name}]
   [@b{--nottool=}@var{name}]
@@ -707,6 +709,41 @@ scanning a directory full of files searching for those that were not
 built by a particular compiler.
 
 @end table
+
+@c man end
+
+@c -----------------------------------------------------------------
+@node Section-Size
+@section The section size recorder
+
+@smallexample
+@c man begin SYNOPSIS annocheck
+
+annocheck
+  @b{--section-size=@var{name}}
+  [@b{--human}]
+  @var{file}@dots{}
+@c man end
+@end smallexample
+
+@c man begin DESCRIPTION annocheck
+The @var{section-size} tool records the size of named sections within
+a list of files and then reports the accumulated size at the end.
+Since it is part of the @command{annocheck} framework, it is able to
+handle directories and rpms files as well as ordinary binary files.
+
+The @option{--section-size=@var{name}} option enables the tool and
+tells it to record the size of section @var{name}.  The option can be
+repeated multiple times to record the sizes of multiple sections.  It
+may also be useful to add the @option{--disable-hardened} option to
+the command line as otherwise the security hardening will be run at
+the same time.
+
+If the @option{--verbose} option is enabled, then the tool will also
+report the size of the named section(s) in each file it encounters.
+If the @option{--human} option is enabled then sizes will be rounded
+down to the nearest byte, kibibyte, mebibyte or gibibyte, as
+appropriate.
 
 @c man end
 

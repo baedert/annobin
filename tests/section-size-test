@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Copyright (c) 2018 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+
+# Test running the section size checker
+
+rm -f hello.o hello2.o hello3.o hello_lib.o section-size.exe
+
+GCC=gcc
+
+PLUGIN=../plugin/.libs/annobin.so
+
+$GCC -fplugin=$PLUGIN -c $srcdir/hello.c $srcdir/hello2.c $srcdir/hello3.c $srcdir/hello_lib.c
+$GCC hello.o hello2.o hello3.o hello_lib.o -o section-size.exe
+
+../annocheck/annocheck -v --disable-hardened --section-size=.gnu.build.attributes --human --ignore-unknown .
+

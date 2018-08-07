@@ -81,7 +81,8 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_annocheck_OBJECTS = annocheck-annocheck.$(OBJEXT) \
-	annocheck-hardened.$(OBJEXT) annocheck-built-by.$(OBJEXT)
+	annocheck-hardened.$(OBJEXT) annocheck-built-by.$(OBJEXT) \
+	annocheck-size.$(OBJEXT)
 annocheck_OBJECTS = $(am_annocheck_OBJECTS)
 annocheck_DEPENDENCIES =
 annocheck_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -239,7 +240,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
-annocheck_SOURCES = annocheck.c hardened.c built-by.c annocheck.h
+annocheck_SOURCES = annocheck.c hardened.c built-by.c annocheck.h size.c
 annocheck_LDADD = -lelf -ldw -lrpm -lrpmio -liberty
 annocheck_CFLAGS = -O2 -ansi -g -Wall -Werror
 all: all-am
@@ -358,6 +359,12 @@ annocheck-built-by.o: built-by.c
 
 annocheck-built-by.obj: built-by.c
 	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-built-by.obj `if test -f 'built-by.c'; then $(CYGPATH_W) 'built-by.c'; else $(CYGPATH_W) '$(srcdir)/built-by.c'; fi`
+
+annocheck-size.o: size.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-size.o `test -f 'size.c' || echo '$(srcdir)/'`size.c
+
+annocheck-size.obj: size.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-size.obj `if test -f 'size.c'; then $(CYGPATH_W) 'size.c'; else $(CYGPATH_W) '$(srcdir)/size.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo

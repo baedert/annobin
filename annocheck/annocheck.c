@@ -28,7 +28,7 @@
 /* -1: silent, 0: normal, 1: verbose, 2: very verbose.  */
 ulong         verbosity = 0;
 
-uint          major_version = 1;
+uint          major_version = 2;
 uint          minor_version = 1;
 
 static ulong         	num_files = 0;
@@ -42,6 +42,8 @@ static char *           prefix = "";
 static const char *     debug_rpm = NULL;
 static const char *     debug_rpm_dir = NULL;
 static const char *     dwarf_path = NULL;
+static uint             level = 0;
+static const char *     tmpdir = NULL;
 
 static checker *        first_checker = NULL;
 static checker *        first_sec_checker = NULL;
@@ -57,6 +59,9 @@ typedef struct checker_internal
 
   /* Pointer to the next checker.  */
   struct checker * next;
+
+  /* Name of the datafile used to share data with other iterations.  */
+  const char *     datafile;
 
 } checker_internal;
   
@@ -119,7 +124,7 @@ einfo (einfo_type type, const char * format, ...)
 
   const char *  do_newline;
   const char    c = format[strlen (format) - 1];
-  if (c == '\n')
+  if (c == '\n' || c == ' ')
     do_newline = "";
   else if (c == '.' || c == ':')
     do_newline = "\n";
@@ -129,7 +134,7 @@ einfo (einfo_type type, const char * format, ...)
   if (pref)
     fprintf (file, "%s: ", pref);
 
-  if (prefix[0])
+  if (!PARTIAL && prefix[0])
     fprintf (file, "%s ", prefix);
 
   va_start (args, format);
@@ -194,10 +199,14 @@ usage (void)
   einfo (INFO, "   --dwarf-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
   einfo (INFO, "   --help             [Display this message & exit]");
   einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types]");
-  einfo (INFO, "   --prefix=<TEXT>    [Include <TEXT> in the output description]");
   einfo (INFO, "   --quiet            [Do not print anything, just return an exit status]");
   einfo (INFO, "   --verbose          [Produce informational messages whilst working.  Repeat for more information]");
   einfo (INFO, "   --version          [Report the verion of the tool & exit]");
+
+  einfo (INFO, "The following options are internal to the scanner and not expected to be supplied by the user:");
+  einfo (INFO, "   --prefix=<TEXT>    [Include <TEXT> in the output description]");
+  einfo (INFO, "   --tmpdir=<NAME>    [Absolute pathname of a temporary directory used to pass data between iterations]");
+  einfo (INFO, "   --level=<N>        [Recursion level of the scanner]");
 
   einfo (INFO, "The following scanning tools are available:");
 
@@ -268,20 +277,20 @@ process_command_line (uint argc, const char * argv[])
 	  arg += (arg[1] == '-' ? 2 : 1);
 	  switch (*arg)
 	    {
-	    case 'h':
+	    case 'h': /* --help */
 	      usage ();
 	      exit (EXIT_SUCCESS);
 
-	    case 'i':
+	    case 'i': /* --ignore-unknown  */
 	      ignore_unknown = true;
 	      break;
 
-	    case 'q':
+	    case 'q': /* --quiet */
 	      save_arg (orig_arg);
 	      verbosity = -1UL;
 	      break;
 
-	    case 'd':
+	    case 'd': /* --debug-rpm or --dwarf-path */
 	      parameter = strchr (arg, '=');
 	      if (parameter == NULL)
 		parameter = argv[a++];
@@ -325,7 +334,7 @@ process_command_line (uint argc, const char * argv[])
 		}
 	      break;
 
-	    case 'p':
+	    case 'p': /* --prefix  */
 	      save_arg (orig_arg);
 	      parameter = strchr (arg, '=');
 	      if (parameter == NULL)
@@ -336,7 +345,31 @@ process_command_line (uint argc, const char * argv[])
 	      prefix = concat (prefix, parameter, NULL);
 	      break;
 
-	    case 'v':
+	    case 'l': /* --level */
+	      parameter = strchr (arg, '=');
+	      if (parameter == NULL)
+		parameter = argv[a++];
+	      else
+		parameter ++;	      
+	      level = strtoul (parameter, NULL, 0);
+	      if (level < 1)
+		{
+		  einfo (WARN, "improper --level option: %s", parameter);
+		  level = 1;
+		}
+	      break;
+
+	    case 't': /* --tmpdir */
+	      parameter = strchr (arg, '=');
+	      if (parameter == NULL)
+		parameter = argv[a++];
+	      else
+		parameter ++;	      
+	      tmpdir = parameter;
+	      assert (tmpdir[0] == '/');
+	      break;
+	      
+	    case 'v': /* --verbose or --version */
 	      if (const_strneq (arg, "version"))
 		{
 		  print_version ();
@@ -446,10 +479,10 @@ run_checkers (const char * filename, int fd, Elf * elf)
 
   /* Call the checker start functions.  */
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-    if (tool->start)
+    if (tool->start_file)
       {
 	push_component (tool);
-	tool->start (& data);
+	tool->start_file (& data);
 	pop_component ();
       }
 
@@ -504,6 +537,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 		    {
 		      einfo (VERBOSE2, "is interested in section %s", sec.secname);
 
+		      assert (tool->check_sec != NULL);
 		      ret &= tool->check_sec (& data, & sec);
 		    }
 		}
@@ -547,6 +581,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 		    seg.data = elf_getdata_rawchunk (elf, seg.phdr->p_offset,
 						     seg.phdr->p_filesz, ELF_T_BYTE);
 
+		  assert (tool->check_seg != NULL);
 		  ret &= tool->check_seg (& data, & seg);
 		}
 	      else
@@ -558,10 +593,10 @@ run_checkers (const char * filename, int fd, Elf * elf)
     }
 
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-    if (tool->finish)
+    if (tool->end_file)
       {
 	push_component (tool);
-	ret &= tool->finish (& data);
+	ret &= tool->end_file (& data);
 	pop_component ();
       }
 
@@ -584,11 +619,11 @@ extract_rpm_file (const char * filename)
   strcpy (dirname, "annocheck.debuginfo.XXXXXX");
   if (mkdtemp (dirname) == NULL)
     {
-      einfo (WARN, "Failed to create temporary directory for processing rpm: %s", filename);
+      einfo (ERROR, "Failed to create temporary directory for debuginfo extraction: %s", filename);
       return NULL;
     }
 
-  einfo (VERBOSE2, "Created temporary directory: %s", dirname);
+  einfo (VERBOSE2, "Created temporary directory for debuginfo extraction: %s", dirname);
 
   char * fname;
   char * command;
@@ -620,6 +655,8 @@ extract_rpm_file (const char * filename)
 		    NULL);
 
   einfo (VERBOSE2, "Running rpm extractor command sequence: %s", command);
+  fflush (stdin);
+  
   if (system (command))
     {
       einfo (WARN, "Failed to extract rpm file: %s", filename);
@@ -1171,6 +1208,19 @@ process_elf (const char * filename, int fd, Elf * elf)
   return ret;
 }
 
+static const char *
+itoa (uint level)
+{
+  switch (level)
+    {
+    case 0: return "0";
+    case 1: return "1";
+    case 2: return "2";
+    case 3: return "3";
+    default: return "4"; /* Can this ever be reached ?  */
+    }
+}
+
 static bool
 process_rpm_file (const char * filename)
 {
@@ -1182,7 +1232,7 @@ process_rpm_file (const char * filename)
   if (mkdtemp (dirname) == NULL)
     return einfo (WARN, "Failed to create temporary directory for processing rpm: %s", filename);
 
-  einfo (VERBOSE2, "Created temporary directory: %s", dirname);
+  einfo (VERBOSE2, "Created temporary directory for rpm processing: %s", dirname);
 
   char * fname;
   char * pname;
@@ -1209,6 +1259,12 @@ process_rpm_file (const char * filename)
 		       and prefixing the output with the rpm name.  */
 		    " && ", pname, " --ignore-unknown ",
 		    "--prefix ", lbasename (filename),
+		    /* Increment the recursion level.  */
+		    " --level ", itoa (level + 1),
+		    /* Pass on the name of the temporary data directory, if created.  */
+		    tmpdir == NULL ? "" : " --tmpdir ",
+		    tmpdir == NULL ? "" : tmpdir,
+		    /* Then all the other options that the user has supplied.  */
 		    " ", saved_args ? saved_args : "",
 		    " .",
 		    /* Then move out of the directory.  */
@@ -1218,6 +1274,8 @@ process_rpm_file (const char * filename)
 		    NULL);
 
   einfo (VERBOSE2, "Running rpm extractor command sequence: %s", command);
+  fflush (stdin);
+
   if (system (command))
     return einfo (WARN, "Failed to process rpm file: %s", filename);
 
@@ -1263,8 +1321,9 @@ process_file (const char * filename)
 	  if (streq (entry->d_name, ".") || streq (entry->d_name, ".."))
 	    continue;
 
-	  /* FIXME: Memory leak...  */
-	  result &= process_file (concat (filename, "/", entry->d_name, NULL));
+	  const char * file = concat (filename, "/", entry->d_name, NULL);
+	  result &= process_file (file);
+	  free ((char *) file);
 	}
 
       closedir (dir);
@@ -1342,11 +1401,40 @@ process_files (void)
   return result;
 }
 
+static const char *
+create_tmpdir (void)
+{
+  static char temp[32];
+
+  if (tmpdir != NULL)
+    return tmpdir;
+
+  /* This assert can be triggered if a tool defines an END_SCAN function
+     but no START_SCAN function.  */
+  assert (level == 0);
+
+  strcpy (temp, "annocheck.data.XXXXXX");
+  tmpdir = mkdtemp (temp);
+  if (tmpdir == NULL)
+    {
+      einfo (ERROR, "Unable to make temporary data directory");
+      return NULL;
+    }
+
+  tmpdir = concat (getcwd (NULL, 0), "/", tmpdir, NULL);
+  einfo (VERBOSE2, "Created temporary directory for data transfer: %s", tmpdir);
+
+  return tmpdir;
+}
+
 /* -------------------------------------------------------------------- */
 
 int
 main (int argc, const char ** argv)
 {
+  checker *     tool;
+  bool          self_made_tmpdir = false;
+
   if (elf_version (EV_CURRENT) == EV_NONE)
     {
       einfo (FAIL, "Could not initialise libelf");
@@ -1362,11 +1450,57 @@ main (int argc, const char ** argv)
   if (! process_command_line (argc, argv))
     return EXIT_FAILURE;
 
+  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+    if (tool->start_scan != NULL)
+      {
+	checker_internal * internal = (checker_internal *)(tool->internal);
+
+	if (internal->datafile == NULL)
+	  {
+	    if (tmpdir == NULL)
+	      {
+		tmpdir = create_tmpdir ();
+		if (tmpdir == NULL)
+		  return EXIT_FAILURE;
+		self_made_tmpdir = true;
+	      }
+
+	    if (tmpdir[strlen (tmpdir) - 1] == '/')
+	      internal->datafile = concat (tmpdir, tool->name, NULL);
+	    else
+	      internal->datafile = concat (tmpdir, "/", tool->name, NULL);
+	  }
+
+	push_component (tool);
+	tool->start_scan (level, internal->datafile);
+	pop_component ();
+      }
+  
   bool res = process_files ();
 
+  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+    if (tool->end_scan != NULL)
+      {
+	checker_internal * internal = (checker_internal *)(tool->internal);
+
+	if (internal->datafile == NULL)
+	  {
+	    einfo (ERROR, "data file should have already been created");
+	    continue;
+	  }
+	push_component (tool);
+	tool->end_scan (level, internal->datafile);
+	pop_component ();
+
+	free ((char *) internal->datafile);
+      }
+  
   if (debug_rpm_dir)
     rmdir (debug_rpm_dir);
-  
+
+  if (level == 0 && tmpdir != NULL && self_made_tmpdir)
+    rmdir (tmpdir);
+
   /* FIXME: This is a hack.  When --ignore-unknown is active we
      are probably processing an rpm, and we do not want the
      return status from annocheck to stop the cleanup of the

@@ -1634,6 +1634,8 @@ struct checker hardened_checker =
   process_arg,
   usage,
   version,
+  NULL, /* start_scan */
+  NULL, /* end_scan */
   NULL, /* internal */
 };
 

@@ -235,6 +235,8 @@ struct checker builtby_checker =
   builtby_process_arg,
   builtby_usage,
   builtby_version,
+  NULL, /* start_scan */
+  NULL, /* end_scan */
   NULL /* internal */
 };
 

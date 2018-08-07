@@ -1351,19 +1351,22 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
   if (asm_out_file == NULL)
     return;
 
-  /* It is possible that there is no code in the .text section.
-     Eg because the compilation was run with the -ffunction-sections option.
-     Nevertheless we generate this symbol because it is needed by the
-     version note that was generated in annobin_create_global_notes().  */
-  fprintf (asm_out_file, "\t.pushsection .text\n");
-  if (global_file_name_symbols)
-    fprintf (asm_out_file, "\t.global %s\n", annobin_current_endname);
-  else
-    fprintf (asm_out_file, "\t.hidden %s\n", annobin_current_endname);
-  fprintf (asm_out_file, "%s:\n", annobin_current_endname);
-  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", annobin_current_endname);
-  fprintf (asm_out_file, "\t.size %s, 0\n", annobin_current_endname);
-  fprintf (asm_out_file, "\t.popsection\n");
+  if (annobin_enable_static_notes)
+    {
+      /* It is possible that there is no code in the .text section.
+	 Eg because the compilation was run with the -ffunction-sections option.
+	 Nevertheless we generate this symbol because it is needed by the
+	 version note that was generated in annobin_create_global_notes().  */
+      fprintf (asm_out_file, "\t.pushsection .text\n");
+      if (global_file_name_symbols)
+	fprintf (asm_out_file, "\t.global %s\n", annobin_current_endname);
+      else
+	fprintf (asm_out_file, "\t.hidden %s\n", annobin_current_endname);
+      fprintf (asm_out_file, "%s:\n", annobin_current_endname);
+      fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", annobin_current_endname);
+      fprintf (asm_out_file, "\t.size %s, 0\n", annobin_current_endname);
+      fprintf (asm_out_file, "\t.popsection\n");
+    }
 
   if (! annobin_enable_dynamic_notes)
     return;
