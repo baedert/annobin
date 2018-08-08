@@ -50,11 +50,16 @@ builtby_interesting_sec (annocheck_data *     data,
 static bool
 found (const char * source, const char * filename, const char * tool)
 {
+  static const char * last_tool = NULL;
+
   /* FIXME: Regexps would be better.  */
   if (nottool != NULL && streq (nottool, tool))
     return true;
 
   if (istool != NULL && ! streq (istool, tool))
+    return true;
+
+  if (last_tool && streq (tool, last_tool))
     return true;
 
   if (all)
@@ -63,6 +68,7 @@ found (const char * source, const char * filename, const char * tool)
     einfo (INFO, "%s was built by %s", filename, tool);
     
   found_builder = true;
+  last_tool = tool;
   return all; /* Stop further searches unless checking for all builder notes.  */
 }
 

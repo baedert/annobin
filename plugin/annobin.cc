@@ -1458,7 +1458,11 @@ plugin_init (struct plugin_name_args *   plugin_info,
     {
       bool fail = false;
 
-      if (strcmp (version->basever, gcc_version.basever))
+      /* plugin_default_version_check is very strict and requires that the
+	 major, minor and revision numbers all match.  Since annobin only
+	 lightly touches gcc we assume that major number compatibility will
+	 be sufficient...  */
+      if (strncmp (version->basever, gcc_version.basever, strchr (version->basever, '.') - version->basever))
 	{
 	  annobin_inform (0, _("Error: plugin built for compiler version (%s) but run with compiler version (%s)"),
 			  gcc_version.basever, version->basever);

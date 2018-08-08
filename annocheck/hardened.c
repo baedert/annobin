@@ -1275,6 +1275,11 @@ show_OPTIMIZATION (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with sufficient optimization");
     }
+  else if (gcc_version == -1)
+    {
+      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
+      einfo (VERBOSE, "No optimization notes found, but the binary was not built with gcc");
+    }
   else
     {
       maybe (data, "The optimization setting was not recorded");
@@ -1307,6 +1312,11 @@ show_PIC (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with PIC/PIE");
     }
+  else if (gcc_version == -1)
+    {
+      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
+      einfo (VERBOSE, "No PIC/PIE notes found, but the binary was not built with gcc");
+    }
   else
     {
       maybe (data, "The PIC/PIE setting was not recorded");
@@ -1338,6 +1348,11 @@ show_STACK_PROT (annocheck_data * data, test * results)
   else if (results->num_pass > 0)
     {
       pass (data, "Compiled with sufficient stack protection");
+    }
+  else if (gcc_version == -1)
+    {
+      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
+      einfo (VERBOSE, "No stack protection notes found, but the binary was not built with gcc");
     }
   else
     {
@@ -1411,6 +1426,11 @@ show_FORTIFY (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with -D_FORTIFY_SOURCE=2");
     }
+  else if (gcc_version == -1)
+    {
+      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
+      einfo (VERBOSE, "No FORTIFY_SOURCE notes found, but the binary was not built with gcc");
+    }
   else
     {
       maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
@@ -1482,6 +1502,11 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
     }
+  else if (gcc_version == -1)
+    {
+      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
+      einfo (VERBOSE, "No GLIBCXX_ASSERTONS notes found, but the binary was not built with gcc");
+    }
   else
     {
       maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
@@ -1516,6 +1541,11 @@ show_STACK_REALIGN (annocheck_data * data, test * results)
   else if (results->num_pass > 0)
     {
       pass (data, "Compiled with -mstack_realign");
+    }
+  else if (gcc_version == -1)
+    {
+      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
+      einfo (VERBOSE, "No stack realign notes found, but the binary was not built with gcc");
     }
   else
     {
