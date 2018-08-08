@@ -284,15 +284,17 @@ skip_check (enum test_index check, const char * component_name)
       return true;
     }
 
-  /* We know that some glibc startup functions cannot be compiled
-     with stack protection enabled.  So do not complain about them.  */
   static const char * skip_these_funcs[] =
-    {
-      "_init",
+    { 
+     /* We know that some glibc startup functions cannot be compiled
+	with stack protection enabled.  So do not complain about them.  */
+     "_init",
       "_fini",
       "__libc_csu_init",
       "__libc_csu_fini",
-      "_start"
+      "_start",
+     /* Similarly the stack check support code does not need checking.  */
+      "__stack_chk_fail_local"
     };
   int i;
 
@@ -629,6 +631,8 @@ walk_notes (annocheck_data *     data,
 	  break;
 
 	case 0:
+	  if (skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
+	    return true;
 	  report_s (INFO, "%s: fail: (%s): compiled without -fPIC/-fPIE",
 		  data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_PIC].num_fail ++;
@@ -639,6 +643,8 @@ walk_notes (annocheck_data *     data,
 	  /* Compiled wth -fpic not -fpie.  */
 	  if (e_type == ET_EXEC)
 	    {
+	      if (skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
+		return true;
 	      report_s (INFO, "%s: fail: (%s): compiled with -fPIC rather than -fPIE",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_PIC].num_fail ++;
@@ -654,7 +660,7 @@ walk_notes (annocheck_data *     data,
 	case 3:
 	case 4:
 	  report_s (VERBOSE2, "%s: pass: (%s): compiled with -fPIE",
-		  data, sec, note_data, prefer_func_name, NULL);
+		    data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_PIC].num_pass ++;
 	  break;
 	}
@@ -674,21 +680,21 @@ walk_notes (annocheck_data *     data,
 	  if (skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
 	    return true;
 	  report_s (INFO, "%s: fail: (%s): No stack protection enabled",
-		  data, sec, note_data, prefer_func_name, NULL);
+		    data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_STACK_PROT].num_fail ++;
 	  break;
 
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
 	case 4: /* EXPLICIT */
 	  report_s (INFO, "%s: fail: (%s): Insufficient stack protection: %s",
-		  data, sec, note_data, prefer_func_name, stack_prot_type (value));
+		    data, sec, note_data, prefer_func_name, stack_prot_type (value));
 	  tests[TEST_STACK_PROT].num_fail ++;
 	  break;
 
 	case 2: /* ALL */
 	case 3: /* STRONG */
 	  report_s (VERBOSE2, "%s: pass: (%s): %s enabled",
-		  data, sec, note_data, prefer_func_name, stack_prot_type (value));
+		    data, sec, note_data, prefer_func_name, stack_prot_type (value));
 	  tests[TEST_STACK_PROT].num_pass ++;
 	  break;
 	}

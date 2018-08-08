@@ -647,7 +647,7 @@ extract_rpm_file (const char * filename)
   command = concat (/* Change into the temporary directory.  */
 		    "cd ", dirname,
 		    /* Convert the rpm to cpio format.  */
-		    " && rpm2cpio ", fname,
+		    " && rpm2cpio \"", fname, "\"",
 		    /* Pipe the output into cpio in order to extract the files.  */
 		    " | cpio -dium --quiet",
 		    /* Then move out of the directory.  */
@@ -1252,13 +1252,13 @@ process_rpm_file (const char * filename)
   command = concat (/* Change into the temporary directory.  */
 		    "cd ", dirname,
 		    /* Convert the rpm to cpio format.  */
-		    " && rpm2cpio ", fname,
+		    " && rpm2cpio \"", fname, "\"",
 		    /* Pipe the output into cpio in order to extract the files.  */
 		    " | cpio -dium --quiet",
 		    /* Run annocheck on the files in the directory, skipping unknown file types,
 		       and prefixing the output with the rpm name.  */
 		    " && ", pname, " --ignore-unknown ",
-		    "--prefix ", lbasename (filename),
+		    "--prefix \"", lbasename (filename), "\"",
 		    /* Increment the recursion level.  */
 		    " --level ", itoa (level + 1),
 		    /* Pass on the name of the temporary data directory, if created.  */
