@@ -1138,9 +1138,9 @@ check_for_gaps (annocheck_data * data)
     }
 
   if (! BE_VERBOSE)
-    maybe (data, "Gaps were detected in the annobin coverage.  Run with -v to list");
+    fail (data, "Gaps were detected in the annobin coverage.  Run with -v to list");
   else
-    maybe (data, "Gaps were detected in the annobin coverage");
+    fail (data, "Gaps were detected in the annobin coverage");
 }
 
 static void
