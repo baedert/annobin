@@ -295,6 +295,7 @@ skip_check (enum test_index check, const char * component_name)
       "_start",
      /* Similarly the stack check support code does not need checking.  */
       "__stack_chk_fail_local"
+      "stack_chk_fail_local.c"
     };
   int i;
 
