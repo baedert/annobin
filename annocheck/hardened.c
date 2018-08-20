@@ -26,6 +26,7 @@ static bool ignore_gaps = false;
 /* These are initialised on a per-input-file basis by start().  */
 static int  e_type;
 static int  e_machine;
+static ulong text_section_name_index;
 static bool is_little_endian;
 static bool debuginfo_file;
 static int  num_fails;
@@ -139,6 +140,7 @@ start (annocheck_data * data)
   /* Initialise other per-file variables.  */
   debuginfo_file = false;
   gcc_version = -1;
+  text_section_name_index = -1;
   if (num_allocated_ranges)
     {
       free (ranges);
@@ -185,6 +187,7 @@ interesting_sec (annocheck_data *     data,
       if (sec->shdr.sh_type == SHT_NOBITS && sec->shdr.sh_size > 0)
 	debuginfo_file = true;
 
+      text_section_name_index = sec->shdr.sh_name;
       return false;
     }
   else if (debuginfo_file)
@@ -307,51 +310,6 @@ skip_check (enum test_index check, const char * component_name)
       }
 
   return false;
-}
-
-/* Returns true iff addr1 and addr2 are in the same section.  */
-
-static bool
-same_section (annocheck_data * data,
-	      ulong            addr1,
-	      ulong            addr2)
-{
-  Elf_Scn * addr1_scn = NULL;
-  Elf_Scn * addr2_scn = NULL;
-  Elf_Scn * scn = NULL;
-
-  if (data->is_32bit)
-    {
-      while ((scn = elf_nextscn (data->elf, scn)) != NULL)
-	{
-	  Elf32_Shdr * shdr = elf32_getshdr (scn);
-
-	  if (addr1_scn == NULL
-	      && shdr->sh_addr <= addr1 && ((shdr->sh_addr + shdr->sh_size) >= addr1))
-	    addr1_scn = scn;
-
-	  if (addr2_scn == NULL
-	      && shdr->sh_addr <= addr2 && ((shdr->sh_addr + shdr->sh_size) >= addr2))
-	    addr2_scn = scn;
-	}
-    }
-  else
-    {
-      while ((scn = elf_nextscn (data->elf, scn)) != NULL)
-	{
-	  Elf64_Shdr * shdr = elf64_getshdr (scn);
-
-	  if (addr1_scn == NULL
-	      && shdr->sh_addr <= addr1 && ((shdr->sh_addr + shdr->sh_size) >= addr1))
-	    addr1_scn = scn;
-
-	  if (addr2_scn == NULL
-	      && shdr->sh_addr <= addr2 && ((shdr->sh_addr + shdr->sh_size) >= addr2))
-	    addr2_scn = scn;
-	}
-    }
-
-  return addr1_scn == addr2_scn && addr1_scn != NULL;
 }
 
 static void
@@ -1058,6 +1016,84 @@ pass (annocheck_data * data, const char * message)
   einfo (VERBOSE2, "%s: pass: %s", data->filename, message);
 }
 
+/* Returns true if GAP is one that can be ignored.  */
+
+static bool
+ignore_gap (annocheck_data * data, hardened_note_data * gap)
+{
+  Elf_Scn * addr1_scn = NULL;
+  Elf_Scn * addr2_scn = NULL;
+  Elf_Scn * scn = NULL;
+  ulong     scn_end = 0;
+  ulong     scn_name = 0;
+
+  /* If the gap starts in one section, but ends in a different section
+     then we ignore it.  */
+
+  if (data->is_32bit)
+    {
+      while ((scn = elf_nextscn (data->elf, scn)) != NULL)
+	{
+	  Elf32_Shdr * shdr = elf32_getshdr (scn);
+
+	  if (addr1_scn == NULL
+	      && shdr->sh_addr <= gap->start && ((shdr->sh_addr + shdr->sh_size) >= gap->start))
+	    addr1_scn = scn;
+
+	  if (addr2_scn == NULL)
+	    {
+	      scn_end = shdr->sh_addr + shdr->sh_size;
+	      scn_name = shdr->sh_name;
+	      
+	      if (shdr->sh_addr <= gap->end && scn_end >= gap->end)
+		addr2_scn = scn;
+	    }
+	}
+    }
+  else
+    {
+      while ((scn = elf_nextscn (data->elf, scn)) != NULL)
+	{
+	  Elf64_Shdr * shdr = elf64_getshdr (scn);
+
+	  if (addr1_scn == NULL
+	      && shdr->sh_addr <= gap->start && ((shdr->sh_addr + shdr->sh_size) >= gap->start))
+	    addr1_scn = scn;
+
+	  if (addr2_scn == NULL)
+	    {
+	      scn_end = shdr->sh_addr + shdr->sh_size;
+	      scn_name = shdr->sh_name;
+
+	      if (shdr->sh_addr <= gap->end && scn_end >= gap->end)
+		addr2_scn = scn;
+	    }
+	}
+    }
+
+  if (addr2_scn == NULL)
+    return false;
+  if (addr1_scn != addr2_scn)
+    return true;
+
+  /* On the PowerPC64, the linker can insert PLT resolver stubs at
+     the end of the .text section.  These will be unannotated, but
+     they can safely be ignored.
+
+     We may not have the symbol table available however so check to
+     see if the gap ends at the end of the .text section.  */
+  if (e_machine == EM_PPC64
+      && align (gap->end, 8) == scn_end
+      && scn_name == text_section_name_index)
+    {
+      einfo (VERBOSE2, "Ignoring gap %lx..%lx at end of ppc64 .text section - it will contain PLT stubs",
+	     gap->start, gap->end);
+      return true;
+    }
+
+  return false;
+}
+
 static void
 check_for_gaps (annocheck_data * data)
 {
@@ -1099,7 +1135,7 @@ check_for_gaps (annocheck_data * data)
 	  gap.start = current.end;
 	  gap.end   = ranges[i].start;
 
-	  if (same_section (data, gap.start, gap.end))
+	  if (! ignore_gap (data, & gap))
 	    {
 	      const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
 
@@ -1579,15 +1615,15 @@ finish (annocheck_data * data)
 	}
     }
 
-  if (num_fails == num_maybes && num_fails == 0)
+  if (num_fails > 0)
+    return false;
+  else if (num_maybes > 0)
+    return false; /* FIXME: Add an option to ignore MAYBE results ? */
+  else
     {
       einfo (INFO, "%s: PASS", data->filename);
       return true;
     }
-  else if (num_fails > 0)
-    return false;
-  else /* FIXME: Add an option to ignore MAYBE results ? */
-    return false;
 }
 
 static void

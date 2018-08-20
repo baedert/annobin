@@ -707,7 +707,7 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
 	string.  */
 
       const char *     path = NULL;
-      const char *     leadin = "/usr/lib/debug/.build-id/";
+      const char *     leadin = "/usr/lib/debug/.build-id";
       unsigned char *  d = (unsigned char *) build_id_ptr;
       char             build_id_dir[3];
       char *           build_id_name;
