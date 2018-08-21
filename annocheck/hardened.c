@@ -1027,6 +1027,11 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
   ulong     scn_end = 0;
   ulong     scn_name = 0;
 
+  /* These tests should be redundant, but just in case...  */
+  if (ignore_gaps
+      || gap->start >= gap->end)
+    return true;
+
   /* If the gap starts in one section, but ends in a different section
      then we ignore it.  */
 
@@ -1083,12 +1088,29 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
      We may not have the symbol table available however so check to
      see if the gap ends at the end of the .text section.  */
   if (e_machine == EM_PPC64
-      && align (gap->end, 8) == scn_end
+      && align (gap->end, 8) == align (scn_end, 8)
       && scn_name == text_section_name_index)
     {
-      einfo (VERBOSE2, "Ignoring gap %lx..%lx at end of ppc64 .text section - it will contain PLT stubs",
-	     gap->start, gap->end);
-      return true;
+      const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap->start + 8, gap->end - 8, false);
+
+      if (sym)
+	{
+	  if (strstr (sym, "glink_PLTresolve") || strstr (sym, "@plt"))
+	    {
+	      einfo (VERBOSE2, "Ignoring gap %lx..%lx at end of ppc64 .text section - it contains PLT stubs",
+		     gap->start, gap->end);
+	      return true;
+	    }
+	  else
+	    einfo (VERBOSE2, "Potential PLT stub gap contains the symbol '%s', so the gap is not ignored", sym);
+	}
+      else
+	{
+	  /* Without symbol information we cannot be sure, but it is a reasonable supposition.  */
+	  einfo (VERBOSE2, "Ignoring gap %lx..%lx at end of ppc64 .text section - it will contain PLT stubs",
+		 gap->start, gap->end);
+	  return true;
+	}
     }
 
   return false;

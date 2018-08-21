@@ -1096,6 +1096,9 @@ annocheck_find_symbol_for_address_range (annocheck_data *     data,
   Elf64_Shdr   sym_shdr;
   Elf_Scn *    sym_sec = NULL;
 
+  if (start > end)
+    return NULL;
+
   if (start == previous_start && end == previous_end)
     return previous_result;
 
