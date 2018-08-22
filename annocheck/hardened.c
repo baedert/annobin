@@ -27,6 +27,7 @@ static bool ignore_gaps = false;
 static int  e_type;
 static int  e_machine;
 static ulong text_section_name_index;
+static ulong text_section_alignment;
 static bool is_little_endian;
 static bool debuginfo_file;
 static int  num_fails;
@@ -141,6 +142,8 @@ start (annocheck_data * data)
   debuginfo_file = false;
   gcc_version = -1;
   text_section_name_index = -1;
+  text_section_alignment = 0;
+
   if (num_allocated_ranges)
     {
       free (ranges);
@@ -188,7 +191,8 @@ interesting_sec (annocheck_data *     data,
 	debuginfo_file = true;
 
       text_section_name_index = sec->shdr.sh_name;
-      return false;
+      text_section_alignment = sec->shdr.sh_addralign;
+      return false; /* We do not actually need to scan the contents of the .text section.  */
     }
   else if (debuginfo_file)
     return false;
@@ -1030,6 +1034,14 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
   /* These tests should be redundant, but just in case...  */
   if (ignore_gaps
       || gap->start >= gap->end)
+    return true;
+
+  /* Gaps narrower than the alignment of the .text section are assumed
+     to be padding between functions, and so can be ignored.  In theory
+     there could be executable code in such gaps, and so we should also
+     check that they are filled with NOP instructions.  But that is
+     overkill at the moment.  */
+  if ((gap->end - gap->start) < text_section_alignment)
     return true;
 
   /* If the gap starts in one section, but ends in a different section
