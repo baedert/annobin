@@ -35,6 +35,7 @@
 #include <elfutils/libdw.h>
 
 #include <libiberty.h>
+#include <demangle.h>
 
 #define PACKAGE                         "annocheck"
 

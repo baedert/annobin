@@ -9,7 +9,7 @@ static_plugin=$enable_static
 
 AC_ARG_WITH(
   [gcc-plugin-dir],
-  [AC_HELP_STRING([--with-gcc-plugin-dir=DIR], [install ODB plugin into the GCC plugin directory])],
+  [AC_HELP_STRING([--with-gcc-plugin-dir=DIR], [install annobin plugin into the GCC plugin directory])],
   [gcc_plugin_dir=$withval],
   [gcc_plugin_dir=test])
 
@@ -54,13 +54,13 @@ else
 
     CPPFLAGS="$CPPFLAGS -I$dir/include"
 
-    AC_MSG_CHECKING([whether to install ODB plugin into default GCC plugin directory])
+    AC_MSG_CHECKING([whether to install annobin plugin into default GCC plugin directory])
     case $gcc_plugin_dir in
        yes)
          gcc_plugin_dir=$dir
          ;;
        test)
-         # Only install into the GCC plugin dir if both GCC and ODB are
+         # Only install into the GCC plugin dir if both GCC and annobin are
          # installed into the same prefix. Testing whether $libdir or
          # $libexecdir is a prefix of the GCC plugin dir is a good
          # approximation.

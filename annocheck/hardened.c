@@ -319,8 +319,8 @@ skip_check (enum test_index check, const char * component_name)
 static void
 record_range (ulong start, ulong end)
 {
-  if (start == end)
-    return;
+  if (start >= end)
+    return;  /* FIXME: We should ICE if start > end.  */
 
   if (next_free_range >= num_allocated_ranges)
     {
@@ -336,24 +336,6 @@ record_range (ulong start, ulong end)
   ranges[next_free_range].start = start;
   ranges[next_free_range].end   = end;
   next_free_range ++;
-}
-
-static int
-compare_range (const void * r1, const void * r2)
-{
-  hardened_note_data * n1 = (hardened_note_data *) r1;
-  hardened_note_data * n2 = (hardened_note_data *) r2;
-
-  if (n1->end < n2->start)
-    return -1;
-  if (n1->start > n2->end)
-    return 1;
-  /* Overlap - we should merge the two ranges.  */
-  if (n1->start < n2->start)
-    return -1;
-  if (n1->end > n2->end)
-    return 1;
-  return 0;
 }
 
 /* Wrapper for einfo that avoids calling get_component_name()
@@ -1044,9 +1026,11 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
   if ((gap->end - gap->start) < text_section_alignment)
     return true;
 
-  /* If the gap starts in one section, but ends in a different section
-     then we ignore it.  */
+  /* We also ignore small gaps for now.  */
+  if ((gap->end - gap->start) < 32)
+    return true;
 
+  /* Find out where the gap starts and ends.  */
   if (data->is_32bit)
     {
       while ((scn = elf_nextscn (data->elf, scn)) != NULL)
@@ -1088,17 +1072,17 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
 	}
     }
 
+  /* If the gap starts in one section, but ends in a different section then we ignore it.  */
   if (addr2_scn == NULL)
     return false;
   if (addr1_scn != addr2_scn)
     return true;
 
-  /* On the PowerPC64, the linker can insert PLT resolver stubs at
-     the end of the .text section.  These will be unannotated, but
-     they can safely be ignored.
+  /* On the PowerPC64, the linker can insert PLT resolver stubs at the end of the .text section.
+     These will be unannotated, but they can safely be ignored.
 
-     We may not have the symbol table available however so check to
-     see if the gap ends at the end of the .text section.  */
+     We may not have the symbol table available however so check to see if the gap ends at the
+     end of the .text section.  */
   if (e_machine == EM_PPC64
       && align (gap->end, 8) == align (scn_end, 8)
       && scn_name == text_section_name_index)
@@ -1128,11 +1112,51 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
   return false;
 }
 
+static signed int
+compare_range (const void * r1, const void * r2)
+{
+  hardened_note_data * n1 = (hardened_note_data *) r1;
+  hardened_note_data * n2 = (hardened_note_data *) r2;
+
+  if (n1->end < n2->start)
+    return -1;
+
+  if (n1->start > n2->end)
+    return 1;
+
+  /* Overlap - we should merge the two ranges.  */
+  if (n1->start < n2->start)
+    return -1;
+
+  if (n1->end > n2->end)
+    return 1;
+
+  /* N1 is wholly covered by N2:
+       n2->start <= n1->start <  n2->end
+       n2->start <= n1->end   <= n2->end.
+     We adjust its range so that the gap detection code does not get confused.  */
+  n1->start = n2->start;
+  n1->end   = n2->end;
+  return 0;
+}
+
+/* Certain symbols can indicate that a gap can be safely ignored.  */
+
+static bool
+skip_gap_sym (const char * sym)
+{
+  if (e_machine == EM_386 && const_strneq (sym, "__x86.get_pc_thunk"))
+    return true;
+
+  if (e_machine == EM_PPC64 && const_strneq (sym, "_savegpr"))
+    return true;
+
+  return false;
+}
+
 static void
 check_for_gaps (annocheck_data * data)
 {
-  bool gap_found = false;
-
   assert (! ignore_gaps);
 
   if (next_free_range < 2)
@@ -1144,6 +1168,7 @@ check_for_gaps (annocheck_data * data)
   hardened_note_data current = ranges[0];
   
   /* Scan the ranges array.  */
+  bool gap_found = false;
   unsigned i;
   for (i = 1; i < next_free_range; i++)
     {
@@ -1169,45 +1194,59 @@ check_for_gaps (annocheck_data * data)
 	  gap.start = current.end;
 	  gap.end   = ranges[i].start;
 
-	  if (! ignore_gap (data, & gap))
-	    {
-	      const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
-
-	      if ((sym == NULL || strstr (sym, ".end"))
-		  && gap.start != align (gap.start, 16))
-		{
-		  sym = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
-		  if (sym)
-		    gap.start = align (gap.start, 16);
-		}
-
-	      if (sym && skip_check (TEST_MAX, sym))
-		continue;
-
-	      gap_found = true;
-	      if (! BE_VERBOSE)
-		break;
-
-	      if (sym)
-		einfo (VERBOSE, "%s: gap:  (%lx..%lx probable component: %s) in annobin notes",
-		       data->filename, gap.start, gap.end, sym);
-	      else
-		einfo (VERBOSE, "%s: gap:  (%lx..%lx) in annobin notes",
-		       data->filename, gap.start, gap.end);
-	    }
-
 	  /* We have found a gap, so reset the current range.  */
 	  current = ranges[i];
+
+	  if (ignore_gap (data, & gap))
+	    continue;
+
+	  const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
+
+	  if ((sym == NULL || strstr (sym, ".end"))
+	      && gap.start != align (gap.start, 16))
+	    {
+	      sym = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
+	      if (sym)
+		gap.start = align (gap.start, 16);
+	    }
+
+	  if (sym)
+	    {
+	      if (skip_check (TEST_MAX, sym))
+		continue;
+	      if (skip_gap_sym (sym))
+		continue;
+	    }
+
+	  gap_found = true;
+	  if (! BE_VERBOSE)
+	    break;
+
+	  if (sym)
+	    {
+	      const char * cpsym = NULL;
+
+	      if (sym[0] == '_' && sym[1] == 'Z')
+		{
+		  cpsym = cplus_demangle (sym, DMGL_PARAMS | DMGL_ANSI | DMGL_VERBOSE);
+		  if (cpsym != NULL)
+		    sym = cpsym;
+		}
+
+	      einfo (VERBOSE, "%s: gap:  (%lx..%lx probable component: %s) in annobin notes",
+		     data->filename, gap.start, gap.end, sym);
+
+	      free ((char *) cpsym);
+	    }
+	  else
+	    einfo (VERBOSE, "%s: gap:  (%lx..%lx) in annobin notes",
+		   data->filename, gap.start, gap.end);
 	}
     }
 
-  if (!gap_found)
-    {
-      pass (data, "No gaps found");
-      return;
-    }
-
-  if (! BE_VERBOSE)
+  if (! gap_found)
+    pass (data, "No gaps found");
+  else if (! BE_VERBOSE)
     fail (data, "Gaps were detected in the annobin coverage.  Run with -v to list");
   else
     fail (data, "Gaps were detected in the annobin coverage");

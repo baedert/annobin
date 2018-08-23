@@ -1427,7 +1427,7 @@ Optional Packages:
                           both]
   --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
   --with-gcc-plugin-dir=DIR
-                          install ODB plugin into the GCC plugin directory
+                          install annobin plugin into the GCC plugin directory
 
 Some influential environment variables:
   CC          C compiler command
@@ -16110,14 +16110,14 @@ $as_echo "yes" >&6; }
 
     CPPFLAGS="$CPPFLAGS -I$dir/include"
 
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install ODB plugin into default GCC plugin directory" >&5
-$as_echo_n "checking whether to install ODB plugin into default GCC plugin directory... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install annobin plugin into default GCC plugin directory" >&5
+$as_echo_n "checking whether to install annobin plugin into default GCC plugin directory... " >&6; }
     case $gcc_plugin_dir in
        yes)
          gcc_plugin_dir=$dir
          ;;
        test)
-         # Only install into the GCC plugin dir if both GCC and ODB are
+         # Only install into the GCC plugin dir if both GCC and annobin are
          # installed into the same prefix. Testing whether $libdir or
          # $libexecdir is a prefix of the GCC plugin dir is a good
          # approximation.

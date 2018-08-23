@@ -874,13 +874,13 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
 
   free (canon_dir);
 
-  /* Now open the file.... */
+  /* Now open the file...  */
   Dwarf * separate_debug_file = dwarf_begin (fd, DWARF_C_READ);
-  
-  einfo (VERBOSE, "%s: %s separate debug file: %s",
-	 data->filename,
-	 separate_debug_file == NULL ? "Failed to open" : "Found",
-	 debugfile);
+
+  if (separate_debug_file == NULL)
+    einfo (VERBOSE, "%s: Failed to open separate debug file: %s", data->filename, debugfile);
+  else
+    einfo (VERBOSE2, "%s: Opened separate debug file: %s", data->filename, debugfile);
 
   free (debugfile);
   return separate_debug_file;
@@ -953,6 +953,18 @@ annocheck_walk_dwarf (annocheck_data * data, dwarf_walker func, void * ptr)
 
 /* -------------------------------------------------------------------- */
 
+static bool
+ends_with (const char * string, const char * ending, const size_t end_len)
+{
+  size_t len = strlen (string);
+
+  if (string == NULL
+      || len <= end_len
+      || ! streq (string + (len - end_len), ending))
+    return false;
+  return true;
+}
+
 static const char *
 find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, bool prefer_func)
 {
@@ -980,6 +992,9 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, 
 	      use_sym = true;
 	      break;
 	    }
+
+	  if (ends_with (elf_strptr (elf, sym_hdr->sh_link, sym.st_name), "_end", strlen ("_end")))
+	    continue;
 
 	  if (! use_saved)
 	    {
