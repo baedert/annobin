@@ -1148,8 +1148,16 @@ skip_gap_sym (const char * sym)
   if (e_machine == EM_386 && const_strneq (sym, "__x86.get_pc_thunk"))
     return true;
 
-  if (e_machine == EM_PPC64 && const_strneq (sym, "_savegpr"))
-    return true;
+  if (e_machine == EM_PPC64)
+    {
+      if (const_strneq (sym, "_savegpr")
+	  || const_strneq (sym, "_restgpr")
+	  || const_strneq (sym, "_savefpr")
+	  || const_strneq (sym, "_restfpr")
+	  || const_strneq (sym, "_savevr")
+	  || const_strneq (sym, "_restvr"))
+	return true;
+    }
 
   return false;
 }
