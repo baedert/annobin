@@ -935,9 +935,14 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	      if (!in_lto_p && ! flag_profile_values)
 		func_section = concat (".text.hot", NULL);
 	    }
+	  else if (DECL_COMDAT_GROUP (current_function_decl))
+	    {
+	      targetm.asm_out.unique_section (current_function_decl, 0);
+	      func_section = concat (annobin_get_section_name (current_function_decl), NULL);
+	    }
 	}
     }
-  
+
   /* If the function is going to be in its own section, then we do not know
      where it will end up in memory.  In particular we cannot rely upon it
      being included in the memory range covered by the global notes.  So for

@@ -36,7 +36,7 @@ static const char *     files[MAX_NUM_FILES];
 static const char *     progname;
 static const char *	base_component = "annocheck";
 static const char *	component = "annocheck";
-static bool             ignore_unknown = false;
+static bool             ignore_unknown = true;
 static char *           saved_args = NULL;
 static char *           prefix = "";
 static const char *     debug_rpm = NULL;
@@ -198,9 +198,11 @@ usage (void)
   einfo (INFO, "   --debug-rpm=<FILE> [Find separate dwarf debug information in <FILE>]");
   einfo (INFO, "   --dwarf-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
   einfo (INFO, "   --help             [Display this message & exit]");
-  einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types]");
+  einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types][default]");
+  einfo (INFO, "   --report-unknown   [Do complain about unknown file types]");
   einfo (INFO, "   --quiet            [Do not print anything, just return an exit status]");
   einfo (INFO, "   --verbose          [Produce informational messages whilst working.  Repeat for more information]");
+  einfo (INFO, "   --timing           [Produce informational messages about how long it takes to process a file]");
   einfo (INFO, "   --version          [Report the verion of the tool & exit]");
 
   einfo (INFO, "The following options are internal to the scanner and not expected to be supplied by the user:");
@@ -283,6 +285,10 @@ process_command_line (uint argc, const char * argv[])
 
 	    case 'i': /* --ignore-unknown  */
 	      ignore_unknown = true;
+	      break;
+
+	    case 'r': /* --report-unknown  */
+	      ignore_unknown = false;
 	      break;
 
 	    case 'q': /* --quiet */
@@ -1285,16 +1291,13 @@ process_rpm_file (const char * filename)
 		    /* Then all the other options that the user has supplied.  */
 		    " ", saved_args ? saved_args : "",
 		    " .",
-		    /* Then move out of the directory.  */
-		    " && cd ..",
-		    /* And delete it.  */
-		    " && rm -r ", dirname,
 		    NULL);
 
   einfo (VERBOSE2, "Running rpm extractor command sequence: %s", command);
   fflush (stdin);
 
-  if (system (command))
+  int result = system (command);
+  if (result == -1 || result == 127)
     return einfo (WARN, "Failed to process rpm file: %s", filename);
 
   free (command);
@@ -1302,8 +1305,14 @@ process_rpm_file (const char * filename)
   free (fname);
   free (pname);
 
-  einfo (VERBOSE2, "RPM processed successful");
-  return true;
+  /* Delete the temporary directory.  */
+  command = concat ("rm -r ", dirname, NULL);
+  if (system (command))
+    einfo (WARN, "Failed to delete temporary directory: %s", dirname);
+  free (command);
+
+  einfo (VERBOSE2, "RPM processed successfully");
+  return result == EXIT_SUCCESS;
 }
 
 static bool
@@ -1311,6 +1320,12 @@ process_file (const char * filename)
 {
   size_t       len;
   struct stat  statbuf;
+
+  /* Fast track ignoring of debuginfo files.
+     FIXME: Maybe add other file extensions ?
+     FIXME: Maybe check that the extension is at the end of the filename ?  */
+  if (ignore_unknown && strstr (filename, ".debug"))
+    return true;
 
   /* When ignoring unknown file types (which typically happens when processing the
      contents of an rpm), we do not follow symbolic links.  This allows us to detect
@@ -1477,6 +1492,7 @@ main (int argc, const char ** argv)
 	  {
 	    if (tmpdir == NULL)
 	      {
+		assert (level == 0);
 		tmpdir = create_tmpdir ();
 		if (tmpdir == NULL)
 		  return EXIT_FAILURE;
@@ -1516,16 +1532,13 @@ main (int argc, const char ** argv)
   if (debug_rpm_dir)
     rmdir (debug_rpm_dir);
 
-  if (level == 0 && tmpdir != NULL && self_made_tmpdir)
-    rmdir (tmpdir);
+  if (self_made_tmpdir)
+    {
+      assert (level == 0);
+      assert (tmpdir != 0);
+      rmdir (tmpdir);
+    }
 
-  /* FIXME: This is a hack.  When --ignore-unknown is active we
-     are probably processing an rpm, and we do not want the
-     return status from annocheck to stop the cleanup of the
-     temporary directory.  */
-  if (!res && ignore_unknown)
-    res = true;
-  
   return res ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

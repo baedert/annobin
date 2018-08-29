@@ -911,19 +911,37 @@ check_dynamic_section (annocheck_data *    data,
       if (dyn == NULL)
 	break;
 
-      if (dyn->d_tag == DT_BIND_NOW)
-	tests[TEST_BIND_NOW].num_pass ++;
+      switch (dyn->d_tag)
+	{
+	case DT_BIND_NOW:
+	  tests[TEST_BIND_NOW].num_pass ++;
+	  break;
 
-      else if (dyn->d_tag == DT_FLAGS
-	       && dyn->d_un.d_val & DF_BIND_NOW)
-	tests[TEST_BIND_NOW].num_pass ++;
+	case DT_FLAGS:
+	  if (dyn->d_un.d_val & DF_BIND_NOW)
+	    tests[TEST_BIND_NOW].num_pass ++;
+	  break;
 
-      if (dyn->d_tag == DT_TEXTREL)
-	tests[TEST_TEXTREL].num_fail ++;
+	case DT_TEXTREL:
+	  tests[TEST_TEXTREL].num_fail ++;
+	  break;
 
-      if (dyn->d_tag == DT_RPATH || dyn->d_tag == DT_RUNPATH)
-	if (not_rooted_at_usr (elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val)))
-	  tests[TEST_RUN_PATH].num_fail ++;
+	case DT_RPATH:
+	case DT_RUNPATH:
+	  {
+	    const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
+
+	    if (not_rooted_at_usr (path))
+	      {
+		einfo (VERBOSE, "%s: fail: Bad runpath: %s", data->filename, path);
+		tests[TEST_RUN_PATH].num_fail ++;
+	      }
+	  }
+	  break;
+
+	default:
+	  break;
+	}
     }
 
   return true;
