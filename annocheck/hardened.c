@@ -216,6 +216,9 @@ interesting_sec (annocheck_data *     data,
 	++ tests[TEST_WRITEABLE_GOT].num_fail;
     }
 
+  if (sec->shdr.sh_size == 0)
+    return false;
+
   /* These types of section need further processing.  */
   return sec->shdr.sh_type == SHT_DYNAMIC
     || sec->shdr.sh_type == SHT_NOTE

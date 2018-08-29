@@ -43,6 +43,9 @@ builtby_interesting_sec (annocheck_data *     data,
   if (! all && found_builder)
     return false;
 
+  if (sec->shdr.sh_size == 0)
+    return false;
+
   if (streq (sec->secname, ".comment"))
     return true;
 

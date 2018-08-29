@@ -513,12 +513,9 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	  read_section_header (& data, scn, & sec.shdr);
 	  sec.secname = elf_strptr (elf, shstrndx, sec.shdr.sh_name);	  
 
-	  if (sec.shdr.sh_size == 0)
-	    {
-	      einfo (VERBOSE2, "%s: Skipping empty section: %s", filename, sec.secname);
-	      continue;
-	    }
-
+	  /* Note - do not skip empty sections, they may still be interesting to some tools.
+	     If a tool is not interested in an empty section, it can always determine this
+	     in its interesting_sec() function.  */
 	  einfo (VERBOSE2, "%s: Examining section %s", filename, sec.secname);
 
 	  /* Walk the checkers, asking each in turn if they are interested in this section.  */

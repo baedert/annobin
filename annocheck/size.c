@@ -171,7 +171,7 @@ size_end_scan (uint level, const char * datafile)
 static bool
 size_process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
-  if (const_strneq (arg, "--section-size="))
+  if (const_strneq (arg, "--section-size"))
     {
       const char * parameter;
       const char * sought;
