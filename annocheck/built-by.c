@@ -19,6 +19,7 @@
 
 static const char * istool = NULL;
 static const char * nottool = NULL;
+static const char * last_tool = NULL;
 
 static bool disabled = true;
 
@@ -29,6 +30,7 @@ static void
 builtby_start (annocheck_data * data)
 {
   found_builder = false;
+  last_tool = NULL;
 }
 
 static bool
@@ -50,8 +52,6 @@ builtby_interesting_sec (annocheck_data *     data,
 static bool
 found (const char * source, const char * filename, const char * tool)
 {
-  static const char * last_tool = NULL;
-
   /* FIXME: Regexps would be better.  */
   if (nottool != NULL && streq (nottool, tool))
     return true;
@@ -105,7 +105,16 @@ builtby_check_sec (annocheck_data *     data,
 		   annocheck_section *  sec)
 {
   if (streq (sec->secname, ".comment"))
-    return found (".comment section", data->filename, (const char *) sec->data->d_buf);
+    {
+      const char * tool = (const char *) sec->data->d_buf;
+
+      if (sec->data->d_size == 0)
+	return true; /* The .comment section is empty, so keep on searching.  */
+
+      if (tool[0] == 0)
+	tool ++; /* not sure why this can happen, but it does.  */
+      return found (".comment section", data->filename, tool);
+    }
 
   if (streq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
     return annocheck_walk_notes (data, sec, builtby_note_walker, (void *) data->filename);
