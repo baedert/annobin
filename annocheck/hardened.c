@@ -219,6 +219,9 @@ interesting_sec (annocheck_data *     data,
   if (sec->shdr.sh_size == 0)
     return false;
 
+  if (gcc_version == -1 && streq (sec->secname, ".comment"))
+    return true;
+
   /* These types of section need further processing.  */
   return sec->shdr.sh_type == SHT_DYNAMIC
     || sec->shdr.sh_type == SHT_NOTE
@@ -951,6 +954,30 @@ check_dynamic_section (annocheck_data *    data,
 }  
 
 static bool
+check_code_section (annocheck_data *     data,
+		    annocheck_section *  sec)
+{
+  if (gcc_version == -1
+      && sec->data->d_size > 11
+      && streq (sec->secname, ".comment"))
+    {
+      const char * tool = (const char *) sec->data->d_buf;
+
+      if (tool[0] == 0)
+	tool ++; /* Not sure why this can happen, but it does.  */
+
+      /* FIXME: This assumes that the tool string looks like: "GCC: (GNU) 8.1.1""  */
+      unsigned int version = (unsigned int) strtoul (tool + 11, NULL, 10);
+
+      einfo (VERBOSE2, "%s: built by gcc version %u (extracted from %s)", data->filename, version, tool);
+      if (version)
+	gcc_version = version;
+    }
+
+  return true;
+}
+
+static bool
 check_sec (annocheck_data *     data,
 	   annocheck_section *  sec)
 {
@@ -958,13 +985,12 @@ check_sec (annocheck_data *     data,
      selected in interesting_sec().  */
   switch (sec->shdr.sh_type)
     {
-    case SHT_NOTE:    return check_note_section (data, sec);
-    case SHT_STRTAB:  return check_string_section (data, sec);
-    case SHT_DYNAMIC: return check_dynamic_section (data, sec);
-    default:          break;
+    case SHT_NOTE:     return check_note_section (data, sec);
+    case SHT_STRTAB:   return check_string_section (data, sec);
+    case SHT_DYNAMIC:  return check_dynamic_section (data, sec);
+    case SHT_PROGBITS: return check_code_section (data, sec);
+    default:           return true;
     }
-
-  return true;
 }
 
 static bool

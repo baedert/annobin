@@ -115,7 +115,8 @@ builtby_check_sec (annocheck_data *     data,
 	return true; /* The .comment section is empty, so keep on searching.  */
 
       if (tool[0] == 0)
-	tool ++; /* not sure why this can happen, but it does.  */
+	tool ++; /* Not sure why this can happen, but it does.  */
+
       return found (".comment section", data->filename, tool);
     }
 
