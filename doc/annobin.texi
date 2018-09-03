@@ -461,8 +461,10 @@ annocheck
   [@b{--help}]
   [@b{--version}]
   [@b{--verbose}]
+  [@b{--timing}]
   [@b{--quiet}]
   [@b{--ignore-unknown}]
+  [@b{--report-unknown}]
   [@b{--debug-rpm=}@var{file}]
   [@b{--dwarf-dir=}@var{dir}]
   [@b{--prefix=}@var{text}]
@@ -487,10 +489,21 @@ The @command{annocheck} program is able to scan inside rpm files and
 libraries.  It will automatically recurse into any directories that
 are specified on the command line.  In addition @command{annocheck}
 knows how to find debug information held in separate debug files, and
-it will search for these whenever it is checking debug information.
+it will search for these whenever it needs the resources that they
+contain.
 
-The program supports some generic command line options that are used
-regardless of which tools are enabled.
+New tools can be added to the annocheck framework by creating a new
+source file and including it in the @file{Makefile} used to build
+@command{annocheck}.  The modular nature of @command{annocheck} means
+that nothing else needs to be updated.
+
+New tools must fill out a @code{struct checker} structure (defined in
+@file{annocheck.h}) and they must define a constructor function that
+calls @code{annocheck_add_checker} to register their presence at
+program start-up.
+
+The @command{annocheck} program supports some generic command line
+options that are used regardless of which tools are enabled.
 
 @table @code
 
@@ -503,8 +516,10 @@ Look in @var{dir} for separate dwarf debug information files.
 @item --help
 Display this message & exit.
 
-@item --ignore-unknown
-Do not complain about unknown file types.
+@item --report-unknown
+@itemx --ignore-unknown
+Report file types not recognised by @command{annocheck}.  The default
+behaviour can be restored by the @option{--ignore-unknown} option.
 
 @item --prefix=@var{text}
 Include @var{text} in the output description.
@@ -515,6 +530,10 @@ Do not print anything, just return an exit status.
 @item --verbose
 Produce informational messages whilst working.  Repeat for more
 information.
+
+@item --timing
+Produce informational messages about how long it takes each tool
+to process a file.
 
 @item --version
 Report the version of the tool and then exit.
@@ -540,6 +559,7 @@ annocheck
   [@b{--skip-gnu-stack}]
   [@b{--skip-optimization}]
   [@b{--skip-pic}]
+  [@b{--skip-pie}]
   [@b{--skip-run-path}]
   [@b{--skip-rwx-seg}]
   [@b{--skip-stack-clash}]
@@ -561,6 +581,10 @@ with the required security hardening options, as outlined in the
 elf-policy document.  It runs a series of tests checking compilation
 options and link time options.  These tests are outlined below, along
 with the command line option that can be used to disable each test.
+
+New tests can be added to the @var{hardened} checker by adding an
+entry in the @var{tests} array defined in @file{hardened.c} and then
+creating the necessary code to support the test.
 
 @table @code
 
@@ -607,9 +631,12 @@ Dynamic executables must have a dynamic segment.
 Disabled by @option{--skip-dynamic-segment}.
 
 @item Position Independent compilation
-Shared libraries must have been compiled with @option{-fPIE} and
-dynamic executables must have been compiled with @option{-fPIC}.
-Disabled by @option{--skip-pic}.
+Shared libraries must have been compiled with @option{-fPIC} or
+@code{-fPIE} but not @option{-static}.
+This check can be disabled by @option{--skip-pic}.
+
+Dynamic executables must have been compiled with @option{-fPIE}.
+This check can be disabled by @option{--skip-pie}.
 
 @item Safe exceptions
 Program which use exception handling must have been compiled with
@@ -652,7 +679,8 @@ The tool does support a couple of other command line options as well:
 
 @table @code
 @item --enable-hardened
-Enable the tool if it was previously disabled.
+Enable the tool if it was previously disabled.  The option is the
+default.
 
 @item --disable-hardened
 Disable the tool.

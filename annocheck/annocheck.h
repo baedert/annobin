@@ -118,7 +118,7 @@ typedef struct checker
   bool (* check_sec) (annocheck_data *     DATA,
 		      annocheck_section *  SECTION);
 
-  /* Called before checking a segment.
+  /* Called to see if the checker is interested in the particular segment.
      Can be NULL.  If NULL, all segments are ignored.
      If FALSE is returned the segment is not processed any further.
      Note - called even if there are sections in the file.
@@ -135,7 +135,7 @@ typedef struct checker
 
   /* Called at the end of checking a file.
      Can be NULL.
-     Returns a success/fail status for the entire of that file.  */
+     Returns a success/fail status for the entirity of that file.  */
   bool (* end_file) (annocheck_data * DATA);
 
   /* Called to allow the callback a chance to handle its own command line arguments.
@@ -153,19 +153,19 @@ typedef struct checker
      Should use einfo to display its information.  */
   void (* version) (void);
 
-  /* Called at the start of a scan of a set of input files, but after PROCESS_ARG
-     has been called.
-     If END_SCAN is NULL then this field can be NULL.
+  /* Called at the start of a scan of a set of input files for a given recursion depth.
+     Called after PROCESS_ARG has been invoked, if that function is not NULL.
+     Can be NULL unless END_SCAN is defined.
      LEVEL is the recursion level for annocheck.  Level 0 is the top level.
      DATAFILE is the pathname of a file that can be used to pass data between iterations.
-     The file is unique and consistent for each checker.  */
+     The file is unique to each checker.  The same file is used at all recursion depths.  */
   void (* start_scan) (uint LEVEL, const char * DATAFILE);
 
-  /* Called at the end of the scan of all of the input files.
+  /* Called at the end of the scan of all of the input files at a given recursion depth.
      Can be NULL.
      LEVEL is the recursion level for annocheck.  Level 0 is the top level.
      DATAFILE is the pathname of a file that can be used to pass data between iterations.
-     The file is unique and consistent for each checker.  */
+     The file is unique to each checker.  The same file is used at all recursion depths.  */
   void (* end_scan) (uint LEVEL, const char * DATAFILE);
 
   /* Pointer to internal data used by the annocheck framework.

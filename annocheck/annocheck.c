@@ -28,8 +28,8 @@
 /* -1: silent, 0: normal, 1: verbose, 2: very verbose.  */
 ulong         verbosity = 0;
 
-uint          major_version = 2;
-uint          minor_version = 1;
+uint          major_version = 8;
+uint          minor_version = 32;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -365,14 +365,23 @@ process_command_line (uint argc, const char * argv[])
 		}
 	      break;
 
-	    case 't': /* --tmpdir */
-	      parameter = strchr (arg, '=');
-	      if (parameter == NULL)
-		parameter = argv[a++];
+	    case 't': /* --tmpdir or --timing */
+	      if (const_strneq (arg, "tmpdir"))
+		{
+		  parameter = strchr (arg, '=');
+		  if (parameter == NULL)
+		    parameter = argv[a++];
+		  else
+		    parameter ++;	      
+		  tmpdir = parameter;
+		  assert (tmpdir[0] == '/');
+		}
+	      else if (streq (arg, "timing"))
+		{
+		  einfo (WARN, "--timing option has yet to be implemented");
+		}
 	      else
-		parameter ++;	      
-	      tmpdir = parameter;
-	      assert (tmpdir[0] == '/');
+		goto unknown_arg;
 	      break;
 	      
 	    case 'v': /* --verbose or --version */

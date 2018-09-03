@@ -390,8 +390,10 @@ File: annobin.info,  Node: Annocheck,  Next: Legacy Scripts,  Prev: Examining,  
        [-help]
        [-version]
        [-verbose]
+       [-timing]
        [-quiet]
        [-ignore-unknown]
+       [-report-unknown]
        [-debug-rpm=FILE]
        [-dwarf-dir=DIR]
        [-prefix=TEXT]
@@ -412,10 +414,19 @@ tools are implemented:
 libraries.  It will automatically recurse into any directories that are
 specified on the command line.  In addition 'annocheck' knows how to
 find debug information held in separate debug files, and it will search
-for these whenever it is checking debug information.
+for these whenever it needs the resources that they contain.
 
-   The program supports some generic command line options that are used
-regardless of which tools are enabled.
+   New tools can be added to the annocheck framework by creating a new
+source file and including it in the 'Makefile' used to build
+'annocheck'.  The modular nature of 'annocheck' means that nothing else
+needs to be updated.
+
+   New tools must fill out a 'struct checker' structure (defined in
+'annocheck.h') and they must define a constructor function that calls
+'annocheck_add_checker' to register their presence at program start-up.
+
+   The 'annocheck' program supports some generic command line options
+that are used regardless of which tools are enabled.
 
 '--debug-rpm=FILE'
      Look in FILE for separate dwarf debug information.
@@ -426,8 +437,10 @@ regardless of which tools are enabled.
 '--help'
      Display this message & exit.
 
+'--report-unknown'
 '--ignore-unknown'
-     Do not complain about unknown file types.
+     Report file types not recognised by 'annocheck'.  The default
+     behaviour can be restored by the '--ignore-unknown' option.
 
 '--prefix=TEXT'
      Include TEXT in the output description.
@@ -438,6 +451,10 @@ regardless of which tools are enabled.
 '--verbose'
      Produce informational messages whilst working.  Repeat for more
      information.
+
+'--timing'
+     Produce informational messages about how long it takes each tool to
+     process a file.
 
 '--version'
      Report the version of the tool and then exit.
@@ -459,6 +476,7 @@ File: annobin.info,  Node: Hardened,  Next: Built-By,  Up: Annocheck
        [-skip-gnu-stack]
        [-skip-optimization]
        [-skip-pic]
+       [-skip-pie]
        [-skip-run-path]
        [-skip-rwx-seg]
        [-skip-stack-clash]
@@ -477,6 +495,10 @@ the required security hardening options, as outlined in the elf-policy
 document.  It runs a series of tests checking compilation options and
 link time options.  These tests are outlined below, along with the
 command line option that can be used to disable each test.
+
+   New tests can be added to the HARDENED checker by adding an entry in
+the TESTS array defined in 'hardened.c' and then creating the necessary
+code to support the test.
 
 'BIND_NOW'
      Lazy binding must not have been enabled via the linker option '-z
@@ -518,9 +540,11 @@ command line option that can be used to disable each test.
      '--skip-dynamic-segment'.
 
 'Position Independent compilation'
-     Shared libraries must have been compiled with '-fPIE' and dynamic
-     executables must have been compiled with '-fPIC'.  Disabled by
-     '--skip-pic'.
+     Shared libraries must have been compiled with '-fPIC' or '-fPIE'
+     but not '-static'.  This check can be disabled by '--skip-pic'.
+
+     Dynamic executables must have been compiled with '-fPIE'.  This
+     check can be disabled by '--skip-pie'.
 
 'Safe exceptions'
      Program which use exception handling must have been compiled with
@@ -554,7 +578,8 @@ command line option that can be used to disable each test.
    The tool does support a couple of other command line options as well:
 
 '--enable-hardened'
-     Enable the tool if it was previously disabled.
+     Enable the tool if it was previously disabled.  The option is the
+     default.
 
 '--disable-hardened'
      Disable the tool.
@@ -1569,14 +1594,14 @@ Node: The GOW Encoding12012
 Node: The CF Encoding13460
 Node: The ENUM Encoding14532
 Node: Annocheck14889
-Node: Hardened16736
-Node: Built-By20593
-Node: Section-Size21982
-Node: Legacy Scripts23064
-Node: Who Built Me23831
-Node: ABI Checking26591
-Node: Hardening Checks28705
-Node: Checking Archives32791
-Node: GNU FDL35213
+Node: Hardened17445
+Node: Built-By21620
+Node: Section-Size23009
+Node: Legacy Scripts24091
+Node: Who Built Me24858
+Node: ABI Checking27618
+Node: Hardening Checks29732
+Node: Checking Archives33818
+Node: GNU FDL36240
 
 End Tag Table

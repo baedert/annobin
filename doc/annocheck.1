@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "ANNOCHECK 1"
-.TH ANNOCHECK 1 "2018-08-07" "annobin-1" "RPM Development Tools"
+.TH ANNOCHECK 1 "2018-09-03" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -146,8 +146,10 @@ annocheck
   [\fB\-\-help\fR]
   [\fB\-\-version\fR]
   [\fB\-\-verbose\fR]
+  [\fB\-\-timing\fR]
   [\fB\-\-quiet\fR]
   [\fB\-\-ignore\-unknown\fR]
+  [\fB\-\-report\-unknown\fR]
   [\fB\-\-debug\-rpm=\fR\fIfile\fR]
   [\fB\-\-dwarf\-dir=\fR\fIdir\fR]
   [\fB\-\-prefix=\fR\fItext\fR]
@@ -163,6 +165,7 @@ annocheck
   [\fB\-\-skip\-gnu\-stack\fR]
   [\fB\-\-skip\-optimization\fR]
   [\fB\-\-skip\-pic\fR]
+  [\fB\-\-skip\-pie\fR]
   [\fB\-\-skip\-run\-path\fR]
   [\fB\-\-skip\-rwx\-seg\fR]
   [\fB\-\-skip\-stack\-clash\fR]
@@ -198,10 +201,21 @@ The \fBannocheck\fR program is able to scan inside rpm files and
 libraries.  It will automatically recurse into any directories that
 are specified on the command line.  In addition \fBannocheck\fR
 knows how to find debug information held in separate debug files, and
-it will search for these whenever it is checking debug information.
+it will search for these whenever it needs the resources that they
+contain.
 .PP
-The program supports some generic command line options that are used
-regardless of which tools are enabled.
+New tools can be added to the annocheck framework by creating a new
+source file and including it in the \fIMakefile\fR used to build
+\&\fBannocheck\fR.  The modular nature of \fBannocheck\fR means
+that nothing else needs to be updated.
+.PP
+New tools must fill out a \f(CW\*(C`struct checker\*(C'\fR structure (defined in
+\&\fIannocheck.h\fR) and they must define a constructor function that
+calls \f(CW\*(C`annocheck_add_checker\*(C'\fR to register their presence at
+program start-up.
+.PP
+The \fBannocheck\fR program supports some generic command line
+options that are used regardless of which tools are enabled.
 .ie n .IP """\-\-debug\-rpm=\fIfile\fP""" 4
 .el .IP "\f(CW\-\-debug\-rpm=\f(CIfile\f(CW\fR" 4
 .IX Item "--debug-rpm=file"
@@ -214,10 +228,16 @@ Look in \fIdir\fR for separate dwarf debug information files.
 .el .IP "\f(CW\-\-help\fR" 4
 .IX Item "--help"
 Display this message & exit.
+.ie n .IP """\-\-report\-unknown""" 4
+.el .IP "\f(CW\-\-report\-unknown\fR" 4
+.IX Item "--report-unknown"
+.PD 0
 .ie n .IP """\-\-ignore\-unknown""" 4
 .el .IP "\f(CW\-\-ignore\-unknown\fR" 4
 .IX Item "--ignore-unknown"
-Do not complain about unknown file types.
+.PD
+Report file types not recognised by \fBannocheck\fR.  The default
+behaviour can be restored by the \fB\-\-ignore\-unknown\fR option.
 .ie n .IP """\-\-prefix=\fItext\fP""" 4
 .el .IP "\f(CW\-\-prefix=\f(CItext\f(CW\fR" 4
 .IX Item "--prefix=text"
@@ -231,6 +251,11 @@ Do not print anything, just return an exit status.
 .IX Item "--verbose"
 Produce informational messages whilst working.  Repeat for more
 information.
+.ie n .IP """\-\-timing""" 4
+.el .IP "\f(CW\-\-timing\fR" 4
+.IX Item "--timing"
+Produce informational messages about how long it takes each tool
+to process a file.
 .ie n .IP """\-\-version""" 4
 .el .IP "\f(CW\-\-version\fR" 4
 .IX Item "--version"
@@ -241,6 +266,10 @@ with the required security hardening options, as outlined in the
 elf-policy document.  It runs a series of tests checking compilation
 options and link time options.  These tests are outlined below, along
 with the command line option that can be used to disable each test.
+.PP
+New tests can be added to the \fIhardened\fR checker by adding an
+entry in the \fItests\fR array defined in \fIhardened.c\fR and then
+creating the necessary code to support the test.
 .ie n .IP """BIND_NOW""" 4
 .el .IP "\f(CWBIND_NOW\fR" 4
 .IX Item "BIND_NOW"
@@ -295,9 +324,12 @@ Disabled by \fB\-\-skip\-dynamic\-segment\fR.
 .ie n .IP """Position Independent compilation""" 4
 .el .IP "\f(CWPosition Independent compilation\fR" 4
 .IX Item "Position Independent compilation"
-Shared libraries must have been compiled with \fB\-fPIE\fR and
-dynamic executables must have been compiled with \fB\-fPIC\fR.
-Disabled by \fB\-\-skip\-pic\fR.
+Shared libraries must have been compiled with \fB\-fPIC\fR or
+\&\f(CW\*(C`\-fPIE\*(C'\fR but not \fB\-static\fR.
+This check can be disabled by \fB\-\-skip\-pic\fR.
+.Sp
+Dynamic executables must have been compiled with \fB\-fPIE\fR.
+This check can be disabled by \fB\-\-skip\-pie\fR.
 .ie n .IP """Safe exceptions""" 4
 .el .IP "\f(CWSafe exceptions\fR" 4
 .IX Item "Safe exceptions"
@@ -345,7 +377,8 @@ The tool does support a couple of other command line options as well:
 .ie n .IP """\-\-enable\-hardened""" 4
 .el .IP "\f(CW\-\-enable\-hardened\fR" 4
 .IX Item "--enable-hardened"
-Enable the tool if it was previously disabled.
+Enable the tool if it was previously disabled.  The option is the
+default.
 .ie n .IP """\-\-disable\-hardened""" 4
 .el .IP "\f(CW\-\-disable\-hardened\fR" 4
 .IX Item "--disable-hardened"

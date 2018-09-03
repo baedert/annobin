@@ -69,6 +69,7 @@ enum test_index
   TEST_GNU_STACK,
   TEST_OPTIMIZATION,
   TEST_PIC,
+  TEST_PIE,
   TEST_RUN_PATH,
   TEST_RWX_SEG,
   TEST_STACK_CLASH,
@@ -90,6 +91,7 @@ static void show_GNU_RELRO          (annocheck_data *, test *);
 static void show_GNU_STACK          (annocheck_data *, test *);
 static void show_OPTIMIZATION       (annocheck_data *, test *);
 static void show_PIC                (annocheck_data *, test *);
+static void show_PIE                (annocheck_data *, test *);
 static void show_RUN_PATH           (annocheck_data *, test *);
 static void show_RWX_SEG            (annocheck_data *, test *);
 static void show_STACK_CLASH        (annocheck_data *, test *);
@@ -110,11 +112,12 @@ static test tests [TEST_MAX] =
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8 only)"),
   TEST (dynamic-segment,    DYNAMIC_SEGMENT,    "There is a dynamic segment/section present"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
-  TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compield with -D_GLIBCXX_ASSERTIONS"),
+  TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
   TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writeable"),
   TEST (gnu-stack,          GNU_STACK,          "The stack is not executable"),
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
-  TEST (pic,                PIC,                "Compiled with -fPIC or fPIE"),
+  TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
+  TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
   TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
   TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
   TEST (stack-clash,        STACK_CLASH,        "Compiled with -fstack-clash-protection (not ARM)"),
@@ -170,6 +173,11 @@ start (annocheck_data * data)
       e_machine = hdr->e_machine;
       is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
     }
+
+  /* We do not expect to find ET_EXEC binaries.  These days all binaries
+     should be ET_DYN, even executable programs.  */
+  if (e_type == ET_EXEC && tests[TEST_PIE].enabled)
+    tests[TEST_PIE].num_fail ++;
 }
 
 static bool
@@ -596,6 +604,12 @@ walk_notes (annocheck_data *     data,
 	    {
 	      if (skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
 		return true;
+	      /* Compiling an executable with -fPIC rather than -fPIE is a bad thing
+		 as it means that the executable is located at a known address that
+		 can be exploited by an attacker.  Linking against shared libraries
+		 compiled with -fPIC is OK, since they expect to have their own
+		 address space, but linking against static libraries compiled with
+		 -fPIC is still bad.  Hence this is a FAIL case.  */
 	      report_s (INFO, "%s: fail: (%s): compiled with -fPIC rather than -fPIE",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_PIC].num_fail ++;
@@ -1311,7 +1325,7 @@ static void
 show_BIND_NOW (annocheck_data * data, test * results)
 {
   /* Only executables need to have their binding checked.  */
-  if (e_type != ET_EXEC)
+  if (e_type != ET_EXEC && e_type != ET_DYN)
     return;
 
   if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
@@ -1492,6 +1506,16 @@ show_PIC (annocheck_data * data, test * results)
     {
       maybe (data, "The PIC/PIE setting was not recorded");
     }
+}
+
+static void
+show_PIE (annocheck_data * data, test * results)
+{
+  if (gcc_version != -1 && results->num_fail > 0)
+    fail (data, "Compiled as an ordinary executable (-fPIC) rather than a position independent executable (-fPIE)");
+
+  else /* Ignore maybe results - they should not happen.  */
+    pass (data, "Compiled as a position independent binary");
 }
 
 static void
@@ -1730,7 +1754,9 @@ finish (annocheck_data * data)
   if (disabled || debuginfo_file)
     return true;
 
-  if (! ignore_gaps && e_type != ET_REL)
+  if (! ignore_gaps
+      && e_type != ET_REL
+      && gcc_version != -1)
     check_for_gaps (data);
 
   int i;
