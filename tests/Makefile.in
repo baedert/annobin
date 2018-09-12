@@ -215,6 +215,7 @@ TESTS = compile-test \
       hardening-test \
       hardening-fail-test \
       missing-notes-test \
+      property-note-test \
       abi-test \
       function-sections-test \
       assembler-gap-test \

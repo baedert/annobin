@@ -216,6 +216,11 @@ Watermark specification, but it basically consists of the letters 'G'
 and 'A' followed by an encoding character (one of '*$!+') and then a
 type character and finally the value.
 
+   The notes are always four byte aligned, even on 64-bit systems.  This
+does mean that consumers of the notes may have to read 8-byte wide
+values from 4-byte aligned addresses, and that producers of the notes
+may have to generate unaligned relocs when creating them.
+
    Most of the notes have a reasonably self explanatory name and value.
 The exception are the 'version' and 'GOW' notes, which are included in
 the table below.
@@ -390,7 +395,6 @@ File: annobin.info,  Node: Annocheck,  Next: Legacy Scripts,  Prev: Examining,  
        [-help]
        [-version]
        [-verbose]
-       [-timing]
        [-quiet]
        [-ignore-unknown]
        [-report-unknown]
@@ -409,6 +413,7 @@ tools are implemented:
 * Hardened::  Was the application built with the correct security options ?
 * Built-By::  Which tool(s) were used to build the application ?
 * Section-Size::  What is the cumulative size of specific sections in a set of files ?
+* Timing::    How long did the checks take ?
 
    The 'annocheck' program is able to scan inside rpm files and
 libraries.  It will automatically recurse into any directories that are
@@ -452,10 +457,6 @@ that are used regardless of which tools are enabled.
      Produce informational messages whilst working.  Repeat for more
      information.
 
-'--timing'
-     Produce informational messages about how long it takes each tool to
-     process a file.
-
 '--version'
      Report the version of the tool and then exit.
 
@@ -477,8 +478,10 @@ File: annobin.info,  Node: Hardened,  Next: Built-By,  Up: Annocheck
        [-skip-optimization]
        [-skip-pic]
        [-skip-pie]
+       [-skip-property-note]
        [-skip-run-path]
        [-skip-rwx-seg]
+       [-skip-short-enum]
        [-skip-stack-clash]
        [-skip-stack-prot]
        [-skip-stack-realign]
@@ -575,6 +578,14 @@ code to support the test.
      The program must not have any relocations that are held in a
      writeable section.  Disabled by '--skip-gnu-relro'.
 
+'GNU Property Note'
+     For X86_64 binaries, check that a correctly formatted GNU Property
+     note is present.
+
+'Enum Size'
+     Check that the program makes consistent use of the '-fshort-enum'
+     option.
+
    The tool does support a couple of other command line options as well:
 
 '--enable-hardened'
@@ -592,7 +603,8 @@ File: annobin.info,  Node: Built-By,  Next: Section-Size,  Prev: Hardened,  Up: 
 
 
      annocheck
-       --enable-builtby
+       [-disable-hardened]
+       -enable-builtby
        [-all]
        [-tool=NAME]
        [-nottool=NAME]
@@ -602,6 +614,9 @@ File: annobin.info,  Node: Built-By,  Next: Section-Size,  Prev: Hardened,  Up: 
 the command line option '--enable-builtby'.  The tool checks the
 specified files to see if any information is stored about how the file
 was built.
+
+   Since the hardening checker is enabled by default it may also be
+useful to add the '--disable-hardened' option to the command line.
 
    The tool supports a few command line options to customise its
 behaviour:
@@ -626,13 +641,14 @@ behaviour:
      not built by a particular compiler.
 
 
-File: annobin.info,  Node: Section-Size,  Prev: Built-By,  Up: Annocheck
+File: annobin.info,  Node: Section-Size,  Next: Timing,  Prev: Built-By,  Up: Annocheck
 
 4.3 The section size recorder
 =============================
 
 
      annocheck
+       [-disable-hardened]
        -section-size=NAME
        [-human]
        FILE...
@@ -652,6 +668,29 @@ the security hardening will be run at the same time.
 the size of the named section(s) in each file it encounters.  If the
 '--human' option is enabled then sizes will be rounded down to the
 nearest byte, kibibyte, mebibyte or gibibyte, as appropriate.
+
+
+File: annobin.info,  Node: Timing,  Prev: Section-Size,  Up: Annocheck
+
+4.4 How long did the check take ?
+=================================
+
+
+     annocheck
+       -enable-timing
+       FILE...
+       [-sec]
+       [-usec]
+       [-nsec]
+
+   The TIMING tool reports on the time taken by other tools to scan the
+list of files.  The tool is disabled by default, but it can be enabled
+by the command line option '--enable-timing'.
+
+   By default the tool will report times in microseconds, but you can
+change this to reporting in seconds with the '--sec' or in nanoseconds
+with the '--nsec'.  The default can be restored with the '--usec'
+option.
 
 
 File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Annocheck,  Up: Top
@@ -1587,21 +1626,22 @@ Node: Top698
 Node: Introduction1674
 Node: Invocation3757
 Node: Examining7993
-Node: The Version Encoding10395
-Node: The STACK Encoding10786
-Node: The PIC Encoding11384
-Node: The GOW Encoding12012
-Node: The CF Encoding13460
-Node: The ENUM Encoding14532
-Node: Annocheck14889
-Node: Hardened17445
-Node: Built-By21620
-Node: Section-Size23009
-Node: Legacy Scripts24091
-Node: Who Built Me24858
-Node: ABI Checking27618
-Node: Hardening Checks29732
-Node: Checking Archives33818
-Node: GNU FDL36240
+Node: The Version Encoding10664
+Node: The STACK Encoding11055
+Node: The PIC Encoding11653
+Node: The GOW Encoding12281
+Node: The CF Encoding13729
+Node: The ENUM Encoding14801
+Node: Annocheck15158
+Node: Hardened17636
+Node: Built-By22078
+Node: Section-Size23629
+Node: Timing24753
+Node: Legacy Scripts25400
+Node: Who Built Me26167
+Node: ABI Checking28927
+Node: Hardening Checks31041
+Node: Checking Archives35127
+Node: GNU FDL37549
 
 End Tag Table

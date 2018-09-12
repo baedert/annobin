@@ -17,7 +17,7 @@ rm -f hello.o hello2.o hello3.o libhello.so hardening-test.exe
 GCC=gcc
 READELF=readelf
 OBJCOPY=objcopy
-
+ANNOCHECK=../annocheck/annocheck
 PLUGIN=../plugin/.libs/annobin.so
 
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
@@ -69,5 +69,4 @@ $GCC -fplugin=$PLUGIN \
 
 # The s390 and PPC targets always create some gaps.  Have not found out why...
 
-../annocheck/annocheck -v --ignore-gaps hardening-test.exe
-
+$ANNOCHECK -v --ignore-gaps hardening-test.exe --enable-timing

@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "ANNOCHECK 1"
-.TH ANNOCHECK 1 "2018-09-03" "annobin-1" "RPM Development Tools"
+.TH ANNOCHECK 1 "2018-09-12" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -146,7 +146,6 @@ annocheck
   [\fB\-\-help\fR]
   [\fB\-\-version\fR]
   [\fB\-\-verbose\fR]
-  [\fB\-\-timing\fR]
   [\fB\-\-quiet\fR]
   [\fB\-\-ignore\-unknown\fR]
   [\fB\-\-report\-unknown\fR]
@@ -166,8 +165,10 @@ annocheck
   [\fB\-\-skip\-optimization\fR]
   [\fB\-\-skip\-pic\fR]
   [\fB\-\-skip\-pie\fR]
+  [\fB\-\-skip\-property\-note\fR]
   [\fB\-\-skip\-run\-path\fR]
   [\fB\-\-skip\-rwx\-seg\fR]
+  [\fB\-\-skip\-short\-enum\fR]
   [\fB\-\-skip\-stack\-clash\fR]
   [\fB\-\-skip\-stack\-prot\fR]
   [\fB\-\-skip\-stack\-realign\fR]
@@ -180,16 +181,25 @@ annocheck
   \fIfile\fR...
 .PP
 annocheck
-  \-\-enable\-builtby
+  [\fB\-\-disable\-hardened\fR]
+  \fB\-\-enable\-builtby\fR
   [\fB\-\-all\fR]
   [\fB\-\-tool=\fR\fIname\fR]
   [\fB\-\-nottool=\fR\fIname\fR]
   \fIfile\fR...
 .PP
 annocheck
+  [\fB\-\-disable\-hardened\fR]
   \fB\-\-section\-size=\fR\fIname\fR
   [\fB\-\-human\fR]
   \fIfile\fR...
+.PP
+annocheck
+  \fB\-\-enable\-timing\fR
+  \fIfile\fR...
+  [\fB\-\-sec\fR]
+  [\fB\-\-usec\fR]
+  [\fB\-\-nsec\fR]
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
 The \fBannocheck\fR program can analyse programs and report
@@ -251,11 +261,6 @@ Do not print anything, just return an exit status.
 .IX Item "--verbose"
 Produce informational messages whilst working.  Repeat for more
 information.
-.ie n .IP """\-\-timing""" 4
-.el .IP "\f(CW\-\-timing\fR" 4
-.IX Item "--timing"
-Produce informational messages about how long it takes each tool
-to process a file.
 .ie n .IP """\-\-version""" 4
 .el .IP "\f(CW\-\-version\fR" 4
 .IX Item "--version"
@@ -372,6 +377,16 @@ Disabled by \fB\-\-skip\-optimization\fR.
 The program must not have any relocations that are held in a writeable
 section.
 Disabled by \fB\-\-skip\-gnu\-relro\fR.
+.ie n .IP """GNU Property Note""" 4
+.el .IP "\f(CWGNU Property Note\fR" 4
+.IX Item "GNU Property Note"
+For \fIx86_64\fR binaries, check that a correctly formatted \s-1GNU\s0
+Property note is present.
+.ie n .IP """Enum Size""" 4
+.el .IP "\f(CWEnum Size\fR" 4
+.IX Item "Enum Size"
+Check that the program makes consistent use of the
+\&\fB\-fshort\-enum\fR option.
 .PP
 The tool does support a couple of other command line options as well:
 .ie n .IP """\-\-enable\-hardened""" 4
@@ -388,6 +403,10 @@ The \fIbuilt-by\fR tool is disabled by default, but it can be enabled
 by the command line option \fB\-\-enable\-builtby\fR.  The tool
 checks the specified files to see if any information is stored about
 how the file was built.
+.PP
+Since the hardening checker is enabled by default it may also be
+useful to add the \fB\-\-disable\-hardened\fR option to the command
+line.
 .PP
 The tool supports a few command line options to customise its
 behaviour:
@@ -431,6 +450,15 @@ report the size of the named section(s) in each file it encounters.
 If the \fB\-\-human\fR option is enabled then sizes will be rounded
 down to the nearest byte, kibibyte, mebibyte or gibibyte, as
 appropriate.
+.PP
+The \fItiming\fR tool reports on the time taken by other tools to
+scan the list of files.  The tool is disabled by default, but it can
+be enabled by the command line option \fB\-\-enable\-timing\fR.
+.PP
+By default the tool will report times in microseconds, but you can
+change this to reporting in seconds with the \fB\-\-sec\fR or in
+nanoseconds with the \fB\-\-nsec\fR.  The default can be restored
+with the \fB\-\-usec\fR option.
 .SH "OPTIONS"
 .IX Header "OPTIONS"
 .SH "COPYRIGHT"

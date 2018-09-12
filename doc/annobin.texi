@@ -282,6 +282,11 @@ the Watermark specification, but it basically consists of the letters
 @samp{G} and @samp{A} followed by an encoding character (one of
 @samp{*$!+}) and then a type character and finally the value.
 
+The notes are always four byte aligned, even on 64-bit systems.  This
+does mean that consumers of the notes may have to read 8-byte wide
+values from 4-byte aligned addresses, and that producers of the
+notes may have to generate unaligned relocs when creating them.
+
 @c man end
 
 Most of the notes have a reasonably self explanatory name and value.
@@ -461,7 +466,6 @@ annocheck
   [@b{--help}]
   [@b{--version}]
   [@b{--verbose}]
-  [@b{--timing}]
   [@b{--quiet}]
   [@b{--ignore-unknown}]
   [@b{--report-unknown}]
@@ -483,6 +487,7 @@ Currently the following tools are implemented:
 * Hardened::  Was the application built with the correct security options ?
 * Built-By::  Which tool(s) were used to build the application ?
 * Section-Size::  What is the cumulative size of specific sections in a set of files ?
+* Timing::    How long did the checks take ?
 @end menu
 
 The @command{annocheck} program is able to scan inside rpm files and
@@ -531,10 +536,6 @@ Do not print anything, just return an exit status.
 Produce informational messages whilst working.  Repeat for more
 information.
 
-@item --timing
-Produce informational messages about how long it takes each tool
-to process a file.
-
 @item --version
 Report the version of the tool and then exit.
 
@@ -560,8 +561,10 @@ annocheck
   [@b{--skip-optimization}]
   [@b{--skip-pic}]
   [@b{--skip-pie}]
+  [@b{--skip-property-note}]
   [@b{--skip-run-path}]
   [@b{--skip-rwx-seg}]
+  [@b{--skip-short-enum}]
   [@b{--skip-stack-clash}]
   [@b{--skip-stack-prot}]
   [@b{--skip-stack-realign}]
@@ -673,6 +676,14 @@ The program must not have any relocations that are held in a writeable
 section.
 Disabled by @option{--skip-gnu-relro}.
 
+@item GNU Property Note
+For @var{x86_64} binaries, check that a correctly formatted GNU
+Property note is present.
+
+@item Enum Size
+Check that the program makes consistent use of the
+@option{-fshort-enum} option.
+
 @end table
 
 The tool does support a couple of other command line options as well:
@@ -697,7 +708,8 @@ Disable the tool.
 @c man begin SYNOPSIS annocheck
 
 annocheck
-  --enable-builtby
+  [@b{--disable-hardened}]
+  @b{--enable-builtby}
   [@b{--all}]
   [@b{--tool=}@var{name}]
   [@b{--nottool=}@var{name}]
@@ -711,6 +723,10 @@ The @var{built-by} tool is disabled by default, but it can be enabled
 by the command line option @option{--enable-builtby}.  The tool
 checks the specified files to see if any information is stored about
 how the file was built.
+
+Since the hardening checker is enabled by default it may also be
+useful to add the @option{--disable-hardened} option to the command
+line.
 
 The tool supports a few command line options to customise its
 behaviour:
@@ -748,6 +764,7 @@ built by a particular compiler.
 @c man begin SYNOPSIS annocheck
 
 annocheck
+  [@b{--disable-hardened}]
   @b{--section-size=@var{name}}
   [@b{--human}]
   @var{file}@dots{}
@@ -772,6 +789,34 @@ report the size of the named section(s) in each file it encounters.
 If the @option{--human} option is enabled then sizes will be rounded
 down to the nearest byte, kibibyte, mebibyte or gibibyte, as
 appropriate.
+
+@c man end
+
+@c -----------------------------------------------------------------
+@node Timing
+@section How long did the check take ?
+
+@smallexample
+@c man begin SYNOPSIS annocheck
+
+annocheck
+  @b{--enable-timing}
+  @var{file}@dots{}
+  [@b{--sec}]
+  [@b{--usec}]
+  [@b{--nsec}]
+@c man end
+@end smallexample
+
+@c man begin DESCRIPTION annocheck
+The @var{timing} tool reports on the time taken by other tools to
+scan the list of files.  The tool is disabled by default, but it can
+be enabled by the command line option @option{--enable-timing}.
+
+By default the tool will report times in microseconds, but you can
+change this to reporting in seconds with the @option{--sec} or in
+nanoseconds with the @option{--nsec}.  The default can be restored
+with the @option{--usec} option.
 
 @c man end
 

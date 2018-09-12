@@ -24,10 +24,11 @@ OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX
 
 $GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello.c -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
 $GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello2.c -U_GLIBCXX_ASSERTIONS
-$GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello3.c -fno-stack-protector
+$GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello3.c -fno-stack-protector -fshort-enums
 $GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello_lib.c -O1
 
 $GCC hello.o hello2.o hello3.o hello_lib.o -o hardening-fail-test.exe -Wl,-z,norelro
 
 ../annocheck/annocheck  hardening-fail-test.exe
 
+# FIXME: Add regexps to check for the expected failure messages

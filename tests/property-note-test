@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Copyright (c) 2018 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+
+# Test that a bad GNU Property note section/segment is detected.
+
+rm -f hello.o property-note.o hello3.o property-note-test.exe property-note-test.out
+
+GAS=as
+GCC=gcc
+ANNOCHECK=../annocheck/annocheck
+PLUGIN=../plugin/.libs/annobin.so
+
+OPTS="-O2 -fpie -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -D_FORTIFY_SOURCE=2"
+
+$GAS $srcdir/property-note.S -o property-note.o
+
+$GCC -fplugin=$PLUGIN $OPTS -c $srcdir/hello.c 
+
+$GCC -fplugin=$PLUGIN $OPTS -c $srcdir/hello3.c
+
+$GCC -nostartfiles -e 0 hello.o property-note.o hello3.o -o property-note-test.exe -Wl,--defsym,big_stack=0 -Wl,-z,now
+
+$ANNOCHECK property-note-test.exe > property-note-test.out
+
+cat property-note-test.out
+
+grep --silent "Bad GNU Property note" property-note-test.out

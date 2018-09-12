@@ -370,6 +370,7 @@ annobin_output_note (const char * name,
 		fprintf (asm_out_file, ",");
 	    }
 
+	  /* These notes use 4 byte alignment, even on 64-bit systems.  */
 	  if (descsz % 4)
 	    {
 	      fprintf (asm_out_file, "\t.dc.b");
@@ -1180,6 +1181,11 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n",
 	   GNU_BUILD_ATTRS_SECTION_NAME);
 #endif
+
+  /* Note we use 4-byte alignment even on 64-bit targets.  This might seem
+     wrong for 64-bit systems, but the ELF standard does not specify any
+     alignment requirements for notes, and it matches already established
+     practice for other types of notes.  */
   fprintf (asm_out_file, "\t.balign 4\n");
 
   /* Output the version of the specification supported.  */

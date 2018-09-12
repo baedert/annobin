@@ -70,8 +70,10 @@ enum test_index
   TEST_OPTIMIZATION,
   TEST_PIC,
   TEST_PIE,
+  TEST_PROPERTY_NOTE,
   TEST_RUN_PATH,
   TEST_RWX_SEG,
+  TEST_SHORT_ENUM,
   TEST_STACK_CLASH,
   TEST_STACK_PROT,
   TEST_STACK_REALIGN,
@@ -92,8 +94,10 @@ static void show_GNU_STACK          (annocheck_data *, test *);
 static void show_OPTIMIZATION       (annocheck_data *, test *);
 static void show_PIC                (annocheck_data *, test *);
 static void show_PIE                (annocheck_data *, test *);
+static void show_PROPERTY_NOTE      (annocheck_data *, test *);
 static void show_RUN_PATH           (annocheck_data *, test *);
 static void show_RWX_SEG            (annocheck_data *, test *);
+static void show_SHORT_ENUM         (annocheck_data *, test *);
 static void show_STACK_CLASH        (annocheck_data *, test *);
 static void show_STACK_PROT         (annocheck_data *, test *);
 static void show_STACK_REALIGN      (annocheck_data *, test *);
@@ -118,8 +122,10 @@ static test tests [TEST_MAX] =
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
   TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
+  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64)"),
   TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
   TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
+  TEST (short-enum,         SHORT_ENUM,         "Compiled with consistent use of -fshort-enum"),
   TEST (stack-clash,        STACK_CLASH,        "Compiled with -fstack-clash-protection (not ARM)"),
   TEST (stack-prot,         STACK_PROT,         "Compiled with -fstack-protector-strong"),
   TEST (stack-realign,      STACK_REALIGN,      "Compiled with -mstackrealign (i686 only)"),
@@ -390,12 +396,12 @@ report_s (einfo_type           type,
 }
 	
 static bool
-walk_notes (annocheck_data *     data,
-	    annocheck_section *  sec,
-	    GElf_Nhdr *          note,
-	    size_t               name_offset,
-	    size_t               data_offset,
-	    void *               ptr)
+walk_build_notes (annocheck_data *     data,
+		  annocheck_section *  sec,
+		  GElf_Nhdr *          note,
+		  size_t               name_offset,
+		  size_t               data_offset,
+		  void *               ptr)
 {
   bool                  prefer_func_name;
   hardened_note_data *  note_data;
@@ -403,7 +409,7 @@ walk_notes (annocheck_data *     data,
   if (note->n_type != NT_GNU_BUILD_ATTRIBUTE_OPEN
       && note->n_type != NT_GNU_BUILD_ATTRIBUTE_FUNC)
     {
-      einfo (FAIL, "%s: Unrecognised annobin note type %d", data->filename, note->n_type);
+      einfo (ERROR, "%s: Unrecognised annobin note type %d", data->filename, note->n_type);
       return false;
     }
 
@@ -665,6 +671,31 @@ walk_notes (annocheck_data *     data,
 	}
       break;
 
+    case GNU_BUILD_ATTRIBUTE_SHORT_ENUM:
+      if (value == 1)
+	{
+	  tests[TEST_SHORT_ENUM].num_fail ++;
+
+	  if (tests[TEST_SHORT_ENUM].num_pass)
+	    report_i (VERBOSE, "%s: fail: (%s): different -fshort-enum option used",
+		      data, sec, note_data, prefer_func_name, value);
+	}
+      else if (value == 0)
+	{
+	  tests[TEST_SHORT_ENUM].num_pass ++;
+
+	  if (tests[TEST_SHORT_ENUM].num_fail)
+	    report_i (VERBOSE, "%s: fail: (%s): different -fshort-enum option used",
+		      data, sec, note_data, prefer_func_name, value);
+	}
+      else
+	{
+	  report_i (VERBOSE, "%s: mayb: (%s): unexpected value for short-enum note (%x)",
+		    data, sec, note_data, prefer_func_name, value);
+	  tests[TEST_SHORT_ENUM].num_maybe ++;
+	}
+      break;
+
     case 'c':
       if (streq (attr, "cf_protection"))
 	{
@@ -868,9 +899,45 @@ walk_notes (annocheck_data *     data,
 }
 
 static bool
+walk_property_notes (annocheck_data *     data,
+		     annocheck_section *  sec,
+		     GElf_Nhdr *          note,
+		     size_t               name_offset,
+		     size_t               data_offset,
+		     void *               ptr)
+{
+  if (note->n_type != NT_GNU_PROPERTY_TYPE_0)
+    {
+      einfo (VERBOSE, "%s: fail: Unexpected GNU Property note type (%x)", data->filename, note->n_type);
+      tests[TEST_PROPERTY_NOTE].num_fail ++;
+    }
+
+  /* More than one note in an executable is an error.  */
+  if (e_type == ET_EXEC || e_type == ET_DYN)
+    {
+      if (tests[TEST_PROPERTY_NOTE].num_pass)
+	{
+	  einfo (VERBOSE, "%s: fail: More than one GNU Property note", data->filename);
+	  tests[TEST_PROPERTY_NOTE].num_fail ++;
+	}
+    }
+
+  /* FIXME: Add test for CET enablement bit ?  */
+
+  tests[TEST_PROPERTY_NOTE].num_pass ++;
+  return true;
+}
+
+static bool
 check_note_section (annocheck_data *    data,
 		    annocheck_section * sec)
 {
+  if (sec->shdr.sh_addralign != 4 && sec->shdr.sh_addralign != 8)
+    {
+      einfo (ERROR, "%s: note section %s not properly aligned",
+	     data->filename, sec->secname);
+    }
+
   if (const_strneq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
     {
       hardened_note_data hard_data;
@@ -878,9 +945,14 @@ check_note_section (annocheck_data *    data,
       hard_data.start = 0;
       hard_data.end = 0;
 
-      return annocheck_walk_notes (data, sec, walk_notes, (void *) & hard_data);
+      return annocheck_walk_notes (data, sec, walk_build_notes, (void *) & hard_data);
     }
 
+  if (e_machine == EM_X86_64 && streq (sec->secname, ".note.gnu.property"))
+    {
+      return annocheck_walk_notes (data, sec, walk_property_notes, NULL);
+    }
+  
   return true;
 }
 
@@ -1014,6 +1086,14 @@ interesting_seg (annocheck_data *    data,
   if (disabled)
     return false;
 
+  if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R)
+      && seg->phdr->p_type != PT_GNU_STACK)
+    {
+      einfo (VERBOSE, "%s: fail: seg %d has Read, Write and eXecute flags\n",
+	     data->filename, seg->number);
+      tests[TEST_RWX_SEG].num_fail ++;
+    }
+
   switch (seg->phdr->p_type)
     {
     case PT_GNU_RELRO:
@@ -1028,19 +1108,58 @@ interesting_seg (annocheck_data *    data,
       tests[TEST_DYNAMIC_SEGMENT].num_pass ++;
       break;
 
+    case PT_NOTE:
+      /* We want to examine the note segments on x86_64 binaries.  */
+      return (e_machine == EM_X86_64);
+
     default:
       break;
     }
 
-  if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R)
-      && seg->phdr->p_type != PT_GNU_STACK)
+  return false;
+}
+
+static bool
+check_seg (annocheck_data *    data,
+	   annocheck_segment * seg)
+{
+  if (e_machine != EM_X86_64)
+    return true;
+
+  /* FIXME: Only run these checks if the note section is missing ??  */
+
+  GElf_Nhdr  note;
+  size_t     name_off;
+  size_t     data_off;
+  size_t     offset = 0;
+
+  offset = gelf_getnote (seg->data, offset, & note, & name_off, & data_off);
+  
+  if (seg->phdr->p_align != 8)
     {
-      einfo (VERBOSE, "%s: fail: seg %d has Read, Write and eXecute flags\n",
-	     data->filename, seg->number);
-      tests[TEST_RWX_SEG].num_fail ++;
+      if (seg->phdr->p_align != 4)
+	{
+	  einfo (VERBOSE, "%s: Note segment not 4 or 8 byte aligned",
+		 data->filename);
+	  tests[TEST_PROPERTY_NOTE].num_fail ++;
+	}
+
+      if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
+	{
+	  einfo (VERBOSE, "%s: GNU Property note segment not 8 byte aligned",
+		 data->filename);
+	  tests[TEST_PROPERTY_NOTE].num_fail ++;
+	}
     }
 
-  return false;
+  if (note.n_type == NT_GNU_PROPERTY_TYPE_0 && offset != 0)
+    {
+      einfo (VERBOSE, "%s: More than one GNU Property note in note segment",
+	     data->filename);
+      tests[TEST_PROPERTY_NOTE].num_fail ++;
+    }
+
+  return true;
 }
 
 static void
@@ -1060,7 +1179,7 @@ maybe (annocheck_data * data, const char * message)
 static void
 pass (annocheck_data * data, const char * message)
 {
-  einfo (VERBOSE2, "%s: pass: %s", data->filename, message);
+  einfo (VERBOSE, "%s: pass: %s", data->filename, message);
 }
 
 /* Returns true if GAP is one that can be ignored.  */
@@ -1322,6 +1441,40 @@ check_for_gaps (annocheck_data * data)
 }
 
 static void
+show_SHORT_ENUM (annocheck_data * data, test * results)
+{
+  if (results->num_fail > 0 && results->num_pass > 0)
+    fail (data, "Linked with different -fshort-enum settings");
+  else if (results->num_maybe > 0)
+    maybe (data, "Corrupt notes on the -fshort-enum setting detected");
+  else if (results->num_fail > 0 || results->num_pass > 0)
+    pass (data, "Consistent use of the -fshort-enum option");
+  else
+    maybe (data, "No data about the use of -fshort-enum available");
+}
+
+static void
+show_PROPERTY_NOTE (annocheck_data * data, test * results)
+{
+  if (e_machine != EM_X86_64)
+    return;
+
+  if (results->num_fail > 0)
+    {
+      if (BE_VERBOSE)
+	fail (data, "Bad GNU Property note");
+      else
+	fail (data, "Bad GNU Property note.  Run with -v to see what is wrong");
+    }
+  else if (results->num_maybe > 0)
+    maybe (data, "Corrupt GNU Property note");
+  else if (results->num_pass > 0)
+    pass (data, "Good GNU Property note");
+  else
+    fail (data, "GNU Property note is missing");
+}
+
+static void
 show_BIND_NOW (annocheck_data * data, test * results)
 {
   /* Only executables need to have their binding checked.  */
@@ -1343,6 +1496,8 @@ show_DYNAMIC_SEGMENT (annocheck_data * data, test * results)
 
   if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
     maybe (data, "Dynamic segment is absent");
+  else if (results->num_pass > 1)
+    maybe (data, "Multiple dynamic segments found!");
   else
     pass (data, "Dynamic segment is present");
 }
@@ -1369,6 +1524,8 @@ show_GNU_STACK (annocheck_data * data, test * results)
 
   if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Executable stack found");
+  else if (results->num_pass > 1)
+    maybe (data, "Multiple GNU stack segments found!");
   else
     pass (data, "Stack not executable");
 }
@@ -1856,7 +2013,7 @@ struct checker hardened_checker =
   interesting_sec,
   check_sec,
   interesting_seg,
-  NULL, /* check_seg */
+  check_seg,
   finish,
   process_arg,
   usage,

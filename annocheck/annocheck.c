@@ -29,7 +29,7 @@
 ulong         verbosity = 0;
 
 uint          major_version = 8;
-uint          minor_version = 32;
+uint          minor_version = 33;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -202,7 +202,6 @@ usage (void)
   einfo (INFO, "   --report-unknown   [Do complain about unknown file types]");
   einfo (INFO, "   --quiet            [Do not print anything, just return an exit status]");
   einfo (INFO, "   --verbose          [Produce informational messages whilst working.  Repeat for more information]");
-  einfo (INFO, "   --timing           [Produce informational messages about how long it takes to process a file]");
   einfo (INFO, "   --version          [Report the verion of the tool & exit]");
 
   einfo (INFO, "The following options are internal to the scanner and not expected to be supplied by the user:");
@@ -365,7 +364,7 @@ process_command_line (uint argc, const char * argv[])
 		}
 	      break;
 
-	    case 't': /* --tmpdir or --timing */
+	    case 't': /* --tmpdir */
 	      if (const_strneq (arg, "tmpdir"))
 		{
 		  parameter = strchr (arg, '=');
@@ -375,10 +374,6 @@ process_command_line (uint argc, const char * argv[])
 		    parameter ++;	      
 		  tmpdir = parameter;
 		  assert (tmpdir[0] == '/');
-		}
-	      else if (streq (arg, "timing"))
-		{
-		  einfo (WARN, "--timing option has yet to be implemented");
 		}
 	      else
 		goto unknown_arg;
@@ -1474,6 +1469,7 @@ main (int argc, const char ** argv)
   checker *     tool;
   bool          self_made_tmpdir = false;
 
+
   if (elf_version (EV_CURRENT) == EV_NONE)
     {
       einfo (FAIL, "Could not initialise libelf");
@@ -1489,6 +1485,9 @@ main (int argc, const char ** argv)
   if (! process_command_line (argc, argv))
     return EXIT_FAILURE;
 
+  if (level == 0)
+    einfo (INFO, "Version %d.%d", major_version, minor_version);
+  
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
     if (tool->start_scan != NULL)
       {

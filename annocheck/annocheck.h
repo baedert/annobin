@@ -93,6 +93,10 @@ typedef struct annocheck_segment
   Elf_Data *           data;
 } annocheck_segment;
 
+/* This is the structure used to communicate between the annocheck framework
+   and the checker tools.  If this structure is changed (or the sub structures
+   above) then increment the major_version value in annocheck.c  */
+
 typedef struct checker
 {
   /* Name of the checker.  Must be unique amoungst all registered checkers.  */

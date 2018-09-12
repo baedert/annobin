@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "ANNOBIN 1"
-.TH ANNOBIN 1 "2018-09-03" "annobin-1" "RPM Development Tools"
+.TH ANNOBIN 1 "2018-09-12" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -241,6 +241,11 @@ extra data as well.  The format of the field is explained in detail in
 the Watermark specification, but it basically consists of the letters
 \&\fBG\fR and \fBA\fR followed by an encoding character (one of
 \&\fB*$!+\fR) and then a type character and finally the value.
+.PP
+The notes are always four byte aligned, even on 64\-bit systems.  This
+does mean that consumers of the notes may have to read 8\-byte wide
+values from 4\-byte aligned addresses, and that producers of the
+notes may have to generate unaligned relocs when creating them.
 .SH "OPTIONS"
 .IX Header "OPTIONS"
 .ie n .IP """disable""" 4

@@ -53,6 +53,11 @@ ChangeLog:
 
   The sh_link and sh_info fields of this section should be set to 0.
 
+  The sh_align field should be set to 4, even on 64-bit systems.
+  This does mean that 8-byte values inside the notes might have to be
+  relocated using unaligned relocs, and that they might have to be
+  read and written using unaligned loads and stores.
+
 
 * The type field of a note is used to distinguish the range of memory
   over which an attribute applies.  The name field identifies the
