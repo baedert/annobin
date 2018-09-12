@@ -792,19 +792,30 @@ walk_build_notes (annocheck_data *     data,
 	    }
 	  else
 	    {
-	      value = (value >> 9) & 3;
-
-	      if (value == 0 || value == 1)
+	      if (value & (1 << 13))
 		{
-		  report_i (INFO, "%s: fail: (%s): Insufficient optimization level: -O%d",
-			  data, sec, note_data, prefer_func_name, value);
-		  tests[TEST_OPTIMIZATION].num_fail ++;
+		  /* Compiled with -Og rather than -O2.
+		     Treat this as a flag to indicate that the package developer is
+		     intentionally not compiling with -O2, so suppress warnings about it.  */
+		  report_i (VERBOSE, "%s: skip: (%s): compiled with -Og, so ignoring test for -O2+",
+			    data, sec, note_data, prefer_func_name, value);
 		}
-	      else /* value == 2 || value == 3 */
+	      else
 		{
-		  report_i (VERBOSE2, "%s: pass: (%s): Sufficient optimization level: -O%d",
-			  data, sec, note_data, prefer_func_name, value);
-		  tests[TEST_OPTIMIZATION].num_pass ++;
+		  value = (value >> 9) & 3;
+
+		  if (value == 0 || value == 1)
+		    {
+		      report_i (INFO, "%s: fail: (%s): Insufficient optimization level: -O%d",
+				data, sec, note_data, prefer_func_name, value);
+		      tests[TEST_OPTIMIZATION].num_fail ++;
+		    }
+		  else /* value == 2 || value == 3 */
+		    {
+		      report_i (VERBOSE2, "%s: pass: (%s): Sufficient optimization level: -O%d",
+				data, sec, note_data, prefer_func_name, value);
+		      tests[TEST_OPTIMIZATION].num_pass ++;
+		    }
 		}
 	    }
 	  break;
@@ -934,8 +945,8 @@ check_note_section (annocheck_data *    data,
 {
   if (sec->shdr.sh_addralign != 4 && sec->shdr.sh_addralign != 8)
     {
-      einfo (ERROR, "%s: note section %s not properly aligned",
-	     data->filename, sec->secname);
+      einfo (ERROR, "%s: note section %s not properly aligned (alignment: %ld)",
+	     data->filename, sec->secname, (long) sec->shdr.sh_addralign);
     }
 
   if (const_strneq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
@@ -1139,8 +1150,8 @@ check_seg (annocheck_data *    data,
     {
       if (seg->phdr->p_align != 4)
 	{
-	  einfo (VERBOSE, "%s: Note segment not 4 or 8 byte aligned",
-		 data->filename);
+	  einfo (VERBOSE, "%s: Note segment not 4 or 8 byte aligned (alignment: %ld)",
+		 data->filename, (long) seg->phdr->p_align);
 	  tests[TEST_PROPERTY_NOTE].num_fail ++;
 	}
 

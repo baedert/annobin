@@ -10,20 +10,20 @@ text_end:
 	.section .note.gnu.property, "a", %note
 	.balign 4
 	.dc.l 4 				# size of name
-	.dc.l 24				# size of description
+	.dc.l 16				# size of description
 	.dc.l 0x5				# type = PROPERTY_TYPE_0
 	.asciz "GNU"				# name (GNU Property Note)
 	.dc.l 0xc0000002			# GNU_PROPERTY_X86_UINT32_AND_LO
-	.dc.l 8					# data size
+	.dc.l 4					# data size
 	.dc.l 1	      				# property bits
 	.dc.l 0					# padding
 
 	.dc.l 4 				# size of name
-	.dc.l 24				# size of description
+	.dc.l 16				# size of description
 	.dc.l 0x5				# type = PROPERTY_TYPE_0
 	.asciz "GNU"				# name (GNU Property Note)
 	.dc.l 0xc0080000			# GNU_PROPERTY_X86_UINT32_OR_HI
-	.dc.l 8					# data size
+	.dc.l 4					# data size
 	.dc.l 1	      				# isa bits
 	.dc.l 0					# padding
 	

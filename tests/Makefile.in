@@ -223,7 +223,7 @@ TESTS = compile-test \
       section-size-test
 
 XFAIL_TESTS = hardening-fail-test \
-      missing-notes-test
+      missing-notes-test property-note-test
 all: all-am
 
 .SUFFIXES:

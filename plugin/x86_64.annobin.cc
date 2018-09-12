@@ -125,7 +125,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
       || (unsigned long) ix86_isa_flags != global_x86_isa)
     {
       annobin_inform (1, "record ISA value of %lx for %s",
-		      ix86_isa_flags, func_name);
+		      (long) ix86_isa_flags, func_name);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, ix86_isa_flags,
 				   "numeric: ABI", aname, aname_end, FUNC, sec_name);

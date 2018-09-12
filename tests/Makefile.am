@@ -15,10 +15,10 @@ TESTS=compile-test \
       assembler-gap-test \
       dynamic-notes-test \
       section-size-test \
-      property-note-test
 
 XFAIL_TESTS=hardening-fail-test \
       missing-notes-test \
+      property-note-test
 
 
 # FIXME: Add a test for merging notes...
