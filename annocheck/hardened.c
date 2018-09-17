@@ -320,9 +320,13 @@ skip_check (enum test_index check, const char * component_name)
       "__libc_csu_init",
       "__libc_csu_fini",
       "_start",
+     "static_reloc.c",
+     "_dl_relocate_static_pie",
      /* Similarly the stack check support code does not need checking.  */
       "__stack_chk_fail_local"
       "stack_chk_fail_local.c"
+     /* Also the atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+     "atexit",
     };
   int i;
 
@@ -610,15 +614,20 @@ walk_build_notes (annocheck_data *     data,
 	    {
 	      if (skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
 		return true;
-	      /* Compiling an executable with -fPIC rather than -fPIE is a bad thing
+#if 0 /* Suppressed because ET_EXEC will already generate a failure...  */
+	      /* Building an executable with -fPIC rather than -fPIE is a bad thing
 		 as it means that the executable is located at a known address that
 		 can be exploited by an attacker.  Linking against shared libraries
 		 compiled with -fPIC is OK, since they expect to have their own
 		 address space, but linking against static libraries compiled with
-		 -fPIC is still bad.  Hence this is a FAIL case.  */
+		 -fPIC is still bad.  But ... compiling with -fPIC but then linking
+		 with -fPIE is OK.  It is the final result that matters.  However
+		 we have already checked the e_type above and know that it is ET_EXEC,
+		 ie, not a PIE executable, so this result is a FAIL.  */
 	      report_s (INFO, "%s: fail: (%s): compiled with -fPIC rather than -fPIE",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_PIC].num_fail ++;
+#endif
 	    }
 	  else
 	    {
@@ -1645,7 +1654,7 @@ show_PIC (annocheck_data * data, test * results)
   if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
-	fail (data, "Parts of the binary were compiled without the proper PIC option");
+	fail (data, "Parts of the binary were compiled without the proper PIC/PIE option");
       else
 	fail (data, "The binary was compiled without -fPIC/-fPIE specified");
     }
