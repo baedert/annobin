@@ -5,9 +5,9 @@
 @setchapternewpage odd
 
 @c man begin INCLUDE
-@set VERSION 7.0
+@set VERSION 8.0
 @set VERSION_PACKAGE (Annobin) 
-@set UPDATED June 2018
+@set UPDATED September 2018
 @c man end
 
 @ifnottex

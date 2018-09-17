@@ -87,8 +87,8 @@ static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
-static unsigned char  annobin_version = 8; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 8");
+static unsigned char  annobin_version = 9; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 9");
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\
@@ -221,6 +221,12 @@ annobin_output_note (const char * name,
     fprintf (asm_out_file, "\t.pushsection %s\n", sec_name);
   else
     fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n", sec_name);
+
+  /* Note we use 4-byte alignment even on 64-bit targets.  This might seem
+     wrong for 64-bit systems, but the ELF standard does not specify any
+     alignment requirements for notes, and it matches already established
+     practice for other types of notes.  */
+  fprintf (asm_out_file, "\t.balign 4\n");
 
   if (name == NULL)
     {
@@ -1172,22 +1178,6 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   fprintf (asm_out_file, "\t.popsection\n");
 
-  /* Create the static notes section.  */
-#if 0
-  /* The SHF_GNU_BUILD_NOTE section flag has not been officially accepted yet.  */
-  fprintf (asm_out_file, "\t.pushsection %s, \"%#x\", %%note\n",
-	   GNU_BUILD_ATTRS_SECTION_NAME, SHF_GNU_BUILD_NOTE);
-#else
-  fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n",
-	   GNU_BUILD_ATTRS_SECTION_NAME);
-#endif
-
-  /* Note we use 4-byte alignment even on 64-bit targets.  This might seem
-     wrong for 64-bit systems, but the ELF standard does not specify any
-     alignment requirements for notes, and it matches already established
-     practice for other types of notes.  */
-  fprintf (asm_out_file, "\t.balign 4\n");
-
   /* Output the version of the specification supported.  */
   sprintf (buffer, "%dp%d", SPEC_VERSION, annobin_version);
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_VERSION, buffer,
@@ -1351,9 +1341,6 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   /* Record target specific notes.  */
   annobin_record_global_target_notes ();
-
-  fprintf (asm_out_file, "\t.popsection\n");
-  fflush (asm_out_file);
 }
 
 static void
