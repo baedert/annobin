@@ -298,6 +298,9 @@ stack_prot_type (uint value)
 static bool
 skip_check (enum test_index check, const char * component_name)
 {
+  if (check < TEST_MAX && ! tests[check].enabled)
+    return true;
+
   if (component_name == NULL)
     return false;
 
@@ -589,6 +592,9 @@ walk_build_notes (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_PIC:
+      if (skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
+	break;
+
       /* Convert the pic value into a pass/fail result.  */
       switch (value)
 	{
@@ -600,8 +606,6 @@ walk_build_notes (annocheck_data *     data,
 	  break;
 
 	case 0:
-	  if (skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
-	    return true;
 	  report_s (INFO, "%s: fail: (%s): compiled without -fPIC/-fPIE",
 		  data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_PIC].num_fail ++;
@@ -647,6 +651,9 @@ walk_build_notes (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
+      if (skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
+	break;
+
       switch (value)
 	{
 	case -1:
@@ -657,8 +664,6 @@ walk_build_notes (annocheck_data *     data,
 	  break;
 	  
 	case 0: /* NONE */
-	  if (skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
-	    return true;
 	  report_s (INFO, "%s: fail: (%s): No stack protection enabled",
 		    data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_STACK_PROT].num_fail ++;
@@ -681,12 +686,15 @@ walk_build_notes (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_SHORT_ENUM:
+      if (skip_check (TEST_SHORT_ENUM, get_component_name (data, sec, note_data, prefer_func_name)))
+	break;
+
       if (value == 1)
 	{
 	  tests[TEST_SHORT_ENUM].num_fail ++;
 
 	  if (tests[TEST_SHORT_ENUM].num_pass)
-	    report_i (VERBOSE, "%s: fail: (%s): different -fshort-enum option used",
+	    report_i (INFO, "%s: fail: (%s): different -fshort-enum option used",
 		      data, sec, note_data, prefer_func_name, value);
 	}
       else if (value == 0)
@@ -694,7 +702,7 @@ walk_build_notes (annocheck_data *     data,
 	  tests[TEST_SHORT_ENUM].num_pass ++;
 
 	  if (tests[TEST_SHORT_ENUM].num_fail)
-	    report_i (VERBOSE, "%s: fail: (%s): different -fshort-enum option used",
+	    report_i (INFO, "%s: fail: (%s): different -fshort-enum option used",
 		      data, sec, note_data, prefer_func_name, value);
 	}
       else
@@ -709,6 +717,9 @@ walk_build_notes (annocheck_data *     data,
       if (streq (attr, "cf_protection"))
 	{
 	  if (e_machine != EM_386 && e_machine != EM_X86_64)
+	    break;
+
+	  if (skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
 	    break;
 
 	  switch (value)
@@ -729,7 +740,7 @@ walk_build_notes (annocheck_data *     data,
 
 	    case 2: /* CF_BRANCH: Branch but not return.  */
 	    case 6: /* CF_BRANCH | CF_SET */
-	      report_s (VERBOSE, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
+	      report_s (INFO, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
@@ -743,19 +754,21 @@ walk_build_notes (annocheck_data *     data,
 
 	    case 1: /* CF_NONE: No protection. */
 	    case 5: /* CF_NONE | CF_SET */
-	      if (skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
-		return true;
 	      report_s (INFO, "%s: fail: (%s): Compiled without -fcf-protection",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
 	    }
 	}
+      /* else report unknown annobin note ?  */
       break;
 
     case 'F':
       if (streq (attr, "FORTIFY"))
 	{
+	  if (skip_check (TEST_FORTIFY, get_component_name (data, sec, note_data, prefer_func_name)))
+	    break;
+
 	  switch (value)
 	    {
 	    case -1:
@@ -793,6 +806,9 @@ walk_build_notes (annocheck_data *     data,
     case 'G':
       if (streq (attr, "GOW"))
 	{
+	  if (skip_check (TEST_OPTIMIZATION, get_component_name (data, sec, note_data, prefer_func_name)))
+	    break;
+
 	  if (value == -1)
 	    {
 	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for optimize note (%x)",
@@ -831,11 +847,12 @@ walk_build_notes (annocheck_data *     data,
 	}
       else if (streq (attr, "GLIBCXX_ASSERTIONS"))
 	{
+	  if (skip_check (TEST_GLIBCXX_ASSERTIONS, get_component_name (data, sec, note_data, prefer_func_name)))
+	    break;
+
 	  switch (value)
 	    {
 	    case 0:
-	      if (skip_check (TEST_GLIBCXX_ASSERTIONS, get_component_name (data, sec, note_data, prefer_func_name)))
-		return true;
 	      report_s (INFO, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS", 
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_GLIBCXX_ASSERTIONS].num_fail ++;
@@ -862,6 +879,9 @@ walk_build_notes (annocheck_data *     data,
 	  if (e_machine == EM_ARM)
 	    break;
 
+	  if (skip_check (TEST_STACK_CLASH, get_component_name (data, sec, note_data, prefer_func_name)))
+	    break;
+
 	  switch (value)
 	    {
 	    case 0:
@@ -886,6 +906,9 @@ walk_build_notes (annocheck_data *     data,
       else if (streq (attr, "stack_realign"))
 	{
 	  if (e_machine != EM_386)
+	    break;
+
+	  if (skip_check (TEST_STACK_REALIGN, get_component_name (data, sec, note_data, prefer_func_name)))
 	    break;
 
 	  switch (value)
@@ -926,9 +949,12 @@ walk_property_notes (annocheck_data *     data,
 		     size_t               data_offset,
 		     void *               ptr)
 {
+  if (skip_check (TEST_PROPERTY_NOTE, NULL))
+    return true;
+
   if (note->n_type != NT_GNU_PROPERTY_TYPE_0)
     {
-      einfo (VERBOSE, "%s: fail: Unexpected GNU Property note type (%x)", data->filename, note->n_type);
+      einfo (INFO, "%s: fail: Unexpected GNU Property note type (%x)", data->filename, note->n_type);
       tests[TEST_PROPERTY_NOTE].num_fail ++;
     }
 
@@ -937,7 +963,7 @@ walk_property_notes (annocheck_data *     data,
     {
       if (tests[TEST_PROPERTY_NOTE].num_pass)
 	{
-	  einfo (VERBOSE, "%s: fail: More than one GNU Property note", data->filename);
+	  einfo (INFO, "%s: fail: More than one GNU Property note", data->filename);
 	  tests[TEST_PROPERTY_NOTE].num_fail ++;
 	}
     }
@@ -1041,11 +1067,14 @@ check_dynamic_section (annocheck_data *    data,
 	case DT_RPATH:
 	case DT_RUNPATH:
 	  {
+	    if (skip_check (TEST_RUN_PATH, NULL))
+	      break;
+
 	    const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
 
 	    if (not_rooted_at_usr (path))
 	      {
-		einfo (VERBOSE, "%s: fail: Bad runpath: %s", data->filename, path);
+		einfo (INFO, "%s: fail: Bad runpath: %s", data->filename, path);
 		tests[TEST_RUN_PATH].num_fail ++;
 	      }
 	  }
@@ -1107,9 +1136,10 @@ interesting_seg (annocheck_data *    data,
     return false;
 
   if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R)
-      && seg->phdr->p_type != PT_GNU_STACK)
+      && seg->phdr->p_type != PT_GNU_STACK
+      && ! skip_check (TEST_RWX_SEG, NULL))
     {
-      einfo (VERBOSE, "%s: fail: seg %d has Read, Write and eXecute flags\n",
+      einfo (INFO, "%s: fail: seg %d has Read, Write and eXecute flags\n",
 	     data->filename, seg->number);
       tests[TEST_RWX_SEG].num_fail ++;
     }
@@ -1689,7 +1719,7 @@ static void
 show_PIE (annocheck_data * data, test * results)
 {
   if (gcc_version != -1 && results->num_fail > 0)
-    fail (data, "Compiled as an ordinary executable (-fPIC) rather than a position independent executable (-fPIE)");
+    fail (data, "Not linked as a position independent executable (ie need to add '-pie' to link command line)");
 
   else /* Ignore maybe results - they should not happen.  */
     pass (data, "Compiled as a position independent binary");
