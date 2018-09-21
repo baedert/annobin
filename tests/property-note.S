@@ -36,7 +36,7 @@ text_end:
 	.dc.b 0x47, 0x41, 0x24, 0x1, 0x33, 0x70	# name (string: version)
 	.dc.b 0x38, 0
 data_start:	
-	.dc.p text_start			# description (symbol name)
-	.dc.p text_end			
+	.dc.a text_start			# description (symbol name)
+	.dc.a text_end			
 data_end:	
 
