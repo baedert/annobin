@@ -862,93 +862,16 @@ annobin_get_node (const_tree decl)
 #endif
 }
 
-/* Create any notes specific to the current function.  */
-
 static void
-annobin_create_function_notes (void * gcc_data, void * user_data)
+annobin_create_function_symbols_and_notes (const char * func_section,
+					   const char * func_name,
+					   const char * asm_name)
 {
-  const char * sec_name = NULL;
-  const char * func_section;
-  const char * func_name;
-  const char * asm_name;
-  const char * start_sym;
-  const char * end_sym;
-  bool         force;
-  unsigned int count;
-
- if (saved_end_sym != NULL)
-    annobin_inform (0, "XXX ICE: end sym %s not NULL\n", saved_end_sym);
-
-  if (! annobin_enable_static_notes || asm_out_file == NULL)
-    return;
-
-  func_name = current_function_name ();
-  asm_name  = function_asm_name ();
-
-  if (func_name == NULL)
-    {
-      func_name = asm_name;
-
-      if (func_name == NULL)
-	{
-	  /* Can this happen ?  */
-	  annobin_inform (0, "ICE: function name not available");
-	  return;
-	}
-    }
-
-  if (asm_name == NULL)
-    asm_name = func_name;
-
-  func_section = annobin_get_section_name (current_function_decl);
-  if (func_section != NULL)
-    /* This is just so that we can free func_section at the end of this code.  */
-    func_section = concat (func_section, NULL);
-
-  else if (flag_function_sections)
-    func_section = concat (".text.", asm_name, NULL);
-
-  else if (flag_reorder_functions /* && targetm_common.have_named_sections*/)
-    {
-      struct cgraph_node * node = annobin_get_node (current_function_decl);
-
-      if (node)
-	{
-	  bool startup = node->only_called_at_startup;
-	  bool exit = node->only_called_at_exit;
-
-	  /* Attempt to determine the section into which the code will be placed.
-	     We could call targetm.asm_out_function_section but that ends up calling
-	     get_section() which will *create* a section if none exists.  This causes
-	     problems because later on gcc will attempt to create the section again
-	     but this time it might be using different flags.
-
-	     So instead we duplicate the code in gcc/varasm.c:default_function_section()
-	     except that we do not actually call get_named_text_section().  */
-
-	  if (node->frequency == NODE_FREQUENCY_UNLIKELY_EXECUTED)
-	    func_section = concat (".text.unlikely", NULL);
-	  else if (startup)
-	    {
-	      if (!in_lto_p && ! flag_profile_values)
-		func_section = concat (".text.startup", NULL);
-	    }
-	  else if (exit)
-	    {
-	      func_section = concat (".text.exit", NULL);
-	    }
-	  else if (node->frequency == NODE_FREQUENCY_HOT)
-	    {
-	      if (!in_lto_p && ! flag_profile_values)
-		func_section = concat (".text.hot", NULL);
-	    }
-	  else if (DECL_COMDAT_GROUP (current_function_decl))
-	    {
-	      targetm.asm_out.unique_section (current_function_decl, 0);
-	      func_section = concat (annobin_get_section_name (current_function_decl), NULL);
-	    }
-	}
-    }
+  const char *  sec_name = NULL;
+  const char *  start_sym;
+  const char *  end_sym;
+  unsigned int  count;
+  bool          force;
 
   /* If the function is going to be in its own section, then we do not know
      where it will end up in memory.  In particular we cannot rely upon it
@@ -962,11 +885,11 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
     {
       /* Include a group name in our section name.  */
       if (strstr (func_section, ".gnu.linkonce."))
-	sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section, ", \"G\", %note, ",
-			   func_section, ".group, comdat", NULL);
+	sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section,
+			   ", \"G\", %note, ", func_section, ".group, comdat", NULL);
       else
-	sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section, ", \"G\", %note, ",
-			   func_section, ".group", NULL);
+	sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section,
+			   ", \"G\", %note, ", func_section, ".group", NULL);
     }
   else
     sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME,  NULL);
@@ -974,13 +897,13 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   /* We use our own function start and end symbols so that they will
      not interfere with the program proper.  In particular if we use
      the function name symbol ourselves then we can cause problems
-     when the linker attempts to relocs against it and finds that it
-     has both PC relative and abolsute relocs.
-     
+     when the linker attempts to resolve relocs against it and finds
+     that it has both PC relative and abolsute relocs.
+
      We try our best to ensure that the new symbols will not clash
      with any other symbols in the program.  */
   start_sym = concat (ANNOBIN_SYMBOL_PREFIX, asm_name, ".start", NULL);
-  end_sym = concat (ANNOBIN_SYMBOL_PREFIX, asm_name, ".end", NULL);
+  end_sym   = concat (ANNOBIN_SYMBOL_PREFIX, asm_name, ".end", NULL);
 
   count = annobin_note_count;
   annobin_emit_function_notes (func_name, start_sym, end_sym, sec_name, force);
@@ -1012,25 +935,6 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	  fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
 	  fprintf (asm_out_file, "%s:\n", start_sym);
 	  fprintf (asm_out_file, "\t.popsection\n");
-#if 0
-	  /* If the function is in a linkonce section then it is possible that
-	     it will be removed by the linker.  In that case we could be left
-	     with a dangling reference from the annobin notes to the now
-	     deleted annobin symbols in the function section.  So we provide
-	     weak definitions of the symbols here.  We also make them
-	     hidden in order to indicate that they are not needed elsewhere.
-
-	     FIXME - Do we need to worry about COMDAT code sections ?  */
-	  if (strstr (func_section, ".gnu.linkonce."))
-	    {
-	      fprintf (asm_out_file, "\t.pushsection %s\n", sec_name);
-	      fprintf (asm_out_file, "\t.weak %s\n", start_sym);
-	      fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
-	      fprintf (asm_out_file, "\t.weak %s\n", end_sym);
-	      fprintf (asm_out_file, "\t.hidden %s\n", end_sym);
-	      fprintf (asm_out_file, "\t.popsection\n");
-	    }
-#endif
 	}
 
       saved_end_sym = end_sym;
@@ -1041,8 +945,113 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
     }
 
   free ((void *) start_sym);
-  free ((void *) func_section);
   free ((void *) sec_name);
+}
+
+/* Create any notes specific to the current function.  */
+
+static void
+annobin_create_function_notes (void * gcc_data, void * user_data)
+{
+  const char * func_section;
+  const char * func_name;
+  const char * asm_name;
+
+ if (saved_end_sym != NULL)
+    annobin_inform (0, "XXX ICE: end sym %s not NULL\n", saved_end_sym);
+
+  if (! annobin_enable_static_notes || asm_out_file == NULL)
+    return;
+
+  func_name = current_function_name ();
+  asm_name  = function_asm_name ();
+
+  if (func_name == NULL)
+    {
+      func_name = asm_name;
+
+      if (func_name == NULL)
+	{
+	  /* Can this happen ?  */
+	  annobin_inform (0, "ICE: function name not available");
+	  return;
+	}
+    }
+
+  if (asm_name == NULL)
+    asm_name = func_name;
+
+  struct cgraph_node * node = annobin_get_node (current_function_decl);
+  bool startup, exit, unlikely, likely;
+
+  if (node)
+    {
+      startup = node->only_called_at_startup;
+      exit = node->only_called_at_exit;
+      unlikely =  node->frequency == NODE_FREQUENCY_UNLIKELY_EXECUTED;
+      node->frequency == NODE_FREQUENCY_HOT;
+    }
+  else
+    startup = exit = unlikely = likely = false;
+
+  func_section = annobin_get_section_name (current_function_decl);
+  if (func_section != NULL)
+    /* This is just so that we can free func_section at the end of this code.  */
+    func_section = concat (func_section, NULL);
+
+  else if (flag_function_sections)
+    {
+      /* Special case: at -O2 or higher startup and exit functions get the prefix added.  */
+      if (startup && flag_reorder_functions)
+	func_section = concat (".text.startup.", asm_name, NULL);
+      else if (exit && flag_reorder_functions)
+	func_section = concat (".text.exit.", asm_name, NULL);
+
+      else
+	func_section = concat (".text.", asm_name, NULL);
+    }
+
+  else if (flag_reorder_functions /* && targetm_common.have_named_sections */)
+    {
+      /* Attempt to determine the section into which the code will be placed.
+	 We could call targetm.asm_out_function_section but that ends up calling
+	 get_section() which will *create* a section if none exists.  This causes
+	 problems because later on gcc will attempt to create the section again
+	 but this time it might be using different flags.
+
+	 So instead we duplicate the code in gcc/varasm.c:default_function_section()
+	 except that we do not actually call get_named_text_section().  */
+
+      if (unlikely)
+	{
+	  /* FIXME: Never actually seen this case occur...  */
+	  func_section = concat (".text.unlikely", NULL);
+	}
+      else if (startup)
+	{
+	  if (!in_lto_p && ! flag_profile_values)
+	    func_section = concat (".text.startup.", asm_name, NULL);
+	}
+      else if (exit)
+	{
+	  func_section = concat (".text.exit.", asm_name, NULL);
+	}
+      else if (likely)
+	{
+	  /* FIXME: Never seen this one, either.  */
+	  if (!in_lto_p && ! flag_profile_values)
+	    func_section = concat (".text.hot.", asm_name, NULL);
+	}
+      else if (DECL_COMDAT_GROUP (current_function_decl))
+	{
+	  targetm.asm_out.unique_section (current_function_decl, 0);
+	  func_section = concat (annobin_get_section_name (current_function_decl), NULL);
+	}
+    }
+
+  annobin_create_function_symbols_and_notes (func_section, func_name, asm_name);
+
+  free ((void *) func_section);
 }
 
 
@@ -1051,6 +1060,8 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 {
   if (! annobin_enable_static_notes || asm_out_file == NULL)
     return;
+
+  struct cgraph_node * node = annobin_get_node (current_function_decl);
 
   if (saved_end_sym)
     {
@@ -1067,6 +1078,73 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
       free ((void *) saved_end_sym);
       saved_end_sym = NULL;
     }
+}
+
+static void
+annobin_emit_start_sym_and_version_note (const char * suffix,
+					 const char   producer_char)
+{
+  if (* suffix)
+    /* We put suffixed text sections into a group so that the linker
+       can delete the notes if the code is discarded.  */
+    fprintf (asm_out_file, "\t.pushsection .text%s, \"axG\", %%progbits, text%s.group\n", suffix, suffix);
+  else
+    fprintf (asm_out_file, "\t.pushsection .text\n");
+    
+  fprintf (asm_out_file, "\t%s %s%s\n", global_file_name_symbols ? ".global" : ".hidden",
+	   annobin_current_filename, suffix);
+
+  /* Note - we used to set the type of the symbol to STT_OBJECT, but that is
+     incorrect because that type is for:
+       "A data object, such as a variable, an array, and so on".
+
+     There is no ELF symbol to represent a compilation unit, (STT_FILE only
+     covers a single source file and has special sematic requirements), so
+     instead we use STT_NOTYPE.  (Ideally we could use STT_LOOS+n, but there
+     is a problem with the GAS assembler, which does not allow such values to
+     be set on symbols).  */
+  fprintf (asm_out_file, "\t.type %s%s, STT_NOTYPE\n", annobin_current_filename, suffix);
+
+  if (target_start_sym_bias)
+    {
+      /* We set the address of the start symbol to be the current address plus
+	 a bias value.  That way this symbol will not be confused for a file
+	 start/function start symbol.
+
+	 There is special code in annobin_output_note() that undoes this bias
+	 when the symbol's address is being used to compute a range for the
+	 notes.  */
+      fprintf (asm_out_file, "\t.equiv %s%s, . + %d\n", annobin_current_filename, suffix, target_start_sym_bias);
+    }
+  else
+    fprintf (asm_out_file, "\t.equiv %s%s, .\n", annobin_current_filename, suffix);
+
+  /* We explicitly set the size of the symbol to 0 so that it will not
+     confuse other tools (eg GDB, elfutils) which look for symbols that
+     cover an address range.  */
+  fprintf (asm_out_file, "\t.size %s%s, 0\n", annobin_current_filename, suffix);
+
+  fprintf (asm_out_file, "\t.popsection\n");
+
+  const char * start = concat (annobin_current_filename, suffix, NULL);
+  const char * end = concat (annobin_current_endname, suffix, NULL);
+  const char * sec;
+
+  if (* suffix)
+    sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix,
+		  ", \"G\", %note, text", suffix, ".group", NULL);
+  else
+    sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix, NULL);
+
+  char buffer [124];
+
+  sprintf (buffer, "%d%c%d", SPEC_VERSION, producer_char, annobin_version);
+  annobin_output_string_note (GNU_BUILD_ATTRIBUTE_VERSION, buffer,
+			      "string: version", start, end, OPEN, sec);
+
+  free ((void *) sec);
+  free ((void *) end);
+  free ((void *) start);
 }
 
 static void
@@ -1137,55 +1215,15 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      Nevertheless we generate this symbol in the .text section
      as at this point we cannot know which section(s) will be used
      by compiled code.  */
-  fprintf (asm_out_file, "\t.pushsection .text\n");
+  annobin_emit_start_sym_and_version_note ("", 'p');
 
-  /* Create a symbol for this compilation unit.  */
-  if (global_file_name_symbols)
-    fprintf (asm_out_file, "\t.global %s\n", annobin_current_filename);
-  else
-    fprintf (asm_out_file, "\t.hidden %s\n", annobin_current_filename);
-
-  /* Note - we used to set the type of the symbol to STT_OBJECT, but that is
-     incorrect because that type is for:
-       "A data object, such as a variable, an array, and so on".
-
-     There is no ELF symbol to represent a compilation unit, (STT_FILE only
-     covers a single source file and has special sematic requirements), so
-     instead we use STT_NOTYPE.  (Ideally we could use STT_LOOS+n, but there
-     is a problem with the GAS assembler, which does not allow such values to
-     be set on symbols).  */
-  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", annobin_current_filename);
-
-  if (target_start_sym_bias)
-    {
-      /* We set the address of the start symbol to be the current address plus
-	 a bias value.  That way this symbol will not be confused for a file
-	 start/function start symbol.
-
-	 There is special code in annobin_output_note() that undoes this bias
-	 when the symbol's address is being used to compute a range for the
-	 notes.  */
-      fprintf (asm_out_file, "\t.equiv %s, . + %d\n", annobin_current_filename,
-	       target_start_sym_bias);
-    }
-  else
-      fprintf (asm_out_file, "\t.equiv %s, .\n", annobin_current_filename);
-
-  /* We explicitly set the size of the symbol to 0 so that it will not
-     confuse other tools (eg GDB, elfutils) which look for symbols that
-     cover an address range.  */
-  fprintf (asm_out_file, "\t.size %s, 0\n", annobin_current_filename);
-
-  fprintf (asm_out_file, "\t.popsection\n");
-
-  /* Output the version of the specification supported.  */
-  sprintf (buffer, "%dp%d", SPEC_VERSION, annobin_version);
-  annobin_output_string_note (GNU_BUILD_ATTRIBUTE_VERSION, buffer,
-			      "string: version",
-			      annobin_current_filename,
-			      annobin_current_endname,
-			      OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
-
+  /* GCC does not provide any way for a plugin to detect if hot/cold partitioning
+     will be performed on a function, and hence a .text.hot and/or .text.unlikely
+     section will be created.  So instead we create global notes to cover these
+     two sections.  */
+  annobin_emit_start_sym_and_version_note (".hot", 'h');
+  annobin_emit_start_sym_and_version_note (".unlikely", 'h');
+  
   /* Record the version of the compiler.  */
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
 			      "string: build-tool", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
@@ -1344,6 +1382,19 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 }
 
 static void
+annobin_emit_end_symbol (const char * suffix)
+{
+  fprintf (asm_out_file, "\t.pushsection .text%s\n", suffix);
+  fprintf (asm_out_file, "\t%s %s%s\n",
+	   global_file_name_symbols ? ".global" : ".hidden",
+	   annobin_current_endname, suffix);
+  fprintf (asm_out_file, "%s%s:\n", annobin_current_endname, suffix);
+  fprintf (asm_out_file, "\t.type %s%s, STT_NOTYPE\n", annobin_current_endname, suffix);
+  fprintf (asm_out_file, "\t.size %s%s, 0\n", annobin_current_endname, suffix);
+  fprintf (asm_out_file, "\t.popsection\n");
+}
+
+static void
 annobin_create_loader_notes (void * gcc_data, void * user_data)
 {
   if (asm_out_file == NULL)
@@ -1355,15 +1406,9 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
 	 Eg because the compilation was run with the -ffunction-sections option.
 	 Nevertheless we generate this symbol because it is needed by the
 	 version note that was generated in annobin_create_global_notes().  */
-      fprintf (asm_out_file, "\t.pushsection .text\n");
-      if (global_file_name_symbols)
-	fprintf (asm_out_file, "\t.global %s\n", annobin_current_endname);
-      else
-	fprintf (asm_out_file, "\t.hidden %s\n", annobin_current_endname);
-      fprintf (asm_out_file, "%s:\n", annobin_current_endname);
-      fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", annobin_current_endname);
-      fprintf (asm_out_file, "\t.size %s, 0\n", annobin_current_endname);
-      fprintf (asm_out_file, "\t.popsection\n");
+      annobin_emit_end_symbol ("");
+      annobin_emit_end_symbol (".hot");
+      annobin_emit_end_symbol (".unlikely");
     }
 
   if (! annobin_enable_dynamic_notes)

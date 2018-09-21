@@ -1159,6 +1159,8 @@ interesting_seg (annocheck_data *    data,
       break;
 
     case PT_NOTE:
+      if (skip_check (TEST_PROPERTY_NOTE, NULL))
+	break;
       /* We want to examine the note segments on x86_64 binaries.  */
       return (e_machine == EM_X86_64);
 
@@ -1184,7 +1186,7 @@ check_seg (annocheck_data *    data,
   size_t     offset = 0;
 
   offset = gelf_getnote (seg->data, offset, & note, & name_off, & data_off);
-  
+
   if (seg->phdr->p_align != 8)
     {
       if (seg->phdr->p_align != 4)
@@ -1202,11 +1204,16 @@ check_seg (annocheck_data *    data,
 	}
     }
 
-  if (note.n_type == NT_GNU_PROPERTY_TYPE_0 && offset != 0)
+  if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
     {
-      einfo (VERBOSE, "%s: More than one GNU Property note in note segment",
-	     data->filename);
-      tests[TEST_PROPERTY_NOTE].num_fail ++;
+      if (offset != 0)
+	{
+	  einfo (VERBOSE, "%s: More than one GNU Property note in note segment",
+		 data->filename);
+	  tests[TEST_PROPERTY_NOTE].num_fail ++;
+	}
+      else
+	tests[TEST_PROPERTY_NOTE].num_pass ++;
     }
 
   return true;
@@ -1520,8 +1527,10 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
     maybe (data, "Corrupt GNU Property note");
   else if (results->num_pass > 0)
     pass (data, "Good GNU Property note");
+  else if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
+    fail (data, "GNU Property note is missing, but -fcf-protection is enabled");
   else
-    fail (data, "GNU Property note is missing");
+    pass (data, "GNU Property note not needed");
 }
 
 static void

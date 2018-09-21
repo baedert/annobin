@@ -58,10 +58,10 @@ foo_ifunc (void)
 extern int bar (int);
 extern int baz (int) __attribute__((cold));
 
-void hot (int) __attribute__((optimize("-O3"),__noinline__));
+void coldy (int) __attribute__((optimize("-O3"),__noinline__));
 
 void
-hot (int x)
+coldy (int x)
 {
   if (x)
     bar (bar (5));
@@ -70,7 +70,7 @@ hot (int x)
 }
 
 void
-hotter (int x)
+colder (int x)
 {
   if (x)
     bar (bar (7));
@@ -87,3 +87,16 @@ func_in_its_own_section (void)
   return 0;
 }
 
+int disabled = -1;
+
+static __attribute__((constructor)) void
+constructor_func (void) 
+{
+  disabled = 1;
+}
+
+static __attribute__((destructor)) void
+destructor_func (void) 
+{
+  disabled = 0;
+}

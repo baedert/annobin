@@ -55,7 +55,7 @@ $GCC -fplugin=$PLUGIN $OPTS $EXTRA_OPTS $srcdir/hello3.c
 
 $GCC -fplugin=$PLUGIN $OPTS $EXTRA_OPTS -shared $srcdir/hello_lib.c -o libhello.so
 
-$GCC -L . -Wl,-z,now -Wl,-z,relro hello.o hello2.o hello3.o -lhello -o missing-notes-test.exe
+$GCC -L . -pie -Wl,-z,now -Wl,-z,relro hello.o hello2.o hello3.o -lhello -o missing-notes-test.exe
 
 # FIXME - we should check that the notes were parsed correctly...
 ../annocheck/annocheck -v missing-notes-test.exe
