@@ -989,7 +989,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       startup = node->only_called_at_startup;
       exit = node->only_called_at_exit;
       unlikely =  node->frequency == NODE_FREQUENCY_UNLIKELY_EXECUTED;
-      node->frequency == NODE_FREQUENCY_HOT;
+      likely = node->frequency == NODE_FREQUENCY_HOT;
     }
   else
     startup = exit = unlikely = likely = false;
@@ -1060,8 +1060,6 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 {
   if (! annobin_enable_static_notes || asm_out_file == NULL)
     return;
-
-  struct cgraph_node * node = annobin_get_node (current_function_decl);
 
   if (saved_end_sym)
     {
@@ -1151,7 +1149,6 @@ static void
 annobin_create_global_notes (void * gcc_data, void * user_data)
 {
   int i;
-  char buffer [1024]; /* FIXME: Is this enough ?  */
 
   if (! annobin_enable_static_notes)
     return;

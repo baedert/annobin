@@ -54,7 +54,7 @@ $GAS $srcdir/property-note.S -o property-note.o
 
 $GCC -fplugin=$PLUGIN $OPTS $EXTRA_OPTS -c $srcdir/hello.c $srcdir/hello3.c
 
-$GCC -fPIE hello.o property-note.o hello3.o -o property-note-test.exe -Wl,--defsym,big_stack=0 -Wl,-z,now
+$GCC -pie hello.o property-note.o hello3.o -o property-note-test.exe -Wl,--defsym,big_stack=0 -Wl,-z,now
 
 $ANNOCHECK property-note-test.exe > property-note-test.out
 

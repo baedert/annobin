@@ -31,11 +31,12 @@ text_end:
 	.section .gnu.build.attributes, "", %note
 	.balign 4
 	.dc.l 8					# size of name
-	.dc.l 16				# size of description
+	.dc.l data_end - data_start		# size of description
 	.dc.l 0x100				# type = OPEN
 	.dc.b 0x47, 0x41, 0x24, 0x1, 0x33, 0x70	# name (string: version)
-	.dc.b 0x38, 0 	
-	.quad text_start			# description (symbol name)
-	.quad text_end			
-
+	.dc.b 0x38, 0
+data_start:	
+	.dc.p text_start			# description (symbol name)
+	.dc.p text_end			
+data_end:	
 
