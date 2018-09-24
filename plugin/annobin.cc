@@ -85,6 +85,7 @@ static int            current_fortify_level = -1;
 static int            current_glibcxx_assertions = -1;
 static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
+static const char *   annobin_extra_prefix = "";
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
 static unsigned char  annobin_version = 9; /* NB. Keep in sync with version_string below.  */
@@ -170,7 +171,7 @@ init_annobin_current_filename (void)
 	       "_%8.8lx_%8.8lx", (long) tv.tv_sec, (long) tv.tv_usec);
     }
 
-  annobin_current_filename = concat (ANNOBIN_SYMBOL_PREFIX, name, NULL);
+  annobin_current_filename = concat (ANNOBIN_SYMBOL_PREFIX, annobin_extra_prefix, name, NULL);
   annobin_current_endname = concat (annobin_current_filename, "_end", NULL);
 }
 
@@ -1437,6 +1438,11 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	 itself.  */
       if (strcmp (key, "disable") == 0)
 	enabled = false;
+
+      /* Private option used to allow building of the plugin whilst
+	 another version of the plugin is also active.  */
+      else if (strcmp (key, "rename") == 0)
+	annobin_extra_prefix = ".1";
 
       else if (strcmp (key, "enable") == 0)
 	enabled = true;
