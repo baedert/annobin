@@ -29,7 +29,7 @@
 ulong         verbosity = 0;
 
 uint          major_version = 8;
-uint          minor_version = 40;
+uint          minor_version = 41;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -985,7 +985,7 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, 
 
   bool use_sym = false;
   bool use_saved = false;
-  GElf_Sym saved_sym;
+  GElf_Sym saved_sym = {0};
   GElf_Sym sym;
   unsigned int symndx;
 
@@ -1000,7 +1000,11 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, 
 	      break;
 	    }
 
-	  if (ends_with (elf_strptr (elf, sym_hdr->sh_link, sym.st_name), "_end", strlen ("_end")))
+	  const char * name = elf_strptr (elf, sym_hdr->sh_link, sym.st_name);
+	  if (ends_with (name, "_end", strlen ("_end")))
+	    continue;
+
+	  if (ends_with (name, ".end", strlen (".end")))
 	    continue;
 
 	  if (! use_saved)
