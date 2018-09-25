@@ -492,9 +492,15 @@ walk_build_notes (annocheck_data *     data,
 
       if (start > end)
 	{
-	  einfo (FAIL, "%s: Corrupt annobin note, start address %#lx > end address %#lx (%d)",
-		 data->filename, start, end, is_little_endian);
-	  return true;
+	  if (e_machine == EM_PPC64 && (start - end) == 2)
+	    /* On the PPC64, start symbols are biased by 2, but end symbols are not...  */
+	    start = end;
+	  else
+	    {
+	      einfo (FAIL, "%s: Corrupt annobin note, start address %#lx > end address %#lx (%d)",
+		     data->filename, start, end, is_little_endian);
+	      return true;
+	    }
 	}
 
       note_data->start = start;
