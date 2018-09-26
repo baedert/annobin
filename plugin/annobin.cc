@@ -75,6 +75,7 @@ static int            global_stack_clash_option = -1;
 #ifdef flag_cf_protection
 static int            global_cf_option = -1;
 #endif
+static bool           annobin_enable_attach = true;
 static signed int     target_start_sym_bias = 0;
 static unsigned int   annobin_note_count = 0;
 static unsigned int   global_GOWall_options = 0;
@@ -101,6 +102,8 @@ static const char *   help_string =  N_("Supported options:\n\
    [no-]static-notes      Do [do not] create static notes (default: do)\n\
    [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
    [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
+   [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
+   rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n\
    stack-threshold=N      Only create function specific stack size notes when the size is > N.");
 
 static struct plugin_info annobin_info =
@@ -193,6 +196,32 @@ annobin_inform (unsigned level, const char * format, ...)
   putc ('\n', stderr);
 }
 
+static void
+annobin_emit_asm (const char * text, const char * comment)
+{
+  unsigned len = 0;
+
+  if (text)
+    {
+      fprintf (asm_out_file, "\t");
+      len = fprintf (asm_out_file, "%s", text);
+    }
+  if (flag_verbose_asm && comment)
+    {
+      if (len == 0)
+	;
+      if (len < 8)
+	fprintf (asm_out_file, "\t\t");
+      else
+	fprintf (asm_out_file, "\t");
+
+      fprintf (asm_out_file, "%s %s", ASM_COMMENT_START, comment);
+    }
+
+  fprintf (asm_out_file, "\n");
+}
+
+
 /* Create the assembler source necessary to build a single ELF Note structure.  */
 
 void
@@ -207,6 +236,8 @@ annobin_output_note (const char * name,
 		     unsigned     type,
 		     const char * sec_name)
 {
+  char buffer1[24];
+  char buffer2[128];
   unsigned i;
 
   if (asm_out_file == NULL)
@@ -226,23 +257,31 @@ annobin_output_note (const char * name,
   /* Note we use 4-byte alignment even on 64-bit targets.  This might seem
      wrong for 64-bit systems, but the ELF standard does not specify any
      alignment requirements for notes, and it matches already established
-     practice for other types of notes.  */
+     practice for other types of notes.  Plus it helps reduce the size of
+     the notes on 64-bit systems which is a good thing.  */
   fprintf (asm_out_file, "\t.balign 4\n");
 
   if (name == NULL)
     {
       if (namesz)
 	annobin_inform (0, "ICE: null name with non-zero size");
-      fprintf (asm_out_file, "\t.dc.l 0\t\t%s no name\n", ASM_COMMENT_START);
+
+      annobin_emit_asm (".dc.l 0", "no name");
     }
   else if (name_is_string)
     {
       if (strlen ((char *) name) != namesz - 1)
 	annobin_inform (0, "ICE: name string '%s' does not match name size %d", name, namesz);
-      fprintf (asm_out_file, "\t.dc.l %u \t%s namesz = strlen (%s)\n", namesz, ASM_COMMENT_START, (char *) name);
+
+      sprintf (buffer1, ".dc.l %u", namesz);
+      sprintf (buffer2 , "namesz [= strlen (%s)]", name);
+      annobin_emit_asm (buffer1, buffer2);
     }
   else
-    fprintf (asm_out_file, "\t.dc.l %u\t\t%s size of name\n", namesz, ASM_COMMENT_START);
+    {
+      sprintf (buffer1, ".dc.l %u", namesz);
+      annobin_emit_asm (buffer1, "size of name");
+    }
 
   if (desc1 == NULL)
     {
@@ -251,7 +290,7 @@ annobin_output_note (const char * name,
       if (desc2 != NULL)
 	annobin_inform (0, "ICE: non-null desc2 with null desc1");
 
-      fprintf (asm_out_file, "\t.dc.l 0\t\t%s no description\n", ASM_COMMENT_START);
+      annobin_emit_asm (".dc.l 0", "no description");
     }
   else if (desc_is_string)
     {
@@ -287,21 +326,23 @@ annobin_output_note (const char * name,
 	  break;
 	}
 
-      fprintf (asm_out_file, "\t.dc.l %u%s%s descsz = sizeof (address%s)\n",
-	       descsz, descsz < 10 ? "\t\t" : "\t", ASM_COMMENT_START, desc2 == NULL ? "" : "es");
+      sprintf (buffer1, ".dc.l %u", descsz);
+      annobin_emit_asm (buffer1, desc2 == NULL ? "descsz [= sizeof (address)]" : "descsz [= 2 * sizeof (address)]");
     }
   else
     {
       if (desc2 != NULL)
 	annobin_inform (0, "ICE: second description not empty for non-string description");
 
-      fprintf (asm_out_file, "\t.dc.l %u\t\t%s size of description\n", descsz, ASM_COMMENT_START);
+      sprintf (buffer1, ".dc.l %u", descsz);
+      annobin_emit_asm (buffer1, "size of description");
     }
 
-  fprintf (asm_out_file, "\t.dc.l %#x\t%s type = %s\n", type, ASM_COMMENT_START,
-	   type == OPEN ? "OPEN" :
-	   type == FUNC ? "FUNC" :
-	   type == NT_GNU_PROPERTY_TYPE_0      ? "PROPERTY_TYPE_0" : "*UNKNOWN*");
+  sprintf (buffer1, ".dc.l %#x", type);
+  annobin_emit_asm (buffer1,
+		    type == OPEN ? "OPEN" :
+		    type == FUNC ? "FUNC" :
+		    type == NT_GNU_PROPERTY_TYPE_0 ? "PROPERTY_TYPE_0" : "*UNKNOWN*");
 
   if (name)
     {
@@ -318,8 +359,7 @@ annobin_output_note (const char * name,
 		     i < (namesz - 1) ? ',' : ' ');
 	}
 
-      fprintf (asm_out_file, "\t%s name (%s)\n",
-	       ASM_COMMENT_START, name_description);
+      annobin_emit_asm (NULL, name_description);
 
       if (namesz % 4)
 	{
@@ -329,7 +369,7 @@ annobin_output_note (const char * name,
 	      namesz++;
 	      fprintf (asm_out_file, " 0%c", namesz % 4 ? ',' : ' ');
 	    }
-	  fprintf (asm_out_file, "\t%s Padding\n", ASM_COMMENT_START);
+	  annobin_emit_asm (NULL, "padding");
 	}
     }
 
@@ -352,15 +392,15 @@ annobin_output_note (const char * name,
 		fprintf (asm_out_file, "- %d", target_start_sym_bias);
 	    }
 
+	  annobin_emit_asm (NULL, desc2 ? "description [symbol names]" : "description [symbol name]");
+
 	  if (desc2)
 	    {
 	      if (annobin_is_64bit)
-		fprintf (asm_out_file, "\n\t.quad %s", (char *) desc2);
+		fprintf (asm_out_file, "\t.quad %s\n", (char *) desc2);
 	      else
-		fprintf (asm_out_file, "\n\t.dc.l %s", (char *) desc2);
+		fprintf (asm_out_file, "\t.dc.l %s\n", (char *) desc2);
 	    }
-
-	  fprintf (asm_out_file, "\t%s description (symbol name)\n", ASM_COMMENT_START);
 	}
       else
 	{
@@ -369,10 +409,14 @@ annobin_output_note (const char * name,
 	  for (i = 0; i < descsz; i++)
 	    {
 	      fprintf (asm_out_file, " %#x", ((unsigned char *) desc1)[i]);
+
 	      if (i == (descsz - 1))
-		fprintf (asm_out_file, "\t%s description\n", ASM_COMMENT_START);
+		annobin_emit_asm (NULL, "description");
 	      else if ((i % 8) == 7)
-		fprintf (asm_out_file, "\t%s description\n\t.dc.b", ASM_COMMENT_START);
+		{
+		  annobin_emit_asm (NULL, "description");
+		  fprintf (asm_out_file, "\t.dc.b");
+		}
 	      else
 		fprintf (asm_out_file, ",");
 	    }
@@ -386,7 +430,7 @@ annobin_output_note (const char * name,
 		  descsz++;
 		  fprintf (asm_out_file, " 0%c", descsz % 4 ? ',' : ' ');
 		}
-	      fprintf (asm_out_file, "\t%s Padding\n", ASM_COMMENT_START);
+	      annobin_emit_asm (NULL, "padding");
 	    }
 	}
     }
@@ -864,6 +908,14 @@ annobin_get_node (const_tree decl)
 }
 
 static void
+annobin_emit_symbol (const char * name)
+{
+  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", name);
+  fprintf (asm_out_file, "\t.hidden %s\n", name);
+  fprintf (asm_out_file, "%s:\n", name);
+}
+
+static void
 annobin_create_function_symbols_and_notes (const char * func_section,
 					   const char * func_name,
 					   const char * asm_name)
@@ -919,24 +971,18 @@ annobin_create_function_symbols_and_notes (const char * func_section,
 	 Note we cannot just use ".equiv start_sym, asm_name", as the
 	 assembler symbol might have a special type, eg ifunc, and this
 	 would be inherited by our symbol.  */
+
+      /* Switch to the text section.  */
       if (func_section == NULL)
-	{
-	  fprintf (asm_out_file, "\t.pushsection .text\n");
-	  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", start_sym);
-	  fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
-	  fprintf (asm_out_file, "%s:\n", start_sym);
-	  fprintf (asm_out_file, "\t.popsection\n");
-	}
+	fprintf (asm_out_file, "\t.pushsection .text\n");
       else
-	{
-	  /* Make sure that the code section is in our group.  */
-	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s.group\n", func_section, func_section);
-	  /* Add the start symbol.  */
-	  fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", start_sym);
-	  fprintf (asm_out_file, "\t.hidden %s\n", start_sym);
-	  fprintf (asm_out_file, "%s:\n", start_sym);
-	  fprintf (asm_out_file, "\t.popsection\n");
-	}
+	/* Make sure that we decalre the section in the same way that
+	   gcc will declare it.  */
+	fprintf (asm_out_file, "\t.pushsection %s, \"ax\", %%progbits\n", func_section);
+
+      /* Add the start symbol.  */
+      annobin_emit_symbol (start_sym);
+      fprintf (asm_out_file, "\t.popsection\n");
 
       saved_end_sym = end_sym;
     }
@@ -1055,7 +1101,6 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   free ((void *) func_section);
 }
 
-
 static void
 annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 {
@@ -1067,11 +1112,64 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
       const char * sn = annobin_get_section_name (current_function_decl);
 
       if (sn == NULL)
-	sn = ".text";
+	{
+	  fprintf (asm_out_file, "\t.pushsection .text\n");
+	}
+      else
+	{
+	  fprintf (asm_out_file, "\t.pushsection %s\n", sn);
 
-      fprintf (asm_out_file, "\t.pushsection %s\n", sn);
-      fprintf (asm_out_file, "\t.hidden %s\n", saved_end_sym);
-      fprintf (asm_out_file, "%s:\n", saved_end_sym);
+	  /* We have a problem.  We want to create a section group containing
+	     the function section, the note section and the relocations.  But
+	     we cannot just emit:
+
+	     .section .text.foo, "axG", %%progbits, foo.group
+
+	     because GCC will emit its own section definition, which does not
+	     attach to a group:
+
+	     .section .text.foo, "ax", %%progbits
+
+	     This will create a *second* section called .text.foo, which is
+	     *not* in the group.  The notes generated by annobin will be
+	     attached to the group, but the code generated by gcc will not.
+
+	     We cannot create a reference from the non-group'ed section
+	     to the group'ed section as this will create a DT_TEXTREL entry
+	     (ie dynamic text relocation) which is not allowed.
+
+	     We cannot access GCC's section structure and set the
+	     SECTION_DECLARED flag as the hash tab holding the structures is
+	     private to the varasm.c file.
+	     
+	     We cannot intercept the asm_named_section() function in GCC as
+	     this is defined by the TARGET_ASM_NAMED_SECTION macro, rather
+	     than being defined in the target structure.
+
+	     If we omit the section group then the notes will work for
+	     retained sections, but they will not be removed for any garbage
+	     collected code.  So then you will have notes covering address
+	     ranges that are probably used for something else.
+
+	     The solution for now is to attach GCC's .text.foo section to the
+	     group created for annobin's .text.foo section by using a new
+	     assembler pseudo-op.  This can be disabled to allow the plugin
+	     to work with older assemblers, although it does mean that notes
+	     for function sections will be discarded by the linker... */	  
+	  if (annobin_enable_attach
+	      /* Do not attach linkonce sections to a gropup - they are already in a group.  */
+	      && strstr (sn, ".gnu.linkonce.") == NULL)
+	      
+	    {
+	      if (flag_verbose_asm)
+		fprintf (asm_out_file, "\t.attach_to_group %s.group\t%s Add the current section to the named group\n",
+			 sn, ASM_COMMENT_START);
+	      else
+		fprintf (asm_out_file, "\t.attach_to_group %s.group\n", sn);
+	    }
+	}
+	     
+      annobin_emit_symbol (saved_end_sym);
       fprintf (asm_out_file, "\t.popsection\n");
 
       free ((void *) saved_end_sym);
@@ -1478,6 +1576,11 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	annobin_enable_static_notes = true;
       else if (strcmp (key, "no-static-notes") == 0)
 	annobin_enable_static_notes = false;
+
+      else if (strcmp (key, "attach") == 0)
+	annobin_enable_attach = true;
+      else if (strcmp (key, "no-attach") == 0)
+	annobin_enable_attach = false;
 
       else if (strcmp (key, "stack-threshold") == 0)
 	{

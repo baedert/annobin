@@ -19,44 +19,33 @@ READELF=readelf
 OBJCOPY=objcopy
 
 PLUGIN=../plugin/.libs/annobin.so
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
+OPTS="-O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 
-$GCC -fplugin=$PLUGIN \
-     -c \
-     -fPIC \
-     -Wall \
-     -g \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS \
+     -g -c \
      -fno-stack-protector \
      -fplugin-arg-annobin-stack-threshold=0x10 \
   $srcdir/hello.c 
 
-$GCC -fplugin=$PLUGIN \
-     -O3 \
-     -c \
-     -fPIC \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS \
+     -O3 -c \
      -fno-stack-protector \
      -fplugin-arg-annobin-global-file-syms \
    $srcdir/hello2.c 
 
-$GCC -fplugin=$PLUGIN \
-     -O2 \
-     -c \
-     -fPIE \
-     -g3 \
-     -fstack-protector-strong \
-     -D_FORTIFY_SOURCE=2 \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS \
+     -g3 -c \
      -fplugin-arg-annobin-no-stack-size-notes \
      -grecord-gcc-switches \
   $srcdir/hello3.c \
 
-$GCC -fplugin=$PLUGIN \
-    -O2 \
-    -fpic \
-    -fstack-protector \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS \
     -shared \
   $srcdir/hello_lib.c \
      -o libhello.so
 
-$GCC -fplugin=$PLUGIN \
+$GCC \
      -L . -pie \
      -Wl,-z,now,-z,relro \
  hello.o hello2.o hello3.o -lhello -o abi-test.exe

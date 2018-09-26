@@ -23,6 +23,7 @@ GCC=gcc
 READELF=readelf
 
 PLUGIN=../plugin/.libs/annobin.so
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
 $GAS --generate-missing-build-notes=yes $srcdir/gap.S -o gap.o
 if [ $? != 0 ];
@@ -31,9 +32,9 @@ then
     exit 0
 fi
 
-$GCC -fplugin=$PLUGIN -c $srcdir/hello.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $srcdir/hello.c 
 
-$GCC -fplugin=$PLUGIN -c $srcdir/hello3.c
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $srcdir/hello3.c
 
 $GCC -nostartfiles -e 0 gap.o -o assembler-gap-test.exe -Wl,--defsym,big_stack=0
 

@@ -21,7 +21,9 @@ GCC=gcc
 
 PLUGIN=../plugin/.libs/annobin.so
 
-$GCC -fplugin=$PLUGIN -c $srcdir/hello.c $srcdir/hello2.c $srcdir/hello3.c $srcdir/hello_lib.c
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
+
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $srcdir/hello.c $srcdir/hello2.c $srcdir/hello3.c $srcdir/hello_lib.c
 $GCC hello.o hello2.o hello3.o hello_lib.o -o section-size.exe
 
 ../annocheck/annocheck -v --disable-hardened --section-size=.gnu.build.attributes --human --ignore-unknown .

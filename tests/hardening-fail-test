@@ -19,13 +19,14 @@ READELF=readelf
 OBJCOPY=objcopy
 
 PLUGIN=../plugin/.libs/annobin.so
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 
-$GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello.c -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
-$GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello2.c -U_GLIBCXX_ASSERTIONS
-$GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello3.c -fno-stack-protector -fshort-enums
-$GCC -fplugin=$PLUGIN -c $OPTS $srcdir/hello_lib.c -O1
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $OPTS $srcdir/hello.c -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $OPTS $srcdir/hello2.c -U_GLIBCXX_ASSERTIONS
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $OPTS $srcdir/hello3.c -fno-stack-protector -fshort-enums
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $OPTS $srcdir/hello_lib.c -O1
 
 $GCC hello.o hello2.o hello3.o hello_lib.o -o hardening-fail-test.exe -Wl,-z,norelro
 

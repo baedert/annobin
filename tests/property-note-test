@@ -22,25 +22,26 @@ GCC=gcc
 ANNOCHECK=../annocheck/annocheck
 PLUGIN=../plugin/.libs/annobin.so
 
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fPIE -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 EXTRA_OPTS="-fcf-protection -mstackrealign"
 
-$GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
 if [ $? != 0 ];
 then
     echo "Compiler might not support -fcf-protection, retrying without it"
     EXTRA_OPTS="-mstackrealign"
-    $GCC -fplugin=$PLUGIN -g $OPTS  $EXTRA_OPTS $srcdir/hello_hard.c 
+    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS  $EXTRA_OPTS $srcdir/hello_hard.c 
     if [ $? != 0 ];
     then
 	echo "Compiler might not support -mstackrealign, retrying without it"
 	EXTRA_OPTS="-fcf-protection"
-	$GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+	$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
 	if [ $? != 0 ];
 	then
 	    echo "Compiler might not support either -fcf-protection or -mstackrealign, retrying without both"
 	    EXTRA_OPTS=""
-	    $GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+	    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
 	    if [ $? != 0 ];
 	    then
 		echo "Failed :-("
@@ -52,7 +53,7 @@ fi
 
 $GAS $srcdir/property-note.S -o property-note.o
 
-$GCC -fplugin=$PLUGIN $OPTS $EXTRA_OPTS -c $srcdir/hello.c $srcdir/hello3.c
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -c $srcdir/hello.c $srcdir/hello3.c
 
 $GCC -pie hello.o property-note.o hello3.o -o property-note-test.exe -Wl,--defsym,big_stack=0 -Wl,-z,now
 

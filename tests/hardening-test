@@ -20,25 +20,26 @@ OBJCOPY=objcopy
 ANNOCHECK=../annocheck/annocheck
 PLUGIN=../plugin/.libs/annobin.so
 
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 EXTRA_OPTS="-fcf-protection -mstackrealign"
 
-$GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
 if [ $? != 0 ];
 then
     echo "Compiler might not support -fcf-protection, retrying without it"
     EXTRA_OPTS="-mstackrealign"
-    $GCC -fplugin=$PLUGIN -g $OPTS  $EXTRA_OPTS $srcdir/hello_hard.c 
+    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
     if [ $? != 0 ];
     then
 	echo "Compiler might not support -mstackrealign, retrying without it"
 	EXTRA_OPTS="-fcf-protection"
-	$GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+	$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
 	if [ $? != 0 ];
 	then
 	    echo "Compiler might not support either -fcf-protection or -mstackrealign, retrying without both"
 	    EXTRA_OPTS=""
-	    $GCC -fplugin=$PLUGIN -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+	    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
 	    if [ $? != 0 ];
 	    then
 		echo "Failed :-("
@@ -48,14 +49,14 @@ then
     fi
 fi
 
-$GCC -fplugin=$PLUGIN -O3 $OPTS $EXTRA_OPTS $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -O3 $OPTS $EXTRA_OPTS $srcdir/hello2.c 
 
-$GCC -fplugin=$PLUGIN -g3 $OPTS $EXTRA_OPTS $srcdir/hello3.c
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g3 $OPTS $EXTRA_OPTS $srcdir/hello3.c
 
-$GCC -fplugin=$PLUGIN $OPTS $EXTRA_OPTS -shared $srcdir/hello_lib.c -o libhello.so
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -shared $srcdir/hello_lib.c -o libhello.so
 
 # Link without system files as these may not have been hardened.
-$GCC -fplugin=$PLUGIN \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -nostartfiles -nostdlib -Wl,-e,0 \
      -Wl,--defsym=__stack_chk_fail=0 \
      -Wl,--defsym=__stack_chk_fail_local=0 \

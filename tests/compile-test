@@ -12,24 +12,26 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so compile-test.exe
+rm -f hello.o hello2.o hello3.o libhello.so compile-test.exe hello.i hello.s
 
 GCC=gcc
 READELF=readelf
 OBJCOPY=objcopy
 
 PLUGIN=../plugin/.libs/annobin.so
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
-$GCC -fplugin=$PLUGIN \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -c \
      -fPIC \
      -Wall \
      -g \
+     --save-temps -fverbose-asm \
      -fno-stack-protector \
      -fplugin-arg-annobin-stack-threshold=0x10 \
  $srcdir/hello.c 
 
-$GCC -fplugin=$PLUGIN \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -O3 \
      -c \
      -fPIC \
@@ -37,7 +39,7 @@ $GCC -fplugin=$PLUGIN \
      -fplugin-arg-annobin-global-file-syms \
  $srcdir/hello2.c 
 
-$GCC -fplugin=$PLUGIN \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -O2 \
      -c \
      -fPIE \
@@ -48,7 +50,7 @@ $GCC -fplugin=$PLUGIN \
      -grecord-gcc-switches \
  $srcdir/hello3.c \
 
-$GCC -fplugin=$PLUGIN \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
     -O2 \
     -fpic \
     -fstack-protector \
