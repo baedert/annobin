@@ -791,7 +791,7 @@ annobin_emit_function_notes (const char *  func_name,
 	  || global_stack_prot_option != flag_stack_protect))
     {
       annobin_inform (1, "Recording stack protection status of %d for %s",
-		      flag_stack_protect, func_name); 
+		      flag_stack_protect, func_name);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, flag_stack_protect,
 				   "numeric: -fstack-protector status",
@@ -915,94 +915,19 @@ annobin_emit_symbol (const char * name)
   fprintf (asm_out_file, "%s:\n", name);
 }
 
-static void
-annobin_create_function_symbols_and_notes (const char * func_section,
-					   const char * func_name,
-					   const char * asm_name)
-{
-  const char *  sec_name = NULL;
-  const char *  start_sym;
-  const char *  end_sym;
-  unsigned int  count;
-  bool          force;
-
-  /* If the function is going to be in its own section, then we do not know
-     where it will end up in memory.  In particular we cannot rely upon it
-     being included in the memory range covered by the global notes.  So for
-     such functions we always generate a set of notes.
-
-     FIXME: We do not currently generate a full range of notes.  */
-  force = func_section != NULL;
-
-  if (func_section != NULL)
-    {
-      /* Include a group name in our section name.  */
-      if (strstr (func_section, ".gnu.linkonce."))
-	sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section,
-			   ", \"G\", %note, ", func_section, ".group, comdat", NULL);
-      else
-	sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section,
-			   ", \"G\", %note, ", func_section, ".group", NULL);
-    }
-  else
-    sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME,  NULL);
-
-  /* We use our own function start and end symbols so that they will
-     not interfere with the program proper.  In particular if we use
-     the function name symbol ourselves then we can cause problems
-     when the linker attempts to resolve relocs against it and finds
-     that it has both PC relative and abolsute relocs.
-
-     We try our best to ensure that the new symbols will not clash
-     with any other symbols in the program.  */
-  start_sym = concat (ANNOBIN_SYMBOL_PREFIX, asm_name, ".start", NULL);
-  end_sym   = concat (ANNOBIN_SYMBOL_PREFIX, asm_name, ".end", NULL);
-
-  count = annobin_note_count;
-  annobin_emit_function_notes (func_name, start_sym, end_sym, sec_name, force);
-
-  if (annobin_note_count > count)
-    {
-      /* If we generated any notes then we must make sure that the start
-	 symbol has been emitted as well.  The end symbols will be emitted
-	 by annobin_create_function_end_symbol, once the body of the function
-	 has been written to the assembler file.
-
-	 Note we cannot just use ".equiv start_sym, asm_name", as the
-	 assembler symbol might have a special type, eg ifunc, and this
-	 would be inherited by our symbol.  */
-
-      /* Switch to the text section.  */
-      if (func_section == NULL)
-	fprintf (asm_out_file, "\t.pushsection .text\n");
-      else
-	/* Make sure that we decalre the section in the same way that
-	   gcc will declare it.  */
-	fprintf (asm_out_file, "\t.pushsection %s, \"ax\", %%progbits\n", func_section);
-
-      /* Add the start symbol.  */
-      annobin_emit_symbol (start_sym);
-      fprintf (asm_out_file, "\t.popsection\n");
-
-      saved_end_sym = end_sym;
-    }
-  else
-    {
-      free ((void *) end_sym);
-    }
-
-  free ((void *) start_sym);
-  free ((void *) sec_name);
-}
-
 /* Create any notes specific to the current function.  */
 
 static void
 annobin_create_function_notes (void * gcc_data, void * user_data)
 {
-  const char * func_section;
-  const char * func_name;
-  const char * asm_name;
+  const char *  func_section;
+  const char *  func_name;
+  const char *  asm_name;
+  const char *  sec_name = NULL;
+  const char *  start_sym;
+  const char *  end_sym;
+  unsigned int  count;
+  bool          force;
 
  if (saved_end_sym != NULL)
     annobin_inform (0, "XXX ICE: end sym %s not NULL\n", saved_end_sym);
@@ -1096,8 +1021,82 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	}
     }
 
-  annobin_create_function_symbols_and_notes (func_section, func_name, asm_name);
+  /* If the function is going to be in its own section, then we do not know
+     where it will end up in memory.  In particular we cannot rely upon it
+     being included in the memory range covered by the global notes.  So for
+     such functions we always generate a set of notes.
 
+     FIXME: We do not currently generate a full range of notes.  */
+  force = func_section != NULL;
+
+  if (func_section != NULL)
+    {
+      /* Include a group name in our section name.  */
+      if (DECL_COMDAT_GROUP (current_function_decl))
+	{
+	  sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section,
+			     ", \"G\", %note, ",
+			     IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)),
+			      ", comdat", NULL);
+	}
+      else
+	{
+	  sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section,
+			     ", \"G\", %note, ", func_section, ".group", NULL);
+	}
+    }
+  else
+    sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME,  NULL);
+
+  /* We use our own function start and end symbols so that they will
+     not interfere with the program proper.  In particular if we use
+     the function name symbol ourselves then we can cause problems
+     when the linker attempts to resolve relocs against it and finds
+     that it has both PC relative and abolsute relocs.
+
+     We try our best to ensure that the new symbols will not clash
+     with any other symbols in the program.  */
+  start_sym = concat (ANNOBIN_SYMBOL_PREFIX, asm_name, ".start", NULL);
+  end_sym   = concat (ANNOBIN_SYMBOL_PREFIX, asm_name, ".end", NULL);
+
+  count = annobin_note_count;
+  annobin_emit_function_notes (func_name, start_sym, end_sym, sec_name, force);
+
+  if (annobin_note_count > count)
+    {
+      /* If we generated any notes then we must make sure that the start
+	 symbol has been emitted as well.  The end symbols will be emitted
+	 by annobin_create_function_end_symbol, once the body of the function
+	 has been written to the assembler file.
+
+	 Note we cannot just use ".equiv start_sym, asm_name", as the
+	 assembler symbol might have a special type, eg ifunc, and this
+	 would be inherited by our symbol.  */
+
+      /* Switch to the text section.  Make sure that we decalre the section
+	 in the same way that gcc will declare it.  */
+      if (func_section == NULL)
+	fprintf (asm_out_file, "\t.pushsection .text\n");
+      else if (DECL_COMDAT_GROUP (current_function_decl))
+	fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s, comdat\n",
+		 func_section,
+		 IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)));
+      else
+	fprintf (asm_out_file, "\t.pushsection %s, \"ax\", %%progbits\n", func_section);
+
+      /* Add the start symbol.  */
+      annobin_emit_symbol (start_sym);
+      fprintf (asm_out_file, "\t.popsection\n");
+
+      saved_end_sym = end_sym;
+    }
+  else
+    {
+      free ((void *) end_sym);
+    }
+
+  free ((void *) start_sym);
+  free ((void *) sec_name);
   free ((void *) func_section);
 }
 
@@ -1114,6 +1113,12 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
       if (sn == NULL)
 	{
 	  fprintf (asm_out_file, "\t.pushsection .text\n");
+	}
+      else if (DECL_COMDAT_GROUP (current_function_decl))
+	{
+	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s, comdat\n",
+		   sn,
+		   IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)));
 	}
       else
 	{
@@ -1141,7 +1146,7 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	     We cannot access GCC's section structure and set the
 	     SECTION_DECLARED flag as the hash tab holding the structures is
 	     private to the varasm.c file.
-	     
+
 	     We cannot intercept the asm_named_section() function in GCC as
 	     this is defined by the TARGET_ASM_NAMED_SECTION macro, rather
 	     than being defined in the target structure.
@@ -1155,20 +1160,21 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	     group created for annobin's .text.foo section by using a new
 	     assembler pseudo-op.  This can be disabled to allow the plugin
 	     to work with older assemblers, although it does mean that notes
-	     for function sections will be discarded by the linker... */	  
-	  if (annobin_enable_attach
-	      /* Do not attach linkonce sections to a gropup - they are already in a group.  */
-	      && strstr (sn, ".gnu.linkonce.") == NULL)
-	      
+	     for function sections will be discarded by the linker.
+
+	     Note - we do not have to do this for COMDAT sections as they are
+	     already part of a section group, and gcc always includes the group
+	     name in its .section directives.  */
+	  if (annobin_enable_attach)
 	    {
+	      fprintf (asm_out_file, "\t.attach_to_group %s.group", sn);
 	      if (flag_verbose_asm)
-		fprintf (asm_out_file, "\t.attach_to_group %s.group\t%s Add the current section to the named group\n",
-			 sn, ASM_COMMENT_START);
-	      else
-		fprintf (asm_out_file, "\t.attach_to_group %s.group\n", sn);
+		fprintf (asm_out_file, " %s Add the current section to the named group",
+			 ASM_COMMENT_START);
+	      fprintf (asm_out_file, "\n");
 	    }
 	}
-	     
+
       annobin_emit_symbol (saved_end_sym);
       fprintf (asm_out_file, "\t.popsection\n");
 
@@ -1187,7 +1193,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
     fprintf (asm_out_file, "\t.pushsection .text%s, \"axG\", %%progbits, text%s.group\n", suffix, suffix);
   else
     fprintf (asm_out_file, "\t.pushsection .text\n");
-    
+
   fprintf (asm_out_file, "\t%s %s%s\n", global_file_name_symbols ? ".global" : ".hidden",
 	   annobin_current_filename, suffix);
 
@@ -1319,7 +1325,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      two sections.  */
   annobin_emit_start_sym_and_version_note (".hot", 'h');
   annobin_emit_start_sym_and_version_note (".unlikely", 'h');
-  
+
   /* Record the version of the compiler.  */
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
 			      "string: build-tool", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
@@ -1463,7 +1469,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     record_fortify_level (-1, OPEN);
   if (current_glibcxx_assertions == -1)
     record_glibcxx_assertions (0, OPEN);
-    
+
   /* Record the PIC status.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
 			       "numeric: PIC", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
