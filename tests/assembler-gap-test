@@ -15,7 +15,7 @@
 
 # Test building an assembler source file without creating a gap in the notes.
 
-rm -f hello.o hello2.o
+rm -f hello.o hello2.o hello3.o
 rm -f gap1.o assembler-gap-test1.exe assembler-gas-test1.out
 rm -f gap2.o assembler-gap-test2.exe assembler-gas-test2.out
 
@@ -38,19 +38,16 @@ $GAS --gdwarf-2 $srcdir/gap.S -o gap1.o
 # are not using all of the hardening options as we want to be sure
 # that annocheck will notice.
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello2.c 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello3.c 
 
-# Link the assembler file betwween the two C files, so that there
-# will be a gap in the notes.
-
-$GCC -nostartfiles -e 0 hello.o gap1.o hello2.o -o assembler-gap-test1.exe \
-     -Wl,--defsym,extern_func2=0 \
+# Put our assemblt file between C files, so that the gap will be noticed.
+$GCC -nostartfiles -e 0 hello.o hello2.o gap1.o hello3.o -o assembler-gap-test1.exe \
      -Wl,--defsym,extern_func3=0 \
      -Wl,-z,now -pie
 
-# FIXME - we should check that the notes were parsed correctly...
-$ANNOCHECK -v --enable-builtby --all assembler-gap-test1.exe > assembler-gap-test1.out
+$ANNOCHECK -v -v --enable-builtby --all assembler-gap-test1.exe > assembler-gap-test1.out
 
 # FAIL if a gap is NOT reported
 grep --silent -e "Gaps were detected" assembler-gap-test1.out
@@ -71,12 +68,10 @@ then
     exit 0
 fi
 
-$GCC -nostartfiles -e 0 hello.o gap2.o hello2.o -o assembler-gap-test2.exe \
-     -Wl,--defsym,extern_func2=0 \
+$GCC -nostartfiles -e 0 hello.o hello2.o gap2.o hello3.o -o assembler-gap-test2.exe \
      -Wl,--defsym,extern_func3=0 \
      -Wl,-z,now -pie
 
-# FIXME - we should check that the notes were parsed correctly...
 $ANNOCHECK -v assembler-gap-test2.exe > assembler-gap-test2.out
 
 # FAIL if a gap is NOT reported

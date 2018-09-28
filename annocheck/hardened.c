@@ -1257,9 +1257,14 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
   ulong     scn_name = 0;
 
   /* These tests should be redundant, but just in case...  */
-  if (ignore_gaps
-      || gap->start >= gap->end)
+  if (ignore_gaps)
     return true;
+
+  if (gap->start >= gap->end)
+    {
+      einfo (VERBOSE2, "gap ignored - start after end!");
+      return true;
+    }
 
   /* Gaps narrower than the alignment of the .text section are assumed
      to be padding between functions, and so can be ignored.  In theory
@@ -1267,11 +1272,17 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
      check that they are filled with NOP instructions.  But that is
      overkill at the moment.  */
   if ((gap->end - gap->start) < text_section_alignment)
-    return true;
+    {
+      einfo (VERBOSE2, "gap ignored - smaller than text section alignment");
+      return true;
+    }
 
   /* We also ignore small gaps for now.  */
   if ((gap->end - gap->start) < 32)
-    return true;
+    {
+      einfo (VERBOSE2, "gap ignored - very small");
+      return true;
+    }
 
   /* Find out where the gap starts and ends.  */
   if (data->is_32bit)
@@ -1319,7 +1330,10 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
   if (addr2_scn == NULL)
     return false;
   if (addr1_scn != addr2_scn)
-    return true;
+    {
+      einfo (VERBOSE2, "gap ignored - crosses section boundary");
+      return true;
+    }
 
   /* On the PowerPC64, the linker can insert PLT resolver stubs at the end of the .text section.
      These will be unannotated, but they can safely be ignored.
@@ -1467,9 +1481,15 @@ check_for_gaps (annocheck_data * data)
 	  if (sym)
 	    {
 	      if (skip_check (TEST_MAX, sym))
-		continue;
+		{
+		  einfo (VERBOSE2, "gap ignored - special symbol: %s", sym);
+		  continue;
+		}
 	      if (skip_gap_sym (sym))
-		continue;
+		{
+		  einfo (VERBOSE2, "gap ignored - linker symbol: %s", sym);
+		  continue;
+		}
 	    }
 
 	  gap_found = true;
