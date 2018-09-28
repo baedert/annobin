@@ -19,8 +19,8 @@ rm -f hello.o hello2.o
 rm -f gap1.o assembler-gap-test1.exe assembler-gas-test1.out
 rm -f gap2.o assembler-gap-test2.exe assembler-gas-test2.out
 
-# GAS=as
-GAS=/work/builds/binutils/current/x86_64-pc-linux-gnu/gas/as-new 
+GAS=as
+# GAS=/work/builds/binutils/current/x86_64-pc-linux-gnu/gas/as-new 
 GCC=gcc
 READELF=readelf
 ANNOCHECK=../annocheck/annocheck
