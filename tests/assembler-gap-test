@@ -15,37 +15,77 @@
 
 # Test building an assembler source file without creating a gap in the notes.
 
-rm -f hello.o gap.o hello3.o assembler-gap-test.exe assembler-gas-test.out
+rm -f hello.o hello2.o
+rm -f gap1.o assembler-gap-test1.exe assembler-gas-test1.out
+rm -f gap2.o assembler-gap-test2.exe assembler-gas-test2.out
 
 # GAS=as
 GAS=/work/builds/binutils/current/x86_64-pc-linux-gnu/gas/as-new 
 GCC=gcc
 READELF=readelf
+ANNOCHECK=../annocheck/annocheck
 
 PLUGIN=../plugin/.libs/annobin.so
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
-$GAS --generate-missing-build-notes=yes $srcdir/gap.S -o gap.o
+# Assemble the file, and include debug information which will
+# identify the producer as being AS.
+
+$GAS --gdwarf-2 $srcdir/gap.S -o gap1.o
+
+# Compile a C source file as well, so that we end up with a binary
+# that was partially built by GCC, and partially not.  Note - we
+# are not using all of the hardening options as we want to be sure
+# that annocheck will notice.
+
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello.c 
+
+# Link the assembler file betwween the two C files, so that there
+# will be a gap in the notes.
+
+$GCC -nostartfiles -e 0 hello.o gap1.o hello2.o -o assembler-gap-test1.exe \
+     -Wl,--defsym,extern_func2=0 \
+     -Wl,--defsym,extern_func3=0 \
+     -Wl,-z,now -pie
+
+# FIXME - we should check that the notes were parsed correctly...
+$ANNOCHECK -v --enable-builtby --all assembler-gap-test1.exe > assembler-gap-test1.out
+
+# FAIL if a gap is NOT reported
+grep --silent -e "Gaps were detected" assembler-gap-test1.out
+if [ $? != 0 ];
+then
+    echo "assembler-gap-test: FAIL: GAP *not* found in notes:"
+    cat assembler-gap-test1.out
+    exit 1
+fi
+
+# Repeat the test, but this time, instead of generating debug inofrmation
+# generate a note.
+
+$GAS --generate-missing-build-notes=yes $srcdir/gap.S -o gap2.o
 if [ $? != 0 ];
 then
     echo "Assembler does not support generating build notes.  Skipping test."
     exit 0
 fi
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $srcdir/hello.c 
-
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $srcdir/hello3.c
-
-$GCC -nostartfiles -e 0 gap.o -o assembler-gap-test.exe -Wl,--defsym,big_stack=0
+$GCC -nostartfiles -e 0 hello.o gap2.o hello2.o -o assembler-gap-test2.exe \
+     -Wl,--defsym,extern_func2=0 \
+     -Wl,--defsym,extern_func3=0 \
+     -Wl,-z,now -pie
 
 # FIXME - we should check that the notes were parsed correctly...
-$READELF --notes --wide assembler-gap-test.exe > /dev/null 2> assembler-gap-test.out
+$ANNOCHECK -v assembler-gap-test2.exe > assembler-gap-test2.out
 
-# FAIL if there was a gap in the notes...
-if [ -s assembler-gap-test.out ];
+# FAIL if a gap is NOT reported
+grep --silent -e "No gaps found" assembler-gap-test2.out
+if [ $? != 0 ];
 then
-    echo "GAP found in notes:"
-    cat assembler-gap-test.out
+    echo "assembler-gap-test: FAIL: GAP found in notes:"
+    cat assembler-gap-test2.out
     exit 1
 fi
+
 
