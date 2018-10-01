@@ -1,4 +1,4 @@
-/* Checks the hardened status of the given file. 
+/* Checks the hardened status of the given file.
    Copyright (c) 2018 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
@@ -80,7 +80,7 @@ enum test_index
   TEST_TEXTREL,
   TEST_THREADS,
   TEST_WRITEABLE_GOT,
-  
+
   TEST_MAX
 };
 
@@ -174,7 +174,7 @@ start (annocheck_data * data)
   else
     {
       Elf64_Ehdr * hdr = elf64_getehdr (data->elf);
-      
+
       e_type = hdr->e_type;
       e_machine = hdr->e_machine;
       is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
@@ -210,7 +210,7 @@ interesting_sec (annocheck_data *     data,
     }
   else if (debuginfo_file)
     return false;
-      
+
   /* If the file has a stack section then check its permissions.  */
   if (streq (sec->secname, ".stack"))
     {
@@ -315,7 +315,7 @@ skip_check (enum test_index check, const char * component_name)
     }
 
   static const char * skip_these_funcs[] =
-    { 
+    {
      /* We know that some glibc startup functions cannot be compiled
 	with stack protection enabled.  So do not complain about them.  */
      "_init",
@@ -346,8 +346,10 @@ skip_check (enum test_index check, const char * component_name)
 static void
 record_range (ulong start, ulong end)
 {
-  if (start >= end)
-    return;  /* FIXME: We should ICE if start > end.  */
+  if (start == end)
+    return;
+
+  assert (start < end);
 
   if (next_free_range >= num_allocated_ranges)
     {
@@ -359,7 +361,6 @@ record_range (ulong start, ulong end)
     }
 
   /* Nothing clever here.  Just record the data.  */
-  assert (start < end);
   ranges[next_free_range].start = start;
   ranges[next_free_range].end   = end;
   next_free_range ++;
@@ -369,7 +370,7 @@ record_range (ulong start, ulong end)
    unless we know that the string will be needed.  */
 
 static void
-report_i (einfo_type           type, 
+report_i (einfo_type           type,
 	  const char *         format,
 	  annocheck_data *     data,
 	  annocheck_section *  sec,
@@ -386,7 +387,7 @@ report_i (einfo_type           type,
 }
 	
 static void
-report_s (einfo_type           type, 
+report_s (einfo_type           type,
 	  const char *         format,
 	  annocheck_data *     data,
 	  annocheck_section *  sec,
@@ -401,7 +402,7 @@ report_s (einfo_type           type,
 
   einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
 }
-	
+
 static bool
 walk_build_notes (annocheck_data *     data,
 		  annocheck_section *  sec,
@@ -534,7 +535,7 @@ walk_build_notes (annocheck_data *     data,
   uint          value = -1;
 
   switch (attr_type)
-    { 
+    {
     case GNU_BUILD_ATTRIBUTE_TYPE_NUMERIC:
       {
 	uint shift = 0;
@@ -668,7 +669,7 @@ walk_build_notes (annocheck_data *     data,
 		  data, sec, note_data, prefer_func_name, value);
 	  tests[TEST_STACK_PROT].num_maybe ++;
 	  break;
-	  
+
 	case 0: /* NONE */
 	  report_s (INFO, "%s: fail: (%s): No stack protection enabled",
 		    data, sec, note_data, prefer_func_name, NULL);
@@ -805,7 +806,7 @@ walk_build_notes (annocheck_data *     data,
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_FORTIFY].num_pass ++;
 	      break;
-	    }	      
+	    }
 	}
       break;
 
@@ -859,13 +860,13 @@ walk_build_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      report_s (INFO, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS", 
+	      report_s (INFO, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_GLIBCXX_ASSERTIONS].num_fail ++;
 	      break;
 
 	    case 1:
-	      report_s (VERBOSE2, "%s: pass: (%s): Compiled with -D_GLIBCXX_ASSERTIONS", 
+	      report_s (VERBOSE2, "%s: pass: (%s): Compiled with -D_GLIBCXX_ASSERTIONS",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_GLIBCXX_ASSERTIONS].num_pass ++;
 	      break;
@@ -939,7 +940,7 @@ walk_build_notes (annocheck_data *     data,
 	    }
 	}
       break;
-      
+
     default:
       break;
     }
@@ -1004,7 +1005,7 @@ check_note_section (annocheck_data *    data,
     {
       return annocheck_walk_notes (data, sec, walk_property_notes, NULL);
     }
-  
+
   return true;
 }
 
@@ -1092,7 +1093,7 @@ check_dynamic_section (annocheck_data *    data,
     }
 
   return true;
-}  
+}
 
 static bool
 check_code_section (annocheck_data *     data,
@@ -1299,7 +1300,7 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
 	    {
 	      scn_end = shdr->sh_addr + shdr->sh_size;
 	      scn_name = shdr->sh_name;
-	      
+
 	      if (shdr->sh_addr <= gap->end && scn_end >= gap->end)
 		addr2_scn = scn;
 	    }
@@ -1394,6 +1395,7 @@ compare_range (const void * r1, const void * r2)
      We adjust its range so that the gap detection code does not get confused.  */
   n1->start = n2->start;
   n1->end   = n2->end;
+  assert (n1->start < n1->end);
   return 0;
 }
 
@@ -1434,7 +1436,7 @@ check_for_gaps (annocheck_data * data)
   qsort (ranges, next_free_range, sizeof ranges[0], compare_range);
 
   hardened_note_data current = ranges[0];
-  
+
   /* Scan the ranges array.  */
   bool gap_found = false;
   unsigned i;
@@ -1690,7 +1692,7 @@ show_WRITEABLE_GOT (annocheck_data * data, test * results)
   if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Relocations for the GOT/PLT sections are writeable");
   else
-    pass (data, "GOT/PLT relocations are read only"); 
+    pass (data, "GOT/PLT relocations are read only");
 }
 
 static void
@@ -2026,7 +2028,11 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 
   string = dwarf_formstring (& attr);
   if (string == NULL)
-    return einfo (ERROR, "%s: DWARF DW_AT_producer attribute does not have a string value", data->filename);
+    {
+      einfo (VERBOSE, "%s: WARN: DWARF DW_AT_producer attribute uses non-string form %u",
+	     data->filename, dwarf_whatform (& attr));
+      return true;
+    }
 
   if (strstr (string, "GNU") == NULL)
     {
@@ -2050,7 +2056,7 @@ finish (annocheck_data * data)
     /* Check to see if something other than gcc produced parts
        of this binary.  */
     (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
-  
+
   if (! ignore_gaps
       && e_type != ET_REL)
     {
@@ -2099,7 +2105,7 @@ usage (void)
   int i;
   for (i = 0; i < TEST_MAX; i++)
     einfo (INFO, "    --skip-%-19sDisables: %s", tests[i].name, tests[i].description);
-  
+
   einfo (INFO, "  The tool will also report missing annobin data unless:");
   einfo (INFO, "    --ignore-gaps             Ignore missing annobin data");
 
@@ -2153,7 +2159,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 }
 
 
-struct checker hardened_checker = 
+struct checker hardened_checker =
 {
   "Hardened",
   start,

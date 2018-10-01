@@ -769,7 +769,7 @@ record_glibcxx_assertions (bool on, int type)
 }
 
 static const char * saved_end_sym;
-
+	 
 static void
 annobin_emit_function_notes (const char *  func_name,
 			     const char *  start_sym,
@@ -929,7 +929,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   unsigned int  count;
   bool          force;
 
- if (saved_end_sym != NULL)
+  if (saved_end_sym != NULL)
     annobin_inform (0, "XXX ICE: end sym %s not NULL\n", saved_end_sym);
 
   if (! annobin_enable_static_notes || asm_out_file == NULL)
@@ -971,14 +971,24 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
     /* This is just so that we can free func_section at the end of this code.  */
     func_section = concat (func_section, NULL);
 
+  else if (DECL_COMDAT_GROUP (current_function_decl))
+    {
+      targetm.asm_out.unique_section (current_function_decl, 0);
+      func_section = concat (annobin_get_section_name (current_function_decl), NULL);
+     }
+
   else if (flag_function_sections)
     {
       /* Special case: at -O2 or higher startup and exit functions get the prefix added.  */
-      if (startup && flag_reorder_functions)
-	func_section = concat (".text.startup.", asm_name, NULL);
-      else if (exit && flag_reorder_functions)
-	func_section = concat (".text.exit.", asm_name, NULL);
-
+      if (flag_reorder_functions)
+	{
+          if (startup)
+	    func_section = concat (".text.startup.", asm_name, NULL);
+          else if (exit)
+	    func_section = concat (".text.exit.", asm_name, NULL);
+	  else
+	    func_section = concat (".text.", asm_name, NULL);
+	 }
       else
 	func_section = concat (".text.", asm_name, NULL);
     }
@@ -1013,11 +1023,6 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	  /* FIXME: Never seen this one, either.  */
 	  if (!in_lto_p && ! flag_profile_values)
 	    func_section = concat (".text.hot.", asm_name, NULL);
-	}
-      else if (DECL_COMDAT_GROUP (current_function_decl))
-	{
-	  targetm.asm_out.unique_section (current_function_decl, 0);
-	  func_section = concat (annobin_get_section_name (current_function_decl), NULL);
 	}
     }
 
@@ -1116,6 +1121,7 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	}
       else if (DECL_COMDAT_GROUP (current_function_decl))
 	{
+annobin_inform (0, "END sym in section group %s",IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)));
 	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s, comdat\n",
 		   sn,
 		   IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)));
@@ -1124,6 +1130,7 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	{
 	  fprintf (asm_out_file, "\t.pushsection %s\n", sn);
 
+annobin_inform (0, "END sym in section  %s", sn);
 	  /* We have a problem.  We want to create a section group containing
 	     the function section, the note section and the relocations.  But
 	     we cannot just emit:
