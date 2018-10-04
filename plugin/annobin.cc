@@ -1012,19 +1012,22 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       else if (startup)
 	{
 	  if (!in_lto_p && ! flag_profile_values)
-	    func_section = concat (".text.startup.", asm_name, NULL);
+	    func_section = concat (".text.startup", NULL);
 	}
       else if (exit)
 	{
-	  func_section = concat (".text.exit.", asm_name, NULL);
+	  func_section = concat (".text.exit", NULL);
 	}
       else if (likely)
 	{
 	  /* FIXME: Never seen this one, either.  */
 	  if (!in_lto_p && ! flag_profile_values)
-	    func_section = concat (".text.hot.", asm_name, NULL);
+	    func_section = concat (".text.hot", NULL);
 	}
     }
+
+  annobin_inform (1, "Function '%s' is assumed to be in section '%s'",
+		  asm_name, func_section ? func_section : ".text");
 
   /* If the function is going to be in its own section, then we do not know
      where it will end up in memory.  In particular we cannot rely upon it
@@ -1111,26 +1114,45 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
   if (! annobin_enable_static_notes || asm_out_file == NULL)
     return;
 
-  if (saved_end_sym)
-    {
-      const char * sn = annobin_get_section_name (current_function_decl);
+  if (saved_end_sym == NULL)
+    return;
 
+  const char * sn = annobin_get_section_name (current_function_decl);
+
+  if (DECL_COMDAT_GROUP (current_function_decl))
+    {
+      fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s, comdat\n",
+	       sn ? sn : ".text",
+	       IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)));
+    }
+  else 
+    {
       if (sn == NULL)
 	{
-	  fprintf (asm_out_file, "\t.pushsection .text\n");
+	  if (flag_reorder_functions)
+	    {
+	      struct cgraph_node * node = annobin_get_node (current_function_decl);
+
+	      if (node != NULL)
+		{
+		  if (node->only_called_at_startup)
+		    sn = ".text.startup";
+		  else if (node->only_called_at_exit)
+		    sn = ".text.exit";
+		  else if (node->frequency == NODE_FREQUENCY_UNLIKELY_EXECUTED)
+		    sn = ".text.unlikely";
+		  else if (node->frequency == NODE_FREQUENCY_HOT)
+		    sn = ".text.hot";
+		}
+	    }
 	}
-      else if (DECL_COMDAT_GROUP (current_function_decl))
-	{
-annobin_inform (0, "END sym in section group %s",IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)));
-	  fprintf (asm_out_file, "\t.pushsection %s, \"axG\", %%progbits, %s, comdat\n",
-		   sn,
-		   IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)));
-	}
+
+      if (sn == NULL)
+	fprintf (asm_out_file, "\t.pushsection .text\n");
       else
 	{
 	  fprintf (asm_out_file, "\t.pushsection %s\n", sn);
 
-annobin_inform (0, "END sym in section  %s", sn);
 	  /* We have a problem.  We want to create a section group containing
 	     the function section, the note section and the relocations.  But
 	     we cannot just emit:
@@ -1181,13 +1203,13 @@ annobin_inform (0, "END sym in section  %s", sn);
 	      fprintf (asm_out_file, "\n");
 	    }
 	}
-
-      annobin_emit_symbol (saved_end_sym);
-      fprintf (asm_out_file, "\t.popsection\n");
-
-      free ((void *) saved_end_sym);
-      saved_end_sym = NULL;
     }
+
+  annobin_emit_symbol (saved_end_sym);
+  fprintf (asm_out_file, "\t.popsection\n");
+
+  free ((void *) saved_end_sym);
+  saved_end_sym = NULL;
 }
 
 static void

@@ -860,7 +860,7 @@ walk_build_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      report_s (INFO, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
+	      report_s (VERBOSE, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_GLIBCXX_ASSERTIONS].num_fail ++;
 	      break;
@@ -1260,8 +1260,9 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
   /* These tests should be redundant, but just in case...  */
   if (ignore_gaps)
     return true;
-
-  if (gap->start >= gap->end)
+  if (gap->start == gap->end)
+    return true;
+  if (gap->start > gap->end)
     {
       einfo (VERBOSE2, "gap ignored - start after end!");
       return true;
@@ -1271,17 +1272,26 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
      to be padding between functions, and so can be ignored.  In theory
      there could be executable code in such gaps, and so we should also
      check that they are filled with NOP instructions.  But that is
-     overkill at the moment.  */
+     overkill at the moment.  Plus at the moment the default x86_64
+     linker map does not appear to fill gaps with NOPs... */
   if ((gap->end - gap->start) < text_section_alignment)
     {
       einfo (VERBOSE2, "gap ignored - smaller than text section alignment");
       return true;
     }
 
-  /* We also ignore small gaps for now.  */
-  if ((gap->end - gap->start) < 32)
+  /* FIXME: The linker can create fill regions in the map that are larger
+     than the text section alignment.  Not sure why, but it does happen.
+     (cf lconvert in the qt5-qttools package which has a gap of 0x28 bytes
+     between the end of .obj/main.o and the start of .obj/numerus.o).
+
+     At the moment we have no way of determinining if a gap is because
+     of linker filling or missing notes.  (Other than examining a linker
+     map).  So we use a heuristic to allow for linker fill regions.
+     0x2f is the largest such gap that I have seen so far...  */
+  if ((gap->end - gap->start) <= 0x2f)
     {
-      einfo (VERBOSE2, "gap ignored - very small");
+      einfo (VERBOSE2, "gap ignored - probably linker padding");
       return true;
     }
 
@@ -1327,9 +1337,11 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
 	}
     }
 
-  /* If the gap starts in one section, but ends in a different section then we ignore it.  */
+  /* If the gap is not inside one or more sections, then something funny has gone on...  */
   if (addr2_scn == NULL)
     return false;
+
+  /* If the gap starts in one section, but ends in a different section then we ignore it.  */
   if (addr1_scn != addr2_scn)
     {
       einfo (VERBOSE2, "gap ignored - crosses section boundary");
@@ -1404,13 +1416,24 @@ compare_range (const void * r1, const void * r2)
 static bool
 skip_gap_sym (const char * sym)
 {
+  /* G++ will generate non-virtual thunk functions all on its own,
+     without telling the annobin plugin about them.  Detect them
+     here and do not complain about the gap in the coverage.  */
+  if (const_strneq (sym, "_ZThn"))
+    return true;
+
+  /* If the symbol is for a function/file that we know has special
+     reasons for not being proplerly annotated then we skip it.  */
+  if (skip_check (TEST_MAX, sym))
+    return true;
+
   if (e_machine == EM_386)
     {
       if (const_strneq (sym, "__x86.get_pc_thunk")
 	  || const_strneq (sym, "_x86_indirect_thunk_"))
 	return true;
     }
-  else   if (e_machine == EM_PPC64)
+  else if (e_machine == EM_PPC64)
     {
       if (const_strneq (sym, "_savegpr")
 	  || const_strneq (sym, "_restgpr")
@@ -1471,26 +1494,38 @@ check_for_gaps (annocheck_data * data)
 	    continue;
 
 	  const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
-
-	  if ((sym == NULL || strstr (sym, ".end"))
-	      && gap.start != align (gap.start, 16))
+	  if (sym && skip_gap_sym (sym))
 	    {
-	      sym = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
-	      if (sym)
-		gap.start = align (gap.start, 16);
+	      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym);
+
+	      /* FIXME: Really we should advance the gap start to the end of the address
+		 range covered by the symbol and then check for gaps again.  But this will
+		 probably causes us more problems than we want to handle right now.  */
+	      continue;
 	    }
 
-	  if (sym)
+	  /* If the start of the range was not aligned to a function boundary
+	     then try again, this time with an aligned start symbol.
+	     FIXME: 16 is suitable for x86_64, but not necessarily other architectures.  */
+	  if (gap.start != align (gap.start, 16))
 	    {
-	      if (skip_check (TEST_MAX, sym))
+	      const char * sym2;
+
+	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
+	      if (sym2 != NULL
+		  && ! streq (sym, sym2)
+		  && strstr (sym2, ".end") == NULL)
 		{
-		  einfo (VERBOSE2, "gap ignored - special symbol: %s", sym);
-		  continue;
-		}
-	      if (skip_gap_sym (sym))
-		{
-		  einfo (VERBOSE2, "gap ignored - linker symbol: %s", sym);
-		  continue;
+		  if (skip_gap_sym (sym2))
+		    {
+		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
+
+		      /* See comment above.  */
+		      continue;
+		    }
+
+		  gap.start = align (gap.start, 16);
+		  sym = sym2;
 		}
 	    }
 
@@ -1668,7 +1703,12 @@ show_RUN_PATH (annocheck_data * data, test * results)
     return;
 
   if (results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
+    {
+      if (BE_VERBOSE)
+	fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
+      else
+	fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr.  Run with -v to see");
+    }
   else
     pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr");
 }
