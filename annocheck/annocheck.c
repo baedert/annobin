@@ -29,7 +29,7 @@
 ulong         verbosity = 0;
 
 uint          major_version = 8;
-uint          minor_version = 45;
+uint          minor_version = 46;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
