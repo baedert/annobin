@@ -1513,7 +1513,7 @@ check_for_gaps (annocheck_data * data)
 
 	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
 	      if (sym2 != NULL
-		  && ! streq (sym, sym2)
+		  && (sym == NULL || ! streq (sym, sym2))
 		  && strstr (sym2, ".end") == NULL)
 		{
 		  if (skip_gap_sym (sym2))
@@ -1703,12 +1703,7 @@ show_RUN_PATH (annocheck_data * data, test * results)
     return;
 
   if (results->num_fail > 0 || results->num_maybe > 0)
-    {
-      if (BE_VERBOSE)
-	fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
-      else
-	fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr.  Run with -v to see");
-    }
+    fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
   else
     pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr");
 }
