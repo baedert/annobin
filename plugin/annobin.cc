@@ -1108,6 +1108,45 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   free ((void *) func_section);
 }
 
+typedef struct attach_item
+{
+  const char *          name;
+  struct attach_item *  next;
+} attach_item;
+
+static attach_item * attach_list = NULL;
+  
+static void
+queue_attachment (const char * section_name)
+{
+  attach_item * item = (attach_item *) xmalloc (sizeof item);
+
+  item->name = concat (section_name, NULL);
+  item->next = attach_list;
+  attach_list = item;
+}
+
+static void
+emit_queued_attachments (void)
+{
+  if (!annobin_enable_attach)
+    return;
+
+  attach_item * item;
+  for (item = attach_list; item != NULL; item = item->next)
+    {
+      fprintf (asm_out_file, "\t.pushsection %s\n", item->name);
+      fprintf (asm_out_file, "\t.attach_to_group %s.group", item->name);
+      if (flag_verbose_asm)
+	fprintf (asm_out_file, " %s Add the %s section to the %s.group group",
+		 ASM_COMMENT_START, item->name, item->name);
+      fprintf (asm_out_file, "\n");
+      fprintf (asm_out_file, "\t.popsection\n");
+      free ((void *) item->name);
+      /* FIXME: memory leak: free (item).  */
+    }
+}
+
 static void
 annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 {
@@ -1193,15 +1232,13 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 
 	     Note - we do not have to do this for COMDAT sections as they are
 	     already part of a section group, and gcc always includes the group
-	     name in its .section directives.  */
+	     name in its .section directives.
+
+	     Note - we do not emit these attach directives here as function
+	     sections can be reused.  So instead we accumulate them and issue
+	     them all at the end of compilation.  */
 	  if (annobin_enable_attach)
-	    {
-	      fprintf (asm_out_file, "\t.attach_to_group %s.group", sn);
-	      if (flag_verbose_asm)
-		fprintf (asm_out_file, " %s Add the current section to the named group",
-			 ASM_COMMENT_START);
-	      fprintf (asm_out_file, "\n");
-	    }
+	    queue_attachment (sn);
 	}
     }
 
@@ -1540,6 +1577,8 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
       annobin_emit_end_symbol ("");
       annobin_emit_end_symbol (".hot");
       annobin_emit_end_symbol (".unlikely");
+      if (annobin_enable_attach)
+	emit_queued_attachments ();
     }
 
   if (! annobin_enable_dynamic_notes)
