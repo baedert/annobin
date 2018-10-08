@@ -1596,11 +1596,7 @@ show_SHORT_ENUM (annocheck_data * data, test * results)
   else if (results->num_fail > 0 || results->num_pass > 0)
     pass (data, "Consistent use of the -fshort-enum option");
   else if (gcc_version == -1)
-    {
-      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      einfo (VERBOSE, "%s: skip: No enum size notes were found, but the binary was not built with gcc",
-	     data->filename);
-    }
+    skip (data, "No enum size notes were found, but the binary was not built with gcc");
   else
     maybe (data, "No data about the use of -fshort-enum available");
 }
@@ -1625,8 +1621,7 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
   else if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
     {
       if (gcc_version == -1)
-	einfo (VERBOSE, "%s: SKIP: -fcf-protection is enabled, but some parts of the binary have been created by a non-GCC tool, and so do not have the necessary markup.  This means that CET protection will *not* be enabled for any part of the binary",
-	       data->filename);
+	skip (data, "-fcf-protection is enabled, but some parts of the binary have been created by a non-GCC tool, and so do not have the necessary markup.  This means that CET protection will *not* be enabled for any part of the binary");
       else
 	fail (data, "GNU Property note is missing, but -fcf-protection is enabled");
     }
@@ -1769,9 +1764,7 @@ show_OPTIMIZATION (annocheck_data * data, test * results)
     }
   else if (gcc_version == -1)
     {
-      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      einfo (VERBOSE, "%s: skip: No optimization notes found, but the binary was not built with gcc",
-	     data->filename);
+      skip (data, "No optimization notes found, but the binary was not built with gcc");
     }
   else
     {
@@ -1807,9 +1800,7 @@ show_PIC (annocheck_data * data, test * results)
     }
   else if (gcc_version == -1)
     {
-      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      einfo (VERBOSE, "%s: skip: No PIC/PIE notes found, but the binary was not built with gcc",
-	     data->filename);
+      skip (data, "No PIC/PIE notes found, but the binary was not built with gcc");
     }
   else
     {
@@ -1855,9 +1846,7 @@ show_STACK_PROT (annocheck_data * data, test * results)
     }
   else if (gcc_version == -1)
     {
-      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      einfo (VERBOSE, "%s: skip: No stack protection notes found, but the binary was not built with gcc",
-	     data->filename);
+      skip (data, "No stack protection notes found, but the binary was not built with gcc");
     }
   else
     {
@@ -1931,9 +1920,7 @@ show_FORTIFY (annocheck_data * data, test * results)
     }
   else if (gcc_version == -1)
     {
-      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      einfo (VERBOSE, "%s: skip: No FORTIFY_SOURCE notes found, but the binary was not built with gcc",
-	     data->filename);
+      skip (data, "No FORTIFY_SOURCE notes found, but the binary was not built with gcc");
     }
   else
     {
@@ -2008,8 +1995,7 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
   else if (gcc_version == -1)
     {
       /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      einfo (VERBOSE, "%s: skip: No GLIBCXX_ASSERTONS notes found, but the binary was not built with gcc",
-	     data->filename);
+      skip (data, "No GLIBCXX_ASSERTONS notes found, but the binary was not built with gcc");
     }
   else
     {
@@ -2049,8 +2035,7 @@ show_STACK_REALIGN (annocheck_data * data, test * results)
   else if (gcc_version == -1)
     {
       /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      einfo (VERBOSE, "%s: skip: No stack realign notes found, but the binary was not built with gcc",
-	     data->filename);
+      skip (data, "No stack realign notes found, but the binary was not built with gcc");
     }
   else
     {
@@ -2072,7 +2057,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
   string = dwarf_formstring (& attr);
   if (string == NULL)
     {
-      einfo (VERBOSE, "%s: WARN: DWARF DW_AT_producer attribute uses non-string form %u",
+      einfo (VERBOSE2, "%s: WARN: DWARF DW_AT_producer attribute uses non-string form %u",
 	     data->filename, dwarf_whatform (& attr));
       return true;
     }
@@ -2104,8 +2089,7 @@ finish (annocheck_data * data)
       && e_type != ET_REL)
     {
       if (gcc_version == -1)
-	einfo (VERBOSE, "%s: skip: Not checking for gaps in a non-gcc compiled binary",
-	       data->filename);
+	skip (data, "Not checking for gaps in a non-gcc compiled binary");
       else
 	check_for_gaps (data);
     }

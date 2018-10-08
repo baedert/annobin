@@ -29,7 +29,7 @@
 ulong         verbosity = 0;
 
 uint          major_version = 8;
-uint          minor_version = 49;
+uint          minor_version = 50;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -308,7 +308,10 @@ process_command_line (uint argc, const char * argv[])
 		debug_rpm = parameter;
 	      else
 		goto unknown_arg;
-		  
+
+	      if (parameter == NULL)
+		goto arg_missing_argument;
+
 	      if (parameter[0] != '/')
 		{
 		  const char * tmp;
@@ -346,6 +349,10 @@ process_command_line (uint argc, const char * argv[])
 		parameter = argv[a++];
 	      else
 		parameter ++;
+
+	      if (parameter == NULL)
+		goto arg_missing_argument;
+
 	      /* Prefix arguments accumulate.  */
 	      prefix = concat (prefix, parameter, NULL);
 	      break;
@@ -356,6 +363,10 @@ process_command_line (uint argc, const char * argv[])
 		parameter = argv[a++];
 	      else
 		parameter ++;	      
+
+	      if (parameter == NULL)
+		goto arg_missing_argument;
+
 	      level = strtoul (parameter, NULL, 0);
 	      if (level < 1)
 		{
@@ -372,6 +383,10 @@ process_command_line (uint argc, const char * argv[])
 		    parameter = argv[a++];
 		  else
 		    parameter ++;	      
+
+		  if (parameter == NULL)
+		    goto arg_missing_argument;
+
 		  tmpdir = parameter;
 		  assert (tmpdir[0] == '/');
 		}
@@ -400,6 +415,9 @@ process_command_line (uint argc, const char * argv[])
 	    unknown_arg:
 	      einfo (WARN, "Unrecognised command line option: %s ", orig_arg);
 	      usage ();
+	      return false;
+	    arg_missing_argument:
+	      einfo (ERROR, "Command line option '%s' needs an argument", orig_arg);
 	      return false;
 	    }
 	}

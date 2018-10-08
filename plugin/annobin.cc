@@ -1166,24 +1166,34 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
     }
   else 
     {
+      struct cgraph_node * node = annobin_get_node (current_function_decl);
+
       if (sn == NULL)
 	{
-	  if (flag_reorder_functions)
+	  if (flag_reorder_functions && node != NULL)
 	    {
-	      struct cgraph_node * node = annobin_get_node (current_function_decl);
-
-	      if (node != NULL)
-		{
-		  if (node->only_called_at_startup)
-		    sn = ".text.startup";
-		  else if (node->only_called_at_exit)
-		    sn = ".text.exit";
-		  else if (node->frequency == NODE_FREQUENCY_UNLIKELY_EXECUTED)
-		    sn = ".text.unlikely";
-		  else if (node->frequency == NODE_FREQUENCY_HOT)
-		    sn = ".text.hot";
-		}
+	      if (node->only_called_at_startup)
+		sn = ".text.startup";
+	      else if (node->only_called_at_exit)
+		sn = ".text.exit";
+	      else if (node->frequency == NODE_FREQUENCY_UNLIKELY_EXECUTED)
+		sn = ".text.unlikely";
+	      else if (node->frequency == NODE_FREQUENCY_HOT)
+		sn = ".text.hot";
 	    }
+	}
+      else if (flag_reorder_functions && node != NULL)
+	{
+	  const char * asm_name  = function_asm_name ();
+
+	  if (asm_name == NULL)
+	    asm_name = current_function_name ();
+	  
+	  /* Startup and exit functions override the default function-sections semantics.  */
+	  if (node->only_called_at_startup)
+	    sn = concat (".text.startup.", asm_name, NULL);
+	  else if (node->only_called_at_exit)
+	    sn = concat (".text.exit.", asm_name, NULL);
 	}
 
       if (sn == NULL)
@@ -1241,6 +1251,9 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	    queue_attachment (sn);
 	}
     }
+
+  annobin_inform (1, "Function '%s' is assumed to end in section '%s'",
+		  function_asm_name(), sn ? sn : ".text");
 
   annobin_emit_symbol (saved_end_sym);
   fprintf (asm_out_file, "\t.popsection\n");
