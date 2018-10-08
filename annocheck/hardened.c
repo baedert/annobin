@@ -62,7 +62,7 @@ enum test_index
 {
   TEST_BIND_NOW,
   TEST_CF_PROTECTION,
-  TEST_DYNAMIC_SEGMENT,
+  TEST_DYNAMIC,
   TEST_FORTIFY,
   TEST_GLIBCXX_ASSERTIONS,
   TEST_GNU_RELRO,
@@ -86,7 +86,7 @@ enum test_index
 
 static void show_BIND_NOW           (annocheck_data *, test *);
 static void show_CF_PROTECTION      (annocheck_data *, test *);
-static void show_DYNAMIC_SEGMENT    (annocheck_data *, test *);
+static void show_DYNAMIC            (annocheck_data *, test *);
 static void show_FORTIFY            (annocheck_data *, test *);
 static void show_GLIBCXX_ASSERTIONS (annocheck_data *, test *);
 static void show_GNU_RELRO          (annocheck_data *, test *);
@@ -114,7 +114,7 @@ static test tests [TEST_MAX] =
 {
   TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8 only)"),
-  TEST (dynamic-segment,    DYNAMIC_SEGMENT,    "There is a dynamic segment/section present"),
+  TEST (dynamic,            DYNAMIC,            "There is at most one dynamic segment/section"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
   TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writeable"),
@@ -1047,6 +1047,16 @@ check_dynamic_section (annocheck_data *    data,
 {
   size_t num_entries = sec->shdr.sh_size / sec->shdr.sh_entsize;
 
+  if (tests[TEST_DYNAMIC].num_pass == 0)
+    {
+      tests[TEST_DYNAMIC].num_pass = 1;
+    }
+  else
+    {
+      einfo (VERBOSE, "fail: %s: contains multiple dynamic sections", data->filename);
+      tests[TEST_DYNAMIC].num_fail ++;
+    }
+
   /* Walk the dynamic tags.  */
   while (num_entries --)
     {
@@ -1162,7 +1172,14 @@ interesting_seg (annocheck_data *    data,
       break;
 
     case PT_DYNAMIC:
-      tests[TEST_DYNAMIC_SEGMENT].num_pass ++;
+      if (tests[TEST_DYNAMIC].num_pass < 2)
+	/* 0 means it had no dynamic sections, 1 means it had a dynamic section.  */
+	tests[TEST_DYNAMIC].num_pass = 2;
+      else
+	{
+	  einfo (VERBOSE, "fail: %s: contains multiple dynamic segments.", data->filename);
+	  tests[TEST_DYNAMIC].num_fail ++;
+	}
       break;
 
     case PT_NOTE:
@@ -1244,6 +1261,12 @@ static void
 pass (annocheck_data * data, const char * message)
 {
   einfo (VERBOSE, "%s: pass: %s", data->filename, message);
+}
+
+static void
+skip (annocheck_data * data, const char * message)
+{
+  einfo (VERBOSE, "%s: skip: %s", data->filename, message);
 }
 
 /* Returns true if GAP is one that can be ignored.  */
@@ -1586,9 +1609,9 @@ static void
 show_PROPERTY_NOTE (annocheck_data * data, test * results)
 {
   if (e_machine != EM_X86_64)
-    return;
+    skip (data, "The GNU Property note is only significant on x86_64 binaries");
 
-  if (results->num_fail > 0)
+  else if (results->num_fail > 0)
     {
       if (BE_VERBOSE)
 	fail (data, "Bad GNU Property note");
@@ -1614,29 +1637,25 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
 static void
 show_BIND_NOW (annocheck_data * data, test * results)
 {
-  /* Only executables need to have their binding checked.  */
   if (e_type != ET_EXEC && e_type != ET_DYN)
-    return;
-
-  if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
+    skip (data, "Only executables need -Wl,-z,now");
+  else if (tests[TEST_DYNAMIC].num_pass == 0)
+    skip (data, "No dynamic segment, no need for -Wl,-z,now");
+  else if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Not linked with -Wl,-z,now");
   else
     pass (data, "Linked with -Wl,-z,now");
 }
 
 static void
-show_DYNAMIC_SEGMENT (annocheck_data * data, test * results)
+show_DYNAMIC (annocheck_data * data, test * results)
 {
-  /* Relocateable object files do not have dynamic segments.  */
-  if (e_type == ET_REL)
-    return;
-
-  if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
-    maybe (data, "Dynamic segment is absent");
-  else if (results->num_pass > 1)
-    maybe (data, "Multiple dynamic segments found!");
+  if (results->num_fail > 0)
+    fail (data, "Multiple dynamic sections/segments found");
+  else if (results->num_pass == 0)
+    pass (data, "No dynamic sections/segments found");
   else
-    pass (data, "Dynamic segment is present");
+    pass (data, "One dynamic section/segment found");
 }
 
 static void
@@ -1644,10 +1663,11 @@ show_GNU_RELRO (annocheck_data * data, test * results)
 {
   /* Relocateable object files are not yet linked.  */
   if (e_type == ET_REL)
-    return;
-
-  if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "Linked without -Wl,-z,relro");
+    skip (data, "No need to check for -Wl,-z,relro in object files");
+  else if (tests[TEST_DYNAMIC].num_pass == 0)
+    skip (data, "No dynamic segment, no need for -Wl,-z,relro");
+  else if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
+    fail (data, "Not linked with -Wl,-z,relro");
   else
     pass (data, "Linked with -Wl,-z,relro");
 }
@@ -1655,11 +1675,10 @@ show_GNU_RELRO (annocheck_data * data, test * results)
 static void
 show_GNU_STACK (annocheck_data * data, test * results)
 {
-  /* Relocateable object files do not have a stack section.  */
+  /* Relocateable object files do not have a stack segment.  */
   if (e_type == ET_REL)
-    return;
-
-  if (results->num_fail > 0 || results->num_maybe > 0)
+    skip (data, "Object files do not need a stack segment");
+  else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Executable stack found");
   else if (results->num_pass > 1)
     maybe (data, "Multiple GNU stack segments found!");
@@ -1672,11 +1691,9 @@ show_GNU_STACK (annocheck_data * data, test * results)
 static void
 show_RWX_SEG (annocheck_data * data, test * results)
 {
-  /* Relocateable object files do not have segments.  */
   if (e_type == ET_REL)
-    return;
-
-  if (results->num_fail > 0 || results->num_maybe > 0)
+    skip (data, "Object files do not have segments");
+  else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "A segment with RWX permissions was found");
   else
     pass (data, "No RWX segments found");
@@ -1685,11 +1702,9 @@ show_RWX_SEG (annocheck_data * data, test * results)
 static void
 show_TEXTREL (annocheck_data * data, test * results)
 {
-  /* Relocateable object files can have text relocations.  */
   if (e_type == ET_REL)
-    return;
-
-  if (results->num_fail > 0 || results->num_maybe > 0)
+    skip (data, "Object files are allowed text relocations");
+  else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Text relocations found");
   else
     pass (data, "No text relocations found");
@@ -1698,11 +1713,9 @@ show_TEXTREL (annocheck_data * data, test * results)
 static void
 show_RUN_PATH (annocheck_data * data, test * results)
 {
-  /* Relocateable object files do not need a runtime path.  */
   if (e_type == ET_REL)
-    return;
-
-  if (results->num_fail > 0 || results->num_maybe > 0)
+    skip (data, "Object files do not need a runtime path");
+  else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
   else
     pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr");
@@ -1720,11 +1733,9 @@ show_THREADS (annocheck_data * data, test * results)
 static void
 show_WRITEABLE_GOT (annocheck_data * data, test * results)
 {
-  /* Relocateable object files do not have a GOT.  */
   if (e_type == ET_REL)
-    return;
-
-  if (results->num_fail > 0 || results->num_maybe > 0)
+    skip (data, "Object files do not have a GOT");
+  else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Relocations for the GOT/PLT sections are writeable");
   else
     pass (data, "GOT/PLT relocations are read only");
@@ -1857,15 +1868,13 @@ show_STACK_PROT (annocheck_data * data, test * results)
 static void
 show_STACK_CLASH (annocheck_data * data, test * results)
 {
-  /* The ARM does not have stack clash protection support.  */
   if (e_machine == EM_ARM)
-    return;
+    skip (data, "Stack clash support is not enabled on the ARM");
 
-  /* GCC 6 and earlier did not support stack clash protection.  */
-  if (gcc_version < 7)
-    return;
+  else if (gcc_version < 7)
+    skip (data, "Stack clash protection is only enabled in gcc 8+");
 
-  if (results->num_fail > 0)
+  else if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
 	fail (data, "Parts of the binary were compiled without stack clash protection");
@@ -1936,13 +1945,12 @@ static void
 show_CF_PROTECTION (annocheck_data * data, test * results)
 {
   if (e_machine != EM_386 && e_machine != EM_X86_64)
-    return;
+    skip (data, "Control flow protection is only supported on x86 binaries");
 
-  /* GCC 7 and earlier did not support stack clash protection.  */
-  if (gcc_version < 8)
-    return;
+  else if (gcc_version < 8)
+    skip (data, "Control flow protectio is only provided by gcc v8+");
 
-  if (results->num_fail > 0)
+  else if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
 	fail (data, "Parts of the binary were compiled without sufficient -fcf-protection");
@@ -2013,9 +2021,9 @@ static void
 show_STACK_REALIGN (annocheck_data * data, test * results)
 {
   if (e_machine != EM_386)
-    return;
+    skip (data, "Stack realignment support is only needed on i686 binaries");
 
-  if (results->num_fail > 0)
+  else if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
 	fail (data, "Parts of the binary were compiled without -mstack-realign");

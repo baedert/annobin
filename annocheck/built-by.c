@@ -167,13 +167,13 @@ builtby_process_arg (const char * arg, const char ** argv, const uint argc, uint
 {
   const char * parameter;
 
-  if (streq (arg, "--enable-builtby"))
+  if (streq (arg, "--enable-builtby") || streq (arg, "--enable-built-by"))
     {
       disabled = false;
       return true;
     }
 
-  if (streq (arg, "--disable-builtby"))
+  if (streq (arg, "--disable-builtby") || streq (arg, "--disable-built-by"))
     {
       disabled = true;
       return true;
