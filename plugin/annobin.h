@@ -145,3 +145,8 @@ extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;
 extern unsigned long  annobin_total_static_stack_usage;
 extern unsigned long  annobin_max_stack_size;
+
+/* Utlity macros to make the code cleaner.  */
+#define streq(a,b)	  (strcmp ((a), (b)) == 0)
+#define strneq(a,b,n)	  (strncmp ((a), (b), (n)) == 0)
+#define const_strneq(a,b) (strncmp ((a), (b), sizeof (b) - 1) == 0)
