@@ -607,13 +607,13 @@ walk_build_notes (annocheck_data *     data,
 	{
 	case -1:
 	default:
-	  report_i (VERBOSE, "%s: mayb: (%s): unexpected value for PIC note (%x)",
+	  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for PIC note (%x)",
 		    data, sec, note_data, prefer_func_name, value);
 	  tests[TEST_PIC].num_maybe ++;
 	  break;
 
 	case 0:
-	  report_s (INFO, "%s: fail: (%s): compiled without -fPIC/-fPIE",
+	  report_s (VERBOSE, "%s: FAIL: (%s): compiled without -fPIC/-fPIE",
 		  data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_PIC].num_fail ++;
 	  break;
@@ -635,14 +635,14 @@ walk_build_notes (annocheck_data *     data,
 		 with -fPIE is OK.  It is the final result that matters.  However
 		 we have already checked the e_type above and know that it is ET_EXEC,
 		 ie, not a PIE executable, so this result is a FAIL.  */
-	      report_s (INFO, "%s: fail: (%s): compiled with -fPIC rather than -fPIE",
+	      report_s (VERBOSE, "%s: FAIL: (%s): compiled with -fPIC rather than -fPIE",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_PIC].num_fail ++;
 #endif
 	    }
 	  else
 	    {
-	      report_s (VERBOSE2, "%s: pass: (%s): compiled with -fPIC/-fPIE",
+	      report_s (VERBOSE2, "%s: PASS: (%s): compiled with -fPIC/-fPIE",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_PIC].num_pass ++;
 	    }
@@ -650,7 +650,7 @@ walk_build_notes (annocheck_data *     data,
 
 	case 3:
 	case 4:
-	  report_s (VERBOSE2, "%s: pass: (%s): compiled with -fPIE",
+	  report_s (VERBOSE2, "%s: PASS: (%s): compiled with -fPIE",
 		    data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_PIC].num_pass ++;
 	  break;
@@ -665,27 +665,27 @@ walk_build_notes (annocheck_data *     data,
 	{
 	case -1:
 	default:
-	  report_i (VERBOSE, "%s: mayb: (%s): unexpected value for stack protection note (%x)",
+	  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for stack protection note (%x)",
 		  data, sec, note_data, prefer_func_name, value);
 	  tests[TEST_STACK_PROT].num_maybe ++;
 	  break;
 
 	case 0: /* NONE */
-	  report_s (INFO, "%s: fail: (%s): No stack protection enabled",
+	  report_s (VERBOSE, "%s: FAIL: (%s): No stack protection enabled",
 		    data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_STACK_PROT].num_fail ++;
 	  break;
 
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
 	case 4: /* EXPLICIT */
-	  report_s (INFO, "%s: fail: (%s): Insufficient stack protection: %s",
+	  report_s (VERBOSE, "%s: FAIL: (%s): Insufficient stack protection: %s",
 		    data, sec, note_data, prefer_func_name, stack_prot_type (value));
 	  tests[TEST_STACK_PROT].num_fail ++;
 	  break;
 
 	case 2: /* ALL */
 	case 3: /* STRONG */
-	  report_s (VERBOSE2, "%s: pass: (%s): %s enabled",
+	  report_s (VERBOSE2, "%s: PASS: (%s): %s enabled",
 		    data, sec, note_data, prefer_func_name, stack_prot_type (value));
 	  tests[TEST_STACK_PROT].num_pass ++;
 	  break;
@@ -701,7 +701,7 @@ walk_build_notes (annocheck_data *     data,
 	  tests[TEST_SHORT_ENUM].num_fail ++;
 
 	  if (tests[TEST_SHORT_ENUM].num_pass)
-	    report_i (INFO, "%s: fail: (%s): different -fshort-enum option used",
+	    report_i (VERBOSE, "%s: FAIL: (%s): different -fshort-enum option used",
 		      data, sec, note_data, prefer_func_name, value);
 	}
       else if (value == 0)
@@ -709,12 +709,12 @@ walk_build_notes (annocheck_data *     data,
 	  tests[TEST_SHORT_ENUM].num_pass ++;
 
 	  if (tests[TEST_SHORT_ENUM].num_fail)
-	    report_i (INFO, "%s: fail: (%s): different -fshort-enum option used",
+	    report_i (VERBOSE, "%s: FAIL: (%s): different -fshort-enum option used",
 		      data, sec, note_data, prefer_func_name, value);
 	}
       else
 	{
-	  report_i (VERBOSE, "%s: mayb: (%s): unexpected value for short-enum note (%x)",
+	  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for short-enum note (%x)",
 		    data, sec, note_data, prefer_func_name, value);
 	  tests[TEST_SHORT_ENUM].num_maybe ++;
 	}
@@ -733,35 +733,35 @@ walk_build_notes (annocheck_data *     data,
 	    {
 	    case -1:
 	    default:
-	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for cf-protection note (%x)",
+	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for cf-protection note (%x)",
 		      data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_CF_PROTECTION].num_maybe ++;
 	      break;
 
 	    case 4: /* CF_FULL.  */
 	    case 8: /* CF_FULL | CF_SET */
-	      report_i (VERBOSE2, "%s: pass: (%s): cf-protection enabled (%x)",
+	      report_i (VERBOSE2, "%s: PASS: (%s): cf-protection enabled (%x)",
 		      data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_CF_PROTECTION].num_pass ++;
 	      break;
 
 	    case 2: /* CF_BRANCH: Branch but not return.  */
 	    case 6: /* CF_BRANCH | CF_SET */
-	      report_s (INFO, "%s: fail: (%s): Only compiled with -fcf-protection=branch",
+	      report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=branch",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
 
 	    case 3: /* CF_RETURN: Return but not branch.  */
 	    case 7: /* CF_RETURN | CF_SET */
-	      report_s (INFO, "%s: fail: (%s): Only compiled with -fcf-protection=return",
+	      report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=return",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
 
 	    case 1: /* CF_NONE: No protection. */
 	    case 5: /* CF_NONE | CF_SET */
-	      report_s (INFO, "%s: fail: (%s): Compiled without -fcf-protection",
+	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fcf-protection",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
@@ -780,13 +780,13 @@ walk_build_notes (annocheck_data *     data,
 	    {
 	    case -1:
 	    default:
-	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for fortify note (%x)",
+	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for fortify note (%x)",
 		      data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_FORTIFY].num_maybe ++;
 	      break;
 
 	    case 0xff:
-	      report_s (VERBOSE, "%s: mayb: (%s): -D_FORTIFY_SOURCE setting not recorded",
+	      report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE setting not recorded",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_FORTIFY].num_maybe ++;
 	      break;
@@ -796,13 +796,13 @@ walk_build_notes (annocheck_data *     data,
 		return true;
 	      /* Fall through.  */
 	    case 1:
-	      report_i (INFO, "%s: fail: (%s): Insufficient value for -D_FORTIFY_SOURCE: %d",
+	      report_i (VERBOSE, "%s: FAIL: (%s): Insufficient value for -D_FORTIFY_SOURCE: %d",
 		      data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_FORTIFY].num_fail ++;
 	      break;
 
 	    case 2:
-	      report_s (VERBOSE2, "%s: pass: (%s): -D_FORTIFY_SOURCE=2",
+	      report_s (VERBOSE2, "%s: PASS: (%s): -D_FORTIFY_SOURCE=2",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_FORTIFY].num_pass ++;
 	      break;
@@ -818,7 +818,7 @@ walk_build_notes (annocheck_data *     data,
 
 	  if (value == -1)
 	    {
-	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for optimize note (%x)",
+	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for optimize note (%x)",
 		      data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_OPTIMIZATION].num_maybe ++;
 	    }
@@ -838,13 +838,13 @@ walk_build_notes (annocheck_data *     data,
 
 		  if (value == 0 || value == 1)
 		    {
-		      report_i (INFO, "%s: fail: (%s): Insufficient optimization level: -O%d",
+		      report_i (VERBOSE, "%s: FAIL: (%s): Insufficient optimization level: -O%d",
 				data, sec, note_data, prefer_func_name, value);
 		      tests[TEST_OPTIMIZATION].num_fail ++;
 		    }
 		  else /* value == 2 || value == 3 */
 		    {
-		      report_i (VERBOSE2, "%s: pass: (%s): Sufficient optimization level: -O%d",
+		      report_i (VERBOSE2, "%s: PASS: (%s): Sufficient optimization level: -O%d",
 				data, sec, note_data, prefer_func_name, value);
 		      tests[TEST_OPTIMIZATION].num_pass ++;
 		    }
@@ -860,19 +860,19 @@ walk_build_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      report_s (VERBOSE, "%s: fail: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
+	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_GLIBCXX_ASSERTIONS].num_fail ++;
 	      break;
 
 	    case 1:
-	      report_s (VERBOSE2, "%s: pass: (%s): Compiled with -D_GLIBCXX_ASSERTIONS",
+	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with -D_GLIBCXX_ASSERTIONS",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_GLIBCXX_ASSERTIONS].num_pass ++;
 	      break;
 
 	    default:
-	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for glibcxx_assertions note (%x)",
+	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for glibcxx_assertions note (%x)",
 		      data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_GLIBCXX_ASSERTIONS].num_maybe ++;
 	      break;
@@ -892,19 +892,19 @@ walk_build_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      report_s (INFO, "%s: fail: (%s): Compiled without -fstack-clash-protection",
+	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fstack-clash-protection",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_STACK_CLASH].num_fail ++;
 	      break;
 
 	    case 1:
-	      report_s (VERBOSE2, "%s: pass: (%s): Compiled with -fstack-clash-protection",
+	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with -fstack-clash-protection",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_STACK_CLASH].num_pass ++;
 	      break;
 
 	    default:
-	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for stack-clash note (%x)",
+	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for stack-clash note (%x)",
 		      data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_STACK_CLASH].num_maybe ++;
 	      break;
@@ -921,19 +921,19 @@ walk_build_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case -1:
-	      report_i (VERBOSE, "%s: mayb: (%s): unexpected value for stack realign note (%x)",
+	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for stack realign note (%x)",
 		      data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_STACK_REALIGN].num_maybe ++;
 	      break;
 
 	    case 0:
-	      report_s (INFO, "%s: fail: (%s): Compiled without -fstack-realign",
+	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fstack-realign",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_STACK_REALIGN].num_fail ++;
 	      break;
 
 	    case 1:
-	      report_s (VERBOSE2, "%s: pass: (%s): Compiled with -fstack-realign",
+	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with -fstack-realign",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_STACK_REALIGN].num_pass ++;
 	      break;
@@ -961,7 +961,7 @@ walk_property_notes (annocheck_data *     data,
 
   if (note->n_type != NT_GNU_PROPERTY_TYPE_0)
     {
-      einfo (INFO, "%s: fail: Unexpected GNU Property note type (%x)", data->filename, note->n_type);
+      einfo (VERBOSE, "%s: FAIL: Unexpected GNU Property note type (%x)", data->filename, note->n_type);
       tests[TEST_PROPERTY_NOTE].num_fail ++;
     }
 
@@ -970,7 +970,7 @@ walk_property_notes (annocheck_data *     data,
     {
       if (tests[TEST_PROPERTY_NOTE].num_pass)
 	{
-	  einfo (INFO, "%s: fail: More than one GNU Property note", data->filename);
+	  einfo (VERBOSE, "%s: FAIL: More than one GNU Property note", data->filename);
 	  tests[TEST_PROPERTY_NOTE].num_fail ++;
 	}
     }
@@ -1053,7 +1053,7 @@ check_dynamic_section (annocheck_data *    data,
     }
   else
     {
-      einfo (VERBOSE, "fail: %s: contains multiple dynamic sections", data->filename);
+      einfo (VERBOSE, "%s: FAIL: contains multiple dynamic sections", data->filename);
       tests[TEST_DYNAMIC].num_fail ++;
     }
 
@@ -1091,7 +1091,7 @@ check_dynamic_section (annocheck_data *    data,
 
 	    if (not_rooted_at_usr (path))
 	      {
-		einfo (INFO, "%s: fail: Bad runpath: %s", data->filename, path);
+		einfo (VERBOSE, "%s: FAIL: Bad runpath: %s", data->filename, path);
 		tests[TEST_RUN_PATH].num_fail ++;
 	      }
 	  }
@@ -1156,7 +1156,7 @@ interesting_seg (annocheck_data *    data,
       && seg->phdr->p_type != PT_GNU_STACK
       && ! skip_check (TEST_RWX_SEG, NULL))
     {
-      einfo (INFO, "%s: fail: seg %d has Read, Write and eXecute flags\n",
+      einfo (VERBOSE, "%s: FAIL: seg %d has Read, Write and eXecute flags\n",
 	     data->filename, seg->number);
       tests[TEST_RWX_SEG].num_fail ++;
     }
@@ -1177,7 +1177,7 @@ interesting_seg (annocheck_data *    data,
 	tests[TEST_DYNAMIC].num_pass = 2;
       else
 	{
-	  einfo (VERBOSE, "fail: %s: contains multiple dynamic segments.", data->filename);
+	  einfo (VERBOSE, "FAIL: %s: contains multiple dynamic segments.", data->filename);
 	  tests[TEST_DYNAMIC].num_fail ++;
 	}
       break;
@@ -1260,7 +1260,7 @@ maybe (annocheck_data * data, const char * message)
 static void
 pass (annocheck_data * data, const char * message)
 {
-  einfo (VERBOSE, "%s: pass: %s", data->filename, message);
+  einfo (VERBOSE, "%s: PASS: %s", data->filename, message);
 }
 
 static void
@@ -1590,7 +1590,12 @@ static void
 show_SHORT_ENUM (annocheck_data * data, test * results)
 {
   if (results->num_fail > 0 && results->num_pass > 0)
-    fail (data, "Linked with different -fshort-enum settings");
+    {
+      if (BE_VERBOSE)
+	fail (data, "Linked with different -fshort-enum settings");
+      else
+	fail (data, "Linked with different -fshort-enum settings.  Run with -v to see where");
+    }
   else if (results->num_maybe > 0)
     maybe (data, "Corrupt notes on the -fshort-enum setting detected");
   else if (results->num_fail > 0 || results->num_pass > 0)
@@ -1711,7 +1716,12 @@ show_RUN_PATH (annocheck_data * data, test * results)
   if (e_type == ET_REL)
     skip (data, "Test of runpath.  (Object files do not have one)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
+    {
+      if (BE_VERBOSE)
+	fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
+      else
+	fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr.  Run with -v for details.");
+    }
   else
     pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr");
 }
@@ -1742,7 +1752,12 @@ show_OPTIMIZATION (annocheck_data * data, test * results)
   if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
-	fail (data, "Parts of the binary were compiled without sufficient optimization");
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without sufficient optimization");
+	  else
+	    fail (data, "Parts of the binary were compiled without sufficient optimization.  Run with -v to see where");
+	}
       else
 	fail (data, "The binary was compiled without sufficient optimization");
     }
@@ -1778,7 +1793,12 @@ show_PIC (annocheck_data * data, test * results)
   if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
-	fail (data, "Parts of the binary were compiled without the proper PIC/PIE option");
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without the proper PIC/PIE option");
+	  else
+	    fail (data, "Parts of the binary were compiled without the proper PIC/PIE option.  Run with -v to see where");
+	}
       else
 	fail (data, "The binary was compiled without -fPIC/-fPIE specified");
     }
@@ -1827,7 +1847,12 @@ show_STACK_PROT (annocheck_data * data, test * results)
   if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
-	fail (data, "Parts of the binary were compiled without suffcient stack protection");
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without suffcient stack protection");
+	  else
+	    fail (data, "Parts of the binary were compiled without suffcient stack protection.  Run with -v to see where");
+	}
       else
 	fail (data, "The binary was compiled without -fstack-protector-strong");
     }
@@ -1872,7 +1897,12 @@ show_STACK_CLASH (annocheck_data * data, test * results)
   else if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
-	fail (data, "Parts of the binary were compiled without stack clash protection");
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without stack clash protection");
+	  else
+	    fail (data, "Parts of the binary were compiled without stack clash protection.  Run with -v to see where");
+	}
       else
 	fail (data, "The binary was compiled without -fstack-clash-protection");
     }
@@ -1904,7 +1934,12 @@ show_FORTIFY (annocheck_data * data, test * results)
   if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
-	fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2");
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2");
+	  else
+	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2.  Run with -v to see where");
+	}
       else
 	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
     }
@@ -1947,7 +1982,12 @@ show_CF_PROTECTION (annocheck_data * data, test * results)
   else if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
-	fail (data, "Parts of the binary were compiled without sufficient -fcf-protection");
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without sufficient -fcf-protection");
+	  else
+	    fail (data, "Parts of the binary were compiled without sufficient -fcf-protection.  Run with -v to see where");
+	}
       else
 	fail (data, "The binary was compiled without sufficient -fcf-protection");
     }
@@ -1978,7 +2018,12 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
   if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0 || gcc_version == -1)
-	fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS");
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS");
+	  else
+	    fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS.  Run with -v to see where");
+	}
       else
 	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
     }
@@ -2020,7 +2065,12 @@ show_STACK_REALIGN (annocheck_data * data, test * results)
   else if (results->num_fail > 0)
     {
       if (results->num_pass > 0 || results->num_maybe > 0)
-	fail (data, "Parts of the binary were compiled without -mstack-realign");
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without -mstack-realign");
+	  else
+	    fail (data, "Parts of the binary were compiled without -mstack-realign.  Run with -v to see where");
+	}
       else
 	fail (data, "The binary was compiled without -mstack-realign");
     }
