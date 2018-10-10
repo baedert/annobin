@@ -10,6 +10,7 @@ TESTS=compile-test \
       hardening-test \
       hardening-fail-test \
       missing-notes-test \
+      active-checks-test \
       abi-test \
       function-sections-test \
       assembler-gap-test \
@@ -18,6 +19,7 @@ TESTS=compile-test \
 
 XFAIL_TESTS=hardening-fail-test \
       missing-notes-test \
+      active-checks-test \
       property-note-test
 
 

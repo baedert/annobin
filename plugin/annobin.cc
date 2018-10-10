@@ -21,12 +21,16 @@
 /* Needed to access some of GCC's internal structures.  */
 #include "cgraph.h"
 #include "target.h"
+#include "errors.h"
 
 /* The version of the annotation specification supported by this plugin.  */
 #define SPEC_VERSION  3
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
+
+/* Suffix used to turn a section name into a group name.  */
+#define ANNOBIN_GROUP_NAME    ".group"
 
 /* Required by the GCC plugin API.  */
 int            plugin_is_GPL_compatible;
@@ -55,6 +59,8 @@ unsigned long  annobin_max_stack_size = 0;
 #define DEFAULT_THRESHOLD (10240)
 static unsigned long  stack_threshold = DEFAULT_THRESHOLD;
 
+static const char *   plugin_name = NULL;
+
 /* Internal variable, used by target specific parts of the annobin plugin as well
    as this generic part.  True if the object file being generated is for a 64-bit
    target.  */
@@ -68,6 +74,9 @@ static bool           annobin_enable_dynamic_notes = true;
 
 /* True if notes in the .gnu.build.attributes section should be produced.  */
 static bool           annobin_enable_static_notes = true;
+
+/* True if annobin should generate gcc errors if gcc command line options are wrong.  */
+static bool           annobin_active_checks = false;
 
 #ifdef flag_stack_clash_protection
 static int            global_stack_clash_option = -1;
@@ -89,8 +98,8 @@ static unsigned       verbose_level = 0;
 static const char *   annobin_extra_prefix = "";
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
-static unsigned char  annobin_version = 9; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 9");
+static unsigned char  annobin_version = 10; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 10");
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\
@@ -103,6 +112,7 @@ static const char *   help_string =  N_("Supported options:\n\
    [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
    [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
    [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
+   [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n\
    rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n\
    stack-threshold=N      Only create function specific stack size notes when the size is > N.");
 
@@ -111,6 +121,31 @@ static struct plugin_info annobin_info =
   version_string,
   help_string
 };
+
+void
+annobin_inform (unsigned level, const char * format, ...)
+{
+  va_list args;
+
+  if (level > 0 && level > verbose_level)
+    return;
+
+  fflush (stdout);
+
+  if (plugin_name)
+    fprintf (stderr, "%s: ", plugin_name);
+  else
+    fprintf (stderr, "annobin: ");
+    
+  if (main_input_filename)
+    fprintf (stderr, "%s: ", main_input_filename);
+
+  va_start (args, format);
+  vfprintf (stderr, format, args);
+  va_end (args);
+
+  putc ('\n', stderr);
+}
 
 /* Create a symbol name to represent the sources we are annotating.
    Since there can be multiple input files, we choose the main output
@@ -176,24 +211,6 @@ init_annobin_current_filename (void)
 
   annobin_current_filename = concat (ANNOBIN_SYMBOL_PREFIX, annobin_extra_prefix, name, NULL);
   annobin_current_endname = concat (annobin_current_filename, "_end", NULL);
-}
-
-void
-annobin_inform (unsigned level, const char * format, ...)
-{
-  va_list args;
-
-  if (level > 0 && level > verbose_level)
-    return;
-
-  fflush (stdout);
-  fprintf (stderr, "annobin: ");
-   if (main_input_filename)
-     fprintf (stderr, "%s: ", main_input_filename);
-  va_start (args, format);
-  vfprintf (stderr, format, args);
-  va_end (args);
-  putc ('\n', stderr);
 }
 
 static void
@@ -839,7 +856,6 @@ annobin_emit_function_notes (const char *  func_name,
       || global_GOWall_options != compute_GOWall_options ())
     {
       record_GOW_settings (compute_GOWall_options (), true, func_name, start_sym, end_sym, sec_name);
-
       start_sym = end_sym = NULL;
     }
 
@@ -1050,7 +1066,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       else
 	{
 	  sec_name = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", func_section,
-			     ", \"G\", %note, ", func_section, ".group", NULL);
+			     ", \"G\", %note, ", func_section, ANNOBIN_GROUP_NAME, NULL);
 	}
     }
   else
@@ -1136,10 +1152,10 @@ emit_queued_attachments (void)
   for (item = attach_list; item != NULL; item = item->next)
     {
       fprintf (asm_out_file, "\t.pushsection %s\n", item->name);
-      fprintf (asm_out_file, "\t.attach_to_group %s.group", item->name);
+      fprintf (asm_out_file, "\t.attach_to_group %s%s", item->name, ANNOBIN_GROUP_NAME);
       if (flag_verbose_asm)
-	fprintf (asm_out_file, " %s Add the %s section to the %s.group group",
-		 ASM_COMMENT_START, item->name, item->name);
+	fprintf (asm_out_file, " %s Add the %s section to the %s%s group",
+		 ASM_COMMENT_START, item->name, item->name, ANNOBIN_GROUP_NAME);
       fprintf (asm_out_file, "\n");
       fprintf (asm_out_file, "\t.popsection\n");
       free ((void *) item->name);
@@ -1269,7 +1285,8 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
   if (* suffix)
     /* We put suffixed text sections into a group so that the linker
        can delete the notes if the code is discarded.  */
-    fprintf (asm_out_file, "\t.pushsection .text%s, \"axG\", %%progbits, text%s.group\n", suffix, suffix);
+    fprintf (asm_out_file, "\t.pushsection .text%s, \"axG\", %%progbits, .text%s%s\n",
+	     suffix, suffix, ANNOBIN_GROUP_NAME);
   else
     fprintf (asm_out_file, "\t.pushsection .text\n");
 
@@ -1314,7 +1331,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 
   if (* suffix)
     sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix,
-		  ", \"G\", %note, text", suffix, ".group", NULL);
+		  ", \"G\", %note, .text", suffix, ANNOBIN_GROUP_NAME, NULL);
   else
     sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix, NULL);
 
@@ -1381,6 +1398,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   global_short_enums = flag_short_enums;
   global_GOWall_options = compute_GOWall_options ();
 
+
+  if (annobin_active_checks && optimize < 2 && ! optimize_debug)
+    {
+      error ("optimization level is too low!");
+    }
+
+  
   /* Output a file name symbol to be referenced by the notes...  */
   if (annobin_current_filename == NULL)
     init_annobin_current_filename ();
@@ -1404,6 +1428,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      two sections.  */
   annobin_emit_start_sym_and_version_note (".hot", 'h');
   annobin_emit_start_sym_and_version_note (".unlikely", 'h');
+  queue_attachment (".text.hot");
+  queue_attachment (".text.unlikely");
 
   /* Record the version of the compiler.  */
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
@@ -1669,6 +1695,11 @@ parse_args (unsigned argc, struct plugin_argument * argv)
       else if (strcmp (key, "no-attach") == 0)
 	annobin_enable_attach = false;
 
+      else if (strcmp (key, "active-checks") == 0)
+	annobin_active_checks = true;
+      else if (strcmp (key, "no-active-checks") == 0)
+	annobin_active_checks = false;
+
       else if (strcmp (key, "stack-threshold") == 0)
 	{
 	  stack_threshold = strtoul (argv[argc].value, NULL, 0);
@@ -1690,6 +1721,8 @@ int
 plugin_init (struct plugin_name_args *   plugin_info,
              struct plugin_gcc_version * version)
 {
+  plugin_name = plugin_info->base_name;
+
   if (!plugin_default_version_check (version, & gcc_version))
     {
       bool fail = false;

@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "ANNOCHECK 1"
-.TH ANNOCHECK 1 "2018-09-12" "annobin-1" "RPM Development Tools"
+.TH ANNOCHECK 1 "2018-10-10" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -291,9 +291,9 @@ Disabled by \fB\-\-skip\-gnu\-stack\fR.
 .IX Item "Safe GOT relocations"
 The relocations for the \s-1GOT\s0 table must be read only.
 Disabled by \fB\-\-skip\-writeable\-got\fR.
-.ie n .IP """No WX segments.""" 4
-.el .IP "\f(CWNo WX segments.\fR" 4
-.IX Item "No WX segments."
+.ie n .IP """No RWX segments.""" 4
+.el .IP "\f(CWNo RWX segments.\fR" 4
+.IX Item "No RWX segments."
 No program segment should have all three of the read, write and
 execute permission bits set.
 Disabled by \fB\-\-skip\-rwx\-seg\fR.
@@ -333,8 +333,9 @@ Shared libraries must have been compiled with \fB\-fPIC\fR or
 \&\f(CW\*(C`\-fPIE\*(C'\fR but not \fB\-static\fR.
 This check can be disabled by \fB\-\-skip\-pic\fR.
 .Sp
-Dynamic executables must have been compiled with \fB\-fPIE\fR.
-This check can be disabled by \fB\-\-skip\-pie\fR.
+Dynamic executables must have been compiled with \fB\-fPIE\fR and
+linked with \fB\-pie\fR.  This check can be disabled by
+\&\fB\-\-skip\-pie\fR.
 .ie n .IP """Safe exceptions""" 4
 .el .IP "\f(CWSafe exceptions\fR" 4
 .IX Item "Safe exceptions"
@@ -352,7 +353,8 @@ Disabled by \fB\-\-skip\-stack\-clash\fR.
 .el .IP "\f(CWControl Flow protection\fR" 4
 .IX Item "Control Flow protection"
 If available the \fB\-fcf\-protection=full\fR must have been used.
-Disabled by \fB\-\-skip\-cf\-protection\fR.
+Disabled by \fB\-\-skip\-cf\-protection\fR.  If this option is disabled
+then the check for \s-1GNU\s0 Property notes will also be disabled.
 .ie n .IP """Stack realignment""" 4
 .el .IP "\f(CWStack realignment\fR" 4
 .IX Item "Stack realignment"
@@ -381,7 +383,10 @@ Disabled by \fB\-\-skip\-gnu\-relro\fR.
 .el .IP "\f(CWGNU Property Note\fR" 4
 .IX Item "GNU Property Note"
 For \fIx86_64\fR binaries, check that a correctly formatted \s-1GNU\s0
-Property note is present.
+Property note is present.  These notes are only generated with a
+program is compiled with the \fB\-fcf\-protection\fR gcc option is
+enabled, so if annocheck's \fB\-\-skip\-cf\-protection\fR option is
+enabled then this test will be skipped as well.
 .ie n .IP """Enum Size""" 4
 .el .IP "\f(CWEnum Size\fR" 4
 .IX Item "Enum Size"

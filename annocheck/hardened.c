@@ -1605,7 +1605,7 @@ static void
 show_PROPERTY_NOTE (annocheck_data * data, test * results)
 {
   if (e_machine != EM_X86_64)
-    skip (data, "The GNU Property note is only significant on x86_64 binaries");
+    skip (data, "GNU Property note check.  (Only useful on x86_64 binaries)");
 
   else if (results->num_fail > 0)
     {
@@ -1633,9 +1633,9 @@ static void
 show_BIND_NOW (annocheck_data * data, test * results)
 {
   if (e_type != ET_EXEC && e_type != ET_DYN)
-    skip (data, "Only executables need -Wl,-z,now");
+    skip (data, "Test for -Wl,-z,now.  (Only needed for executables)");
   else if (tests[TEST_DYNAMIC].num_pass == 0)
-    skip (data, "No dynamic segment, no need for -Wl,-z,now");
+    skip (data, "Test for -Wl,-z,now.  (No dynamic segment present)");
   else if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Not linked with -Wl,-z,now");
   else
@@ -1658,9 +1658,9 @@ show_GNU_RELRO (annocheck_data * data, test * results)
 {
   /* Relocateable object files are not yet linked.  */
   if (e_type == ET_REL)
-    skip (data, "No need to check for -Wl,-z,relro in object files");
+    skip (data, "Test for -Wl,-z,relro.  (Not needed in object files)");
   else if (tests[TEST_DYNAMIC].num_pass == 0)
-    skip (data, "No dynamic segment, no need for -Wl,-z,relro");
+    skip (data, "Test for -Wl,-z,relro.  (No dynamic segment present)");
   else if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Not linked with -Wl,-z,relro");
   else
@@ -1672,7 +1672,7 @@ show_GNU_STACK (annocheck_data * data, test * results)
 {
   /* Relocateable object files do not have a stack segment.  */
   if (e_type == ET_REL)
-    skip (data, "Object files do not need a stack segment");
+    skip (data, "Test of stack segment.  (Object files do not have segments)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Executable stack found");
   else if (results->num_pass > 1)
@@ -1687,7 +1687,7 @@ static void
 show_RWX_SEG (annocheck_data * data, test * results)
 {
   if (e_type == ET_REL)
-    skip (data, "Object files do not have segments");
+    skip (data, "Check for RWX segments.  (Object files do not have segments)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "A segment with RWX permissions was found");
   else
@@ -1709,7 +1709,7 @@ static void
 show_RUN_PATH (annocheck_data * data, test * results)
 {
   if (e_type == ET_REL)
-    skip (data, "Object files do not need a runtime path");
+    skip (data, "Test of runpath.  (Object files do not have one)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
   else
@@ -1729,7 +1729,7 @@ static void
 show_WRITEABLE_GOT (annocheck_data * data, test * results)
 {
   if (e_type == ET_REL)
-    skip (data, "Object files do not have a GOT");
+    skip (data, "Test for writeable GOT.  (Object files do not have a GOT)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Relocations for the GOT/PLT sections are writeable");
   else
@@ -1745,6 +1745,10 @@ show_OPTIMIZATION (annocheck_data * data, test * results)
 	fail (data, "Parts of the binary were compiled without sufficient optimization");
       else
 	fail (data, "The binary was compiled without sufficient optimization");
+    }
+  else if (gcc_version == -1)
+    {
+      skip (data, "Test of optimization level.  (The binary was not built by gcc)");
     }
   else if (results->num_maybe > 0)
     {
@@ -1762,10 +1766,6 @@ show_OPTIMIZATION (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with sufficient optimization");
     }
-  else if (gcc_version == -1)
-    {
-      skip (data, "No optimization notes found, but the binary was not built with gcc");
-    }
   else
     {
       maybe (data, "The optimization setting was not recorded");
@@ -1781,6 +1781,10 @@ show_PIC (annocheck_data * data, test * results)
 	fail (data, "Parts of the binary were compiled without the proper PIC/PIE option");
       else
 	fail (data, "The binary was compiled without -fPIC/-fPIE specified");
+    }
+  else if (gcc_version == -1)
+    {
+      skip (data, "Test for PIC compilation.  (The binary was not built by gcc)");
     }
   else if (results->num_maybe > 0)
     {
@@ -1798,10 +1802,6 @@ show_PIC (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with PIC/PIE");
     }
-  else if (gcc_version == -1)
-    {
-      skip (data, "No PIC/PIE notes found, but the binary was not built with gcc");
-    }
   else
     {
       maybe (data, "The PIC/PIE setting was not recorded");
@@ -1811,7 +1811,10 @@ show_PIC (annocheck_data * data, test * results)
 static void
 show_PIE (annocheck_data * data, test * results)
 {
-  if (gcc_version != -1 && results->num_fail > 0)
+  if (gcc_version == -1)
+    skip (data, "Test for -pie.  (Not built with gcc)");
+
+  else if (results->num_fail > 0)
     fail (data, "Not linked as a position independent executable (ie need to add '-pie' to link command line)");
 
   else /* Ignore maybe results - they should not happen.  */
@@ -1827,6 +1830,10 @@ show_STACK_PROT (annocheck_data * data, test * results)
 	fail (data, "Parts of the binary were compiled without suffcient stack protection");
       else
 	fail (data, "The binary was compiled without -fstack-protector-strong");
+    }
+  else if (gcc_version == -1)
+    {
+      skip (data, "Test for stack protection.  (The binary was not built by gcc)");
     }
   else if (results->num_maybe > 0)
     {
@@ -1844,10 +1851,6 @@ show_STACK_PROT (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with sufficient stack protection");
     }
-  else if (gcc_version == -1)
-    {
-      skip (data, "No stack protection notes found, but the binary was not built with gcc");
-    }
   else
     {
       maybe (data, "The stack protection setting was not recorded");
@@ -1858,10 +1861,13 @@ static void
 show_STACK_CLASH (annocheck_data * data, test * results)
 {
   if (e_machine == EM_ARM)
-    skip (data, "Stack clash support is not enabled on the ARM");
+    skip (data, "Test for stack clash support.  (Not enabled on the ARM)");
+
+  else if (gcc_version == -1)
+    skip (data, "Test for stack clash support.  (Not built by gcc)");
 
   else if (gcc_version < 7)
-    skip (data, "Stack clash protection is only enabled in gcc 8+");
+    skip (data, "Test for stack clash support.  (Needs gcc 7+)");
 
   else if (results->num_fail > 0)
     {
@@ -1902,6 +1908,10 @@ show_FORTIFY (annocheck_data * data, test * results)
       else
 	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
     }
+
+  else if (gcc_version == -1)
+    skip (data, "Test for -D_FORTIFY_SOURCE=2.  (The binary was not built by gcc)");
+
   else if (results->num_maybe > 0)
     {
       if (results->num_pass > 0)
@@ -1914,28 +1924,25 @@ show_FORTIFY (annocheck_data * data, test * results)
       else
 	maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
     }
+
   else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with -D_FORTIFY_SOURCE=2");
-    }
-  else if (gcc_version == -1)
-    {
-      skip (data, "No FORTIFY_SOURCE notes found, but the binary was not built with gcc");
-    }
+    pass (data, "Compiled with -D_FORTIFY_SOURCE=2");
+
   else
-    {
-      maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
-    }
+    maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
 }
 
 static void
 show_CF_PROTECTION (annocheck_data * data, test * results)
 {
   if (e_machine != EM_386 && e_machine != EM_X86_64)
-    skip (data, "Control flow protection is only supported on x86 binaries");
+    skip (data, "Test for control flow protection.  (Only supported on x86 binaries)");
+
+  else if (gcc_version == -1)
+    skip (data, "Test for control flow protection.  (Not built by gcc)");
 
   else if (gcc_version < 8)
-    skip (data, "Control flow protectio is only provided by gcc v8+");
+    skip (data, "Test for control flow protection.  (Needs gcc v8+)");
 
   else if (results->num_fail > 0)
     {
@@ -1944,6 +1951,7 @@ show_CF_PROTECTION (annocheck_data * data, test * results)
       else
 	fail (data, "The binary was compiled without sufficient -fcf-protection");
     }
+
   else if (results->num_maybe > 0)
     {
       if (results->num_pass > 0)
@@ -1956,14 +1964,12 @@ show_CF_PROTECTION (annocheck_data * data, test * results)
       else
 	maybe (data, "The -fcf-protection option was not seen");
     }
+
   else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with -fcf-protection");
-    }
+    pass (data, "Compiled with -fcf-protection");
+
   else
-    {
-      maybe (data, "The -fcf-protection option was not seen");
-    }
+    maybe (data, "The -fcf-protection option was not seen");
 }
 
 static void
@@ -1975,6 +1981,10 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
 	fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS");
       else
 	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
+    }
+  else if (gcc_version == -1)
+    {
+      skip (data, "Test for -D_GLIBCXX_ASSERTONS.  (The binary was not built by gcc)");
     }
   else if (results->num_maybe > 0)
     {
@@ -1992,11 +2002,6 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
     }
-  else if (gcc_version == -1)
-    {
-      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      skip (data, "No GLIBCXX_ASSERTONS notes found, but the binary was not built with gcc");
-    }
   else
     {
       maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
@@ -2007,7 +2012,10 @@ static void
 show_STACK_REALIGN (annocheck_data * data, test * results)
 {
   if (e_machine != EM_386)
-    skip (data, "Stack realignment support is only needed on i686 binaries");
+    skip (data, "Test for stack realignment support.  (Only needed on i686 binaries)");
+
+  else if (gcc_version == -1)
+    skip (data, "Test for stack realignment support.  (Not built by gcc)");
 
   else if (results->num_fail > 0)
     {
@@ -2028,19 +2036,12 @@ show_STACK_REALIGN (annocheck_data * data, test * results)
       else
 	maybe (data, "The -mstack-realign option was not seen");
     }
+
   else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with -mstack_realign");
-    }
-  else if (gcc_version == -1)
-    {
-      /* Not compiled with gcc.  Therefore no annobin notes recorded.  */
-      skip (data, "No stack realign notes found, but the binary was not built with gcc");
-    }
+    pass (data, "Compiled with -mstack_realign");
+
   else
-    {
-      maybe (data, "The -mstack-realign option was not seen");
-    }
+    maybe (data, "The -mstack-realign option was not seen");
 }
 
 /* Look for DW_AT_producer attributes.  */
@@ -2057,8 +2058,13 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
   string = dwarf_formstring (& attr);
   if (string == NULL)
     {
-      einfo (VERBOSE2, "%s: WARN: DWARF DW_AT_producer attribute uses non-string form %u",
-	     data->filename, dwarf_whatform (& attr));
+      unsigned int form = dwarf_whatform (& attr);
+
+      if (form == DW_FORM_GNU_strp_alt)
+	einfo (VERBOSE2, "ICE: DW_FORM_GNU_strp_alt not yet handled");
+      else
+	einfo (VERBOSE2, "%s: WARN: DWARF DW_AT_producer attribute uses non-string form %x",
+	       data->filename, form);
       return true;
     }
 

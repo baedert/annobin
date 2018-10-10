@@ -215,6 +215,7 @@ TESTS = compile-test \
       hardening-test \
       hardening-fail-test \
       missing-notes-test \
+      active-checks-test \
       property-note-test \
       abi-test \
       function-sections-test \
@@ -223,7 +224,7 @@ TESTS = compile-test \
       section-size-test
 
 XFAIL_TESTS = hardening-fail-test \
-      missing-notes-test property-note-test
+      missing-notes-test active-checks-test property-note-test
 all: all-am
 
 .SUFFIXES:
