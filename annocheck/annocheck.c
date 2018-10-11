@@ -29,7 +29,7 @@
 ulong         verbosity = 0;
 
 uint          major_version = 8;
-uint          minor_version = 52;
+uint          minor_version = 53;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -1329,7 +1329,7 @@ process_rpm_file (const char * filename)
   free (pname);
 
   /* Delete the temporary directory.  */
-  command = concat ("rm -r ", dirname, NULL);
+  command = concat ("rm -fr ", dirname, NULL);
   if (system (command))
     einfo (WARN, "Failed to delete temporary directory: %s", dirname);
   free (command);

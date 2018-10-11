@@ -1439,10 +1439,10 @@ compare_range (const void * r1, const void * r2)
 static bool
 skip_gap_sym (const char * sym)
 {
-  /* G++ will generate non-virtual thunk functions all on its own,
-     without telling the annobin plugin about them.  Detect them
-     here and do not complain about the gap in the coverage.  */
-  if (const_strneq (sym, "_ZThn"))
+  /* G++ will generate virtual and non-virtual thunk functions all on its own,
+     without telling the annobin plugin about them.  Detect them here and do
+     not complain about the gap in the coverage.  */
+  if (const_strneq (sym, "_ZThn") || const_strneq (sym, "_ZTv0"))
     return true;
 
   /* If the symbol is for a function/file that we know has special
