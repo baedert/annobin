@@ -103,9 +103,12 @@ typedef struct checker
   const char * name;
 
   /* Called before starting the check of a file.
-     Can be NULL.
-     The section_headers and segment_headers fields will not have been initialised.  */
-  void (* start_file) (annocheck_data * DATA);
+     Can be NULL.  If it is NULL, annocheck will act as if it had returned true.
+     The section_headers and segment_headers fields will not have been initialised.
+     Returns true if the checker wishes to examine the file and false if it does not.
+     If false is returned the INTERESTING_xxx, CHECK_xxx, and END_FILE functions will
+     not be called for that file.  */
+  bool (* start_file) (annocheck_data * DATA);
 
   /* Called to see if the checker is interested in the particular section.
      Can be NULL.  If NULL, all sections are ignored.
@@ -143,7 +146,12 @@ typedef struct checker
   bool (* end_file) (annocheck_data * DATA);
 
   /* Called to allow the callback a chance to handle its own command line arguments.
-     Can be NULL.  */
+     Can be NULL.
+     ARG is the command line argument to be processed.  It might not start with a '-'.
+     ARGV is the array of command line arguments.  ARG == ARGV[(*NEXT_INDX) - 1].
+     ARGC is the number of entries in ARGV.
+     NEXT_INDEX contains the index of the next argument to be processed.  Can be
+     incremented in order to skip paramters to ARG.  */
   bool (* process_arg) (const char * ARG, const char ** ARGV, const uint ARGC, uint * NEXT_INDX);
 
   /* Called to add additional text to the --help output.

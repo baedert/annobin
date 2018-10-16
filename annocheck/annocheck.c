@@ -29,7 +29,7 @@
 ulong         verbosity = 0;
 
 uint          major_version = 8;
-uint          minor_version = 53;
+uint          minor_version = 55;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -51,6 +51,9 @@ static checker *        first_seg_checker = NULL;
 
 typedef struct checker_internal
 {
+  /* True if this checker should be skipped for this file.  */
+  bool             skip;
+
   /* Pointer to the next section checker.  */
   struct checker * next_sec;
 
@@ -413,7 +416,7 @@ process_command_line (uint argc, const char * argv[])
 
 	    default:
 	    unknown_arg:
-	      einfo (WARN, "Unrecognised command line option: %s ", orig_arg);
+	      einfo (WARN, "Unrecognised command line option: %s", orig_arg);
 	      usage ();
 	      return false;
 	    arg_missing_argument:
@@ -507,12 +510,16 @@ run_checkers (const char * filename, int fd, Elf * elf)
 
   /* Call the checker start functions.  */
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-    if (tool->start_file)
-      {
-	push_component (tool);
-	tool->start_file (& data);
-	pop_component ();
-      }
+    {
+      if (tool->start_file)
+	{
+	  push_component (tool);
+	  ((checker_internal *)(tool->internal))->skip = ! tool->start_file (& data);
+	  pop_component ();
+	}
+      else
+	((checker_internal *)(tool->internal))->skip = false;
+    }
 
   bool ret = true;  
 
@@ -543,7 +550,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	  /* Walk the checkers, asking each in turn if they are interested in this section.  */
 	  for (tool = first_sec_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next_sec)
 	    {
-	      if (tool->interesting_sec == NULL)
+	      if (((checker_internal *)(tool->internal))->skip || tool->interesting_sec == NULL)
 		continue;
 
 	      push_component (tool);
@@ -594,7 +601,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 
 	  for (tool = first_seg_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next_seg)
 	    {
-	      if (tool->interesting_seg == NULL)
+	      if (((checker_internal *)(tool->internal))->skip || tool->interesting_seg == NULL)
 		continue;
 
 	      push_component (tool);
@@ -618,7 +625,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
     }
 
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-    if (tool->end_file)
+    if (! ((checker_internal *)(tool->internal))->skip && tool->end_file)
       {
 	push_component (tool);
 	ret &= tool->end_file (& data);

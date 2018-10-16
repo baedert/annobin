@@ -26,11 +26,12 @@ static bool disabled = true;
 static bool found_builder;
 static bool all = false;
 
-static void
+static bool
 builtby_start (annocheck_data * data)
 {
   found_builder = false;
   last_tool = NULL;
+  return true;
 }
 
 static bool

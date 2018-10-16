@@ -985,9 +985,6 @@ annobin_emit_symbol (const char * name)
 static void
 annobin_create_function_notes (void * gcc_data, void * user_data)
 {
-  const char *  func_section;
-  const char *  start_sym;
-  const char *  end_sym;
   unsigned int  count;
   bool          force;
 
@@ -1357,11 +1354,17 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 					 const char   producer_char)
 {
   if (* suffix)
-    /* We put suffixed text sections into a group so that the linker
-       can delete the notes if the code is discarded.  */
-    fprintf (asm_out_file, "\t.pushsection %s%s, \"axG\", %%progbits, %s%s%s\n",
-	     CODE_SECTION, suffix,
-	     CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
+    {
+      if (annobin_enable_attach)
+	/* We put suffixed text sections into a group so that the linker
+	   can delete the notes if the code is discarded.  */
+	fprintf (asm_out_file, "\t.pushsection %s%s, \"axG\", %%progbits, %s%s%s\n",
+		 CODE_SECTION, suffix,
+		 CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
+      else
+	fprintf (asm_out_file, "\t.pushsection %s%s, \"ax\", %%progbits\n",
+		 CODE_SECTION, suffix);
+    }
   else
     fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
 
@@ -1388,7 +1391,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 	 There is special code in annobin_output_note() that undoes this bias
 	 when the symbol's address is being used to compute a range for the
 	 notes.  */
-      fprintf (asm_out_file, "\t.equiv %s%s, . + %d\n", annobin_current_filename, suffix, target_start_sym_bias);
+      fprintf (asm_out_file, "\t.set %s%s, . + %d\n", annobin_current_filename, suffix, target_start_sym_bias);
     }
   else
     fprintf (asm_out_file, "\t.equiv %s%s, .\n", annobin_current_filename, suffix);
@@ -1677,6 +1680,33 @@ annobin_emit_end_symbol (const char * suffix)
 }
 
 static void
+annobin_emit_symbol_correct (const char * suffix)
+{
+  if (*suffix)
+    {
+      if (annobin_enable_attach)
+	/* Since we have issued the .attach, make sure that we include it here.  */
+	fprintf (asm_out_file, "\t.pushsection %s%s, \"axG\", %%progbits, %s%s%s\n", CODE_SECTION, suffix,
+		 CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
+      else
+	fprintf (asm_out_file, "\t.pushsection %s%s\n", CODE_SECTION, suffix);
+    }
+  else
+    fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
+
+  /* Note: we cannot test "start sym > end sym" as these symbols may not have values
+     yet, (due to the possibility of linker relaxation).  But we are allowed to
+     test for symbol equality.  So we fudge things a little....  */
+     
+  fprintf (asm_out_file, "\t.if %s%s == %s%s + 2\n", annobin_current_filename, suffix,
+	   annobin_current_endname, suffix);
+  fprintf (asm_out_file, "\t  .set %s%s, %s%s\n", annobin_current_filename, suffix,
+	   annobin_current_endname, suffix);
+  fprintf (asm_out_file, "\t.endif\n");
+  fprintf (asm_out_file, "\t.popsection\n");
+}
+
+static void
 annobin_create_loader_notes (void * gcc_data, void * user_data)
 {
   if (asm_out_file == NULL)
@@ -1693,6 +1723,18 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
       annobin_emit_end_symbol (".unlikely");
       if (annobin_enable_attach)
 	emit_queued_attachments ();
+
+      /* If there is a bias to the start symbol, we can end up with the case where
+	 the start symbol is after the end symbol.  (If the section is empty).
+	 Catch that and adjust the start symbol.  This also pacifies eu-elflint
+	 which complains about the start symbol being placed beyond the end of
+	 the section.  */
+      if (target_start_sym_bias)
+	{
+	  annobin_emit_symbol_correct ("");
+	  annobin_emit_symbol_correct (".hot");
+	  annobin_emit_symbol_correct (".unlikely");
+	}
     }
 
   if (! annobin_enable_dynamic_notes)

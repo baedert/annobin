@@ -135,11 +135,12 @@ static test tests [TEST_MAX] =
 };
 
 
-static void
+static bool
 start (annocheck_data * data)
 {
   /* (Re) Set the results for the tests.  */
   int i;
+
   for (i = 0; i < TEST_MAX; i++)
     {
       tests [i].num_pass = 0;
@@ -184,6 +185,8 @@ start (annocheck_data * data)
      should be ET_DYN, even executable programs.  */
   if (e_type == ET_EXEC && tests[TEST_PIE].enabled)
     tests[TEST_PIE].num_fail ++;
+
+  return true;
 }
 
 static bool
@@ -964,20 +967,23 @@ walk_property_notes (annocheck_data *     data,
       einfo (VERBOSE, "%s: FAIL: Unexpected GNU Property note type (%x)", data->filename, note->n_type);
       tests[TEST_PROPERTY_NOTE].num_fail ++;
     }
-
-  /* More than one note in an executable is an error.  */
-  if (e_type == ET_EXEC || e_type == ET_DYN)
+  else
     {
-      if (tests[TEST_PROPERTY_NOTE].num_pass)
+      if (e_type == ET_EXEC || e_type == ET_DYN)
 	{
-	  einfo (VERBOSE, "%s: FAIL: More than one GNU Property note", data->filename);
-	  tests[TEST_PROPERTY_NOTE].num_fail ++;
+	  /* More than one note in an executable is an error.  */
+	  if (tests[TEST_PROPERTY_NOTE].num_pass)
+	    {
+	      einfo (VERBOSE, "%s: FAIL: More than one GNU Property note", data->filename);
+	      tests[TEST_PROPERTY_NOTE].num_fail ++;
+	    }
 	}
+
+      /* FIXME: Add test for CET enablement bit ?  */
+
+      tests[TEST_PROPERTY_NOTE].num_pass ++;
     }
 
-  /* FIXME: Add test for CET enablement bit ?  */
-
-  tests[TEST_PROPERTY_NOTE].num_pass ++;
   return true;
 }
 
@@ -1464,6 +1470,12 @@ skip_gap_sym (const char * sym)
 	  || const_strneq (sym, "_restfpr")
 	  || const_strneq (sym, "_savevr")
 	  || const_strneq (sym, "_restvr"))
+	return true;
+
+      /* The linker can also generate long call stubs.  */
+      if (const_strneq (sym, ".plt_call.")
+	  || const_strneq (sym, ".plt_branch.")
+	  || const_strneq (sym, ".long_branch."))
 	return true;
     }
 
