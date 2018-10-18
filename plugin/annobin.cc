@@ -26,8 +26,8 @@
 /* The version of the annotation specification supported by this plugin.  */
 #define SPEC_VERSION  3
 
-static unsigned int   annobin_version = 856; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 856");
+static unsigned int   annobin_version = 857; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 857");
 
 
 
@@ -1251,7 +1251,10 @@ emit_queued_attachments (void)
       free ((void *) item->section_name);
       free ((void *) item->group_name);
       next = item->next;
-      free ((void *) item);
+      // FIXME: BZ #1638371 reports that this free() triggers an "invalid pointer"
+      // error when running under MALLOC_CHECK_.  I have no idea why, as the
+      // pointer certainly looks valid to me.  So for now, suppress the free.
+      // free ((void *) item);
     }
 }
 
