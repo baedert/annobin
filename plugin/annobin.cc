@@ -26,6 +26,11 @@
 /* The version of the annotation specification supported by this plugin.  */
 #define SPEC_VERSION  3
 
+static unsigned int   annobin_version = 856; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 856");
+
+
+
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
 
@@ -105,8 +110,6 @@ static unsigned       verbose_level = 0;
 static const char *   annobin_extra_prefix = "";
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
-static unsigned char  annobin_version = 10; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 10");
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\
@@ -1667,20 +1670,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 }
 
 static void
-annobin_emit_end_symbol (const char * suffix)
-{
-  fprintf (asm_out_file, "\t.pushsection %s%s\n", CODE_SECTION, suffix);
-  fprintf (asm_out_file, "\t%s %s%s\n",
-	   global_file_name_symbols ? ".global" : ".hidden",
-	   annobin_current_endname, suffix);
-  fprintf (asm_out_file, "%s%s:\n", annobin_current_endname, suffix);
-  fprintf (asm_out_file, "\t.type %s%s, STT_NOTYPE\n", annobin_current_endname, suffix);
-  fprintf (asm_out_file, "\t.size %s%s, 0\n", annobin_current_endname, suffix);
-  fprintf (asm_out_file, "\t.popsection\n");
-}
-
-static void
-annobin_emit_symbol_correct (const char * suffix)
+annobin_change_section (const char * suffix)
 {
   if (*suffix)
     {
@@ -1693,6 +1683,26 @@ annobin_emit_symbol_correct (const char * suffix)
     }
   else
     fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
+}
+
+static void
+annobin_emit_end_symbol (const char * suffix)
+{
+  annobin_change_section (suffix);
+
+  fprintf (asm_out_file, "\t%s %s%s\n",
+	   global_file_name_symbols ? ".global" : ".hidden",
+	   annobin_current_endname, suffix);
+  fprintf (asm_out_file, "%s%s:\n", annobin_current_endname, suffix);
+  fprintf (asm_out_file, "\t.type %s%s, STT_NOTYPE\n", annobin_current_endname, suffix);
+  fprintf (asm_out_file, "\t.size %s%s, 0\n", annobin_current_endname, suffix);
+  fprintf (asm_out_file, "\t.popsection\n");
+}
+
+static void
+annobin_emit_symbol_correct (const char * suffix)
+{
+  annobin_change_section (suffix);
 
   /* Note: we cannot test "start sym > end sym" as these symbols may not have values
      yet, (due to the possibility of linker relaxation).  But we are allowed to
@@ -1718,11 +1728,12 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
 	 Eg because the compilation was run with the -ffunction-sections option.
 	 Nevertheless we generate this symbol because it is needed by the
 	 version note that was generated in annobin_create_global_notes().  */
+      if (annobin_enable_attach)
+	emit_queued_attachments ();
+
       annobin_emit_end_symbol ("");
       annobin_emit_end_symbol (".hot");
       annobin_emit_end_symbol (".unlikely");
-      if (annobin_enable_attach)
-	emit_queued_attachments ();
 
       /* If there is a bias to the start symbol, we can end up with the case where
 	 the start symbol is after the end symbol.  (If the section is empty).

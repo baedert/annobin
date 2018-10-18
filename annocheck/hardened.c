@@ -1472,10 +1472,12 @@ skip_gap_sym (const char * sym)
 	  || const_strneq (sym, "_restvr"))
 	return true;
 
-      /* The linker can also generate long call stubs.  */
-      if (const_strneq (sym, ".plt_call.")
-	  || const_strneq (sym, ".plt_branch.")
-	  || const_strneq (sym, ".long_branch."))
+      /* The linker can also generate long call stubs.  They have the form:
+         NNNNNNNN.<stub_name>.<func_name>.  */
+      const size_t len = strlen (sym);
+      if (   (len > 8 + 10 && const_strneq (sym + 8, ".plt_call."))
+	  || (len > 8 + 12 && const_strneq (sym + 8, ".plt_branch."))
+	  || (len > 8 + 13 && const_strneq (sym + 8, ".long_branch.")))
 	return true;
     }
 

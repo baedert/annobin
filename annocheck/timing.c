@@ -33,16 +33,18 @@ static enum res
     SEC, USEC, NSEC
   } resolution = USEC;
 
-static void
+static bool
 timing_start_file (annocheck_data * data)
 {
   if (! disabled && clock_gettime (clk_id, & start_time) != 0)
     {
       einfo (SYS_WARN, "unable to get time at start of file processing");
       disabled = true;
+      return false;
     }
   first_sec = true;
   first_seg = true;
+  return true;
 }
 
 static bool
