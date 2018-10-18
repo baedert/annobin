@@ -29,7 +29,7 @@
 ulong         verbosity = 0;
 
 uint          major_version = 8;
-uint          minor_version = 57;
+uint          minor_version = 58;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -41,7 +41,8 @@ static char *           saved_args = NULL;
 static char *           prefix = "";
 static const char *     debug_rpm = NULL;
 static const char *     debug_rpm_dir = NULL;
-static const char *     dwarf_path = NULL;
+static const char *     debug_path = NULL;
+static const char *     debug_file = NULL;
 static uint             level = 0;
 static const char *     tmpdir = NULL;
 
@@ -198,8 +199,9 @@ usage (void)
   einfo (INFO, "Runs various scans on the given files");
   einfo (INFO, "Useage: %s [options] <file(s)>", component);
   einfo (INFO, " Options are:");
-  einfo (INFO, "   --debug-rpm=<FILE> [Find separate dwarf debug information in <FILE>]");
-  einfo (INFO, "   --dwarf-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
+  einfo (INFO, "   --debug-rpm=<RPM>  [Find separate dwarf debug information in <RPM>]");
+  einfo (INFO, "   --debug-file=<FILE>[Find separate dwarf debug information in <FILE>]");
+  einfo (INFO, "   --debug-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
   einfo (INFO, "   --help             [Display this message & exit]");
   einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types][default]");
   einfo (INFO, "   --report-unknown   [Do complain about unknown file types]");
@@ -298,17 +300,21 @@ process_command_line (uint argc, const char * argv[])
 	      verbosity = -1UL;
 	      break;
 
-	    case 'd': /* --debug-rpm or --dwarf-path */
+	    case 'd': /* --debug-rpm, --debug-file or --debug-dir.  */
 	      parameter = strchr (arg, '=');
 	      if (parameter == NULL)
 		parameter = argv[a++];
 	      else
 		parameter ++;
 
-	      if (strncmp (arg, "dwarf-dir", 9) == 0)
-		dwarf_path = parameter;
-	      else if (strncmp (arg, "debug-rpm", 9) == 0)
+	      if (const_strneq (arg, "dwarf-dir")) /* Old name for --debug-dir.  */
+		debug_path = parameter;
+	      else if (const_strneq (arg, "debug-dir"))
+		debug_path = parameter;
+	      else if (const_strneq (arg, "debug-rpm"))
 		debug_rpm = parameter;
+	      else if (const_strneq (arg, "debug-file"))
+		debug_file = parameter;
 	      else
 		goto unknown_arg;
 
@@ -324,8 +330,10 @@ process_command_line (uint argc, const char * argv[])
 		    tmp = concat (orig_arg, " ", getcwd (NULL, 0), "/", parameter, NULL);
 		  else if (debug_rpm == parameter)
 		    tmp = concat ("--debug-rpm=", getcwd (NULL, 0), "/", parameter, NULL);
-		  else /* dwarf_path == parameter  */
-		    tmp = concat ("--dwarf-dir=", getcwd (NULL, 0), "/", parameter, NULL);
+		  else if (debug_path == parameter)
+		    tmp = concat ("--debug-dir=", getcwd (NULL, 0), "/", parameter, NULL);
+		  else /* debug_file == parameter  */
+		    tmp = concat ("--debug-file=", getcwd (NULL, 0), "/", parameter, NULL);
 		  save_arg (tmp);
 		  free ((void *) tmp);
 		}
@@ -336,11 +344,11 @@ process_command_line (uint argc, const char * argv[])
 		    save_arg (parameter);
 		}
 
-	      if (dwarf_path != NULL && debug_rpm != NULL)
+	      if (debug_path != NULL && debug_rpm != NULL)
 		{
 		  static bool warned = false;
 		  if (! warned)
-		    einfo (WARN, "Behaviour is udnefined when both --debug-rpm and --dwarf-dir are specified");
+		    einfo (WARN, "Behaviour is undefined when both --debug-rpm and --debug-dir are specified");
 		  warned = true;
 		}
 	      break;
@@ -726,6 +734,13 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
 
   einfo (VERBOSE2, "%s: Attempting to locate separate debuginfo file", data->filename);
 
+  if (debug_file)
+    {
+      debugfile = (char *) xmalloc (strlen (debug_file) + 2);
+      TRY_DEBUG ("%s", debug_file);
+      free (debugfile);
+    }
+
   build_id_len = dwelf_elf_gnu_build_id (data->elf, & build_id_ptr);
   if (build_id_len > 0)
     {
@@ -751,8 +766,8 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
 	/* If the user has told us an rpm file that contains
 	   debug information then extract it and use it.  */
 	path = extract_rpm_file (debug_rpm);
-      else if (dwarf_path)
-	path = dwarf_path;
+      else if (debug_path)
+	path = debug_path;
 
       if (path == NULL)
 	path = "";
@@ -826,9 +841,9 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
 				+ strlen (link)
 				+ 1);
 
-  /* If we have been provided with a dwarf directory, try that first.  */
-  if (dwarf_path)
-    TRY_DEBUG ("%s/%s", dwarf_path, link);
+  /* If we have been provided with a debug directory, try that first.  */
+  if (debug_path)
+    TRY_DEBUG ("%s/%s", debug_path, link);
 
   /* If we have been pointed at an debuginfo rpm then try that next.  */
   if (debug_rpm)
@@ -876,10 +891,11 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
 
   /* FIMXE: This is a workaround for a bug in the Fedora packaging
      system.  It is possible for the debuginfo files to be out of
-     sync with their corresponding binary files.  Eg ld-2.29.1-23.fc28
-     vs ld-2.29.1-22.fc28.debug_info.  So check for earlier versions
-     of the debuginfo file in the directory where it is known that
-     Fedora stores its debug files...  */
+     sync with their corresponding binary files.  Eg:
+          ld-2.29.1-23.fc28
+       vs ld-2.29.1-22.fc28.debug_info.
+     So check for earlier versions of the debuginfo file in the directory
+     where it is known that Fedora stores its debug files...  */
   char * dash = strrchr (link, '-');
   if (dash)
     {
@@ -988,13 +1004,13 @@ annocheck_walk_dwarf (annocheck_data * data, dwarf_walker func, void * ptr)
 static bool
 ends_with (const char * string, const char * ending, const size_t end_len)
 {
-  size_t len = strlen (string);
+  size_t len;
 
-  if (string == NULL
-      || len <= end_len
-      || ! streq (string + (len - end_len), ending))
-    return false;
-  return true;
+  return (string != NULL
+	  && ending != NULL
+	  && end_len > 0
+	  && (len = strlen (string)) > end_len
+	  && streq (string + (len - end_len), ending));
 }
 
 static const char *

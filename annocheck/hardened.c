@@ -307,7 +307,7 @@ skip_check (enum test_index check, const char * component_name)
   if (component_name == NULL)
     return false;
 
-  if (strstr (component_name, "component: "))
+  if (const_strneq (component_name, "component: "))
     component_name += strlen ("component: ");
 
   if (streq (component_name, "elf_init.c")
@@ -1556,7 +1556,6 @@ check_for_gaps (annocheck_data * data)
 		  if (skip_gap_sym (sym2))
 		    {
 		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
-
 		      /* See comment above.  */
 		      continue;
 		    }
@@ -1566,6 +1565,27 @@ check_for_gaps (annocheck_data * data)
 		}
 	    }
 
+	  /* Finally, give it one more go, looking for a symbol half way through the gap.  */
+	  if (gap.end - gap.start > 32)
+	    {
+	      const char * sym2;
+	      ulong start = align (gap.start + (gap.end - gap.start) / 2, 32);
+
+	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, start, start + 32, false);
+
+	      if (sym2 != NULL
+		  && (sym == NULL || ! streq (sym, sym2))
+		  && strstr (sym2, ".end") == NULL)
+		{
+		  if (skip_gap_sym (sym2))
+		    {
+		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
+		      /* See comment above.  */
+		      continue;
+		    }
+		}
+	    }
+	      
 	  gap_found = true;
 	  if (! BE_VERBOSE)
 	    break;
