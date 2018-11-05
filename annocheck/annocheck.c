@@ -28,8 +28,8 @@
 /* -1: silent, 0: normal, 1: verbose, 2: very verbose.  */
 ulong         verbosity = 0;
 
-uint          major_version = 8;
-uint          minor_version = 58;
+const uint              major_version = 8;
+const uint              minor_version = 59;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];

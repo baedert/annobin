@@ -239,7 +239,10 @@ annobin_target_specific_loader_notes (void)
   annobin_inform (1, "Creating notes for the dynamic loader");
 
   fprintf (asm_out_file, "\t.section %s, \"a\", %%note\n", NOTE_GNU_PROPERTY_SECTION_NAME);
-  fprintf (asm_out_file, "\t.balign 4\n");
+  if (annobin_is_64bit)
+    fprintf (asm_out_file, "\t.balign 8\n");
+  else
+    fprintf (asm_out_file, "\t.balign 4\n");
 
   ptr = buffer;
 

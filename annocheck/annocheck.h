@@ -247,7 +247,7 @@ extern ulong        verbosity;
 #define BE_QUIET         (verbosity == -1UL)
 
 /* The version numbers of the checksec framework.  */
-extern uint major_version;
-extern uint minor_version;
+extern const uint major_version;
+extern const uint minor_version;
 
 #endif /* __ANNOCHECK_H__ */

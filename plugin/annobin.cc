@@ -26,8 +26,8 @@
 /* The version of the annotation specification supported by this plugin.  */
 #define SPEC_VERSION  3
 
-static unsigned int   annobin_version = 858; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 858");
+static unsigned int   annobin_version = 859; /* NB. Keep in sync with version_string below.  */
+static const char *   version_string = N_("Version 859");
 
 
 
