@@ -1083,6 +1083,12 @@ check_dynamic_section (annocheck_data *    data,
 	    tests[TEST_BIND_NOW].num_pass ++;
 	  break;
 
+	case DT_RELSZ:
+	case DT_RELASZ:
+	  if (dyn->d_un.d_val > 0)
+	    tests[TEST_BIND_NOW].num_maybe ++;
+	  break;
+	      
 	case DT_TEXTREL:
 	  tests[TEST_TEXTREL].num_fail ++;
 	  break;
@@ -1675,7 +1681,12 @@ show_BIND_NOW (annocheck_data * data, test * results)
     skip (data, "Test for -Wl,-z,now.  (Only needed for executables)");
   else if (tests[TEST_DYNAMIC].num_pass == 0)
     skip (data, "Test for -Wl,-z,now.  (No dynamic segment present)");
-  else if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
+  else if (results->num_maybe == 0)
+    skip (data, "Test for -Wl,-z-now.  (Dynamic segment present, but no dynamic relocations found)");
+  else if (gcc_version == -1)
+    /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
+    skip (data, "Test for -Wl,-z,now.  (Binary was not built by gcc)");
+  else if (results->num_pass == 0 || results->num_fail > 0)
     fail (data, "Not linked with -Wl,-z,now");
   else
     pass (data, "Linked with -Wl,-z,now");
@@ -1700,7 +1711,12 @@ show_GNU_RELRO (annocheck_data * data, test * results)
     skip (data, "Test for -Wl,-z,relro.  (Not needed in object files)");
   else if (tests[TEST_DYNAMIC].num_pass == 0)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic segment present)");
-  else if (results->num_pass == 0 || results->num_fail > 0 || results->num_maybe > 0)
+  else if (tests [TEST_BIND_NOW].num_maybe == 0)
+    skip (data, "Test for -Wl,-z,relro.  (No dynamic relocations)");
+  else if (gcc_version == -1)
+    /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
+    skip (data, "Test for -Wl,z,relro. (Not built by gcc)");
+  else if (results->num_pass == 0 || results->num_fail > 0)
     fail (data, "Not linked with -Wl,-z,relro");
   else
     pass (data, "Linked with -Wl,-z,relro");
@@ -2175,11 +2191,12 @@ finish (annocheck_data * data)
        of this binary.  */
     (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
 
-  if (! ignore_gaps
-      && e_type != ET_REL)
+  if (! ignore_gaps)
     {
-      if (gcc_version == -1)
-	skip (data, "Not checking for gaps in a non-gcc compiled binary");
+      if (e_type == ET_REL)
+	skip (data, "Not checking for gaps (object file)");
+      else if (gcc_version == -1)
+	skip (data, "Not checking for gaps (non-gcc compiled binary)");
       else
 	check_for_gaps (data);
     }
@@ -2201,10 +2218,7 @@ finish (annocheck_data * data)
   else if (num_maybes > 0)
     return false; /* FIXME: Add an option to ignore MAYBE results ? */
   else
-    {
-      einfo (INFO, "%s: PASS", data->filename);
-      return true;
-    }
+    return einfo (INFO, "%s: PASS", data->filename);
 }
 
 static void
