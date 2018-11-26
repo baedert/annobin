@@ -1703,7 +1703,8 @@ show_ENTRY (annocheck_data * data, test * results)
 	fail (data, "Entry point instruction is not ENDBR64");
       if (BE_VERBOSE)
 	einfo (VERBOSE, "%s:      (Entry Address: %#lx.  Bytes at this address: %x %x %x %x)",
-	       data->filename, e_entry, entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
+	       data->filename, (long) e_entry,
+	       entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
     }
   else
     pass (data, "Entry point instruction is ENDBR");
