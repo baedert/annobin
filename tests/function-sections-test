@@ -54,13 +54,16 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS $srcdir/hello.c
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -ffunction-sections $srcdir/hello2.c 
 
+# For extra debugging add these to linker command line below:
+#     -Wl,--print-gc-sections \
+#     -Wl,--orphan-handling=warn \
+
 $GCC -pie \
      -Wl,-z,now,-z,relro \
-     -Wl,--gc-sections -Wl,--print-gc-sections \
+     -Wl,--gc-sections \
      -Wl,-Map,fred.map \
-     -Wl,--orphan-handling=warn \
  hello.o unused_code.o hello2.o -o function-sections-test.exe
 
 # FIXME - we should check that the notes were parsed correctly...
 # FIXME - we should check for gaps.
-../annocheck/annocheck --ignore-gaps function-sections-test.exe
+../annocheck/annocheck --ignore-gaps --skip-entry function-sections-test.exe

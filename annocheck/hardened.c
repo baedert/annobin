@@ -17,6 +17,12 @@
 
 #include "annocheck.h"
 
+typedef struct hardened_note_data
+{
+  ulong         start;
+  ulong         end;
+} hardened_note_data;
+
 /* Set by the constructor.  */
 static bool disabled = false;
 
@@ -24,26 +30,25 @@ static bool disabled = false;
 static bool ignore_gaps = false;
 
 /* These are initialised on a per-input-file basis by start().  */
-static int  e_type;
-static int  e_machine;
-static ulong text_section_name_index;
-static ulong text_section_alignment;
-static bool is_little_endian;
-static bool debuginfo_file;
-static int  num_fails;
-static int  num_maybes;
-static int  gcc_version;
-
-typedef struct hardened_note_data
-{
-  ulong         start;
-  ulong         end;
-} hardened_note_data;
+static Elf64_Half  e_type;
+static Elf64_Half  e_machine;
+static Elf64_Addr  e_entry;
+static ulong       text_section_name_index;
+static ulong       text_section_alignment;
+static bool        is_little_endian;
+static bool        debuginfo_file;
+static int         num_fails;
+static int         num_maybes;
+static int         gcc_version;
 
 static hardened_note_data *  ranges = NULL;
 static unsigned              num_allocated_ranges = 0;
 static unsigned              next_free_range = 0;
 #define RANGE_ALLOC_DELTA    16
+
+/* Array used to store instruction bytes at entry point.
+   Use for verbose reporting when the ENTRY test fails.  */
+static unsigned char entry_bytes[4];
 
 /* This structure defines an individual test.  */
 
@@ -63,6 +68,7 @@ enum test_index
   TEST_BIND_NOW,
   TEST_CF_PROTECTION,
   TEST_DYNAMIC,
+  TEST_ENTRY,
   TEST_FORTIFY,
   TEST_GLIBCXX_ASSERTIONS,
   TEST_GNU_RELRO,
@@ -87,6 +93,7 @@ enum test_index
 static void show_BIND_NOW           (annocheck_data *, test *);
 static void show_CF_PROTECTION      (annocheck_data *, test *);
 static void show_DYNAMIC            (annocheck_data *, test *);
+static void show_ENTRY              (annocheck_data *, test *);
 static void show_FORTIFY            (annocheck_data *, test *);
 static void show_GLIBCXX_ASSERTIONS (annocheck_data *, test *);
 static void show_GNU_RELRO          (annocheck_data *, test *);
@@ -115,6 +122,7 @@ static test tests [TEST_MAX] =
   TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8 only)"),
   TEST (dynamic,            DYNAMIC,            "There is at most one dynamic segment/section"),
+  TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
   TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writeable"),
@@ -170,6 +178,7 @@ start (annocheck_data * data)
 
       e_type = hdr->e_type;
       e_machine = hdr->e_machine;
+      e_entry = hdr->e_entry;
       is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
     }
   else
@@ -178,6 +187,7 @@ start (annocheck_data * data)
 
       e_type = hdr->e_type;
       e_machine = hdr->e_machine;
+      e_entry = hdr->e_entry;
       is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
     }
 
@@ -1200,6 +1210,19 @@ interesting_seg (annocheck_data *    data,
       /* We want to examine the note segments on x86_64 binaries.  */
       return (e_machine == EM_X86_64);
 
+    case PT_LOAD:
+      /* If we are checking the entry point instruction then we need to load
+	 the segment.  We check segments rather than sections because executables
+	 do not have to have sections.  */
+      if ((e_type == ET_EXEC || e_type == ET_DYN)
+	  && (e_machine == EM_386 || e_machine == EM_X86_64)
+	  && seg->phdr->p_memsz > 0
+	  && seg->phdr->p_vaddr <= e_entry
+	  && seg->phdr->p_vaddr + seg->phdr->p_memsz > e_entry
+	  && ! skip_check (TEST_ENTRY, NULL))
+	return true;
+      break;
+
     default:
       break;
     }
@@ -1211,6 +1234,43 @@ static bool
 check_seg (annocheck_data *    data,
 	   annocheck_segment * seg)
 {
+  if (seg->phdr->p_type == PT_LOAD)
+    {
+      Elf64_Addr entry_point = e_entry - seg->phdr->p_vaddr;
+
+      /* We are checking the entry point instruction.  We should
+	 only have reached this point if the requirements for the
+	 check have already been met, so we do not need to test
+	 them again.  */
+      assert (entry_point + 3 < seg->data->d_size);
+      memcpy (entry_bytes, seg->data->d_buf + entry_point, sizeof entry_bytes);
+      
+      if (e_machine == EM_386)
+	{
+	  /* Look for ENDBR32: 0xf3 0x0f 0x1e 0xfb. */
+	  if (   entry_bytes[0] == 0xf3
+	      && entry_bytes[1] == 0x0f
+	      && entry_bytes[2] == 0x1e
+	      && entry_bytes[3] == 0xfb)
+	    tests[TEST_ENTRY].num_pass ++;
+	  else
+	    tests[TEST_ENTRY].num_fail ++;
+	}
+      else /* e_machine == EM_X86_64 */
+	{
+	  /* Look for ENDBR64: 0xf3 0x0f 0x1e 0xfa.  */
+	  if (   entry_bytes[0] == 0xf3
+	      && entry_bytes[1] == 0x0f
+	      && entry_bytes[2] == 0x1e
+	      && entry_bytes[3] == 0xfa)
+	    tests[TEST_ENTRY].num_pass ++;
+	  else
+	    tests[TEST_ENTRY].num_fail ++;
+	}
+
+      return true;
+    }
+
   if (e_machine != EM_X86_64)
     return true;
 
@@ -1624,6 +1684,29 @@ check_for_gaps (annocheck_data * data)
     fail (data, "Gaps were detected in the annobin coverage.  Run with -v to list");
   else
     fail (data, "Gaps were detected in the annobin coverage");
+}
+
+static void
+show_ENTRY (annocheck_data * data, test * results)
+{
+  if (e_machine != EM_386 && e_machine != EM_X86_64)
+    skip (data, "Entry point instruction.  (Not an x86 binary)");
+  else if (e_type != ET_DYN && e_type != ET_EXEC)
+    skip (data, "Entry point instruction.  (Not an executable)");
+  else if (e_entry == 0)
+    maybe (data, "Entry point address is zero");
+  else if (results->num_fail > 0)
+    {
+      if (e_machine == EM_386)
+	fail (data, "Entry point instruction is not ENDBR32");
+      else
+	fail (data, "Entry point instruction is not ENDBR64");
+      if (BE_VERBOSE)
+	einfo (VERBOSE, "%s:      (Entry Address: %#lx.  Bytes at this address: %x %x %x %x)",
+	       data->filename, e_entry, entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
+    }
+  else
+    pass (data, "Entry point instruction is ENDBR");
 }
 
 static void
@@ -2210,7 +2293,7 @@ finish (annocheck_data * data)
 	  einfo (VERBOSE2, " Use --skip-%s to disable this test", tests[i].name);
 	}
       else
-	einfo (VERBOSE, "%s: skip: %s", data->filename, tests[i].name);
+	einfo (VERBOSE, "%s: skip: %s", data->filename, tests[i].description);
     }
 
   if (num_fails > 0)

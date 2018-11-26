@@ -21,15 +21,20 @@
 /* Needed to access some of GCC's internal structures.  */
 #include "cgraph.h"
 #include "target.h"
+#if GCCPLUGIN_VERSION_MAJOR >= 5
 #include "errors.h"
+#else
+#include "diagnostic-core.h"
+#endif
 
 /* The version of the annotation specification supported by this plugin.  */
 #define SPEC_VERSION  3
 
-static unsigned int   annobin_version = 860; /* NB. Keep in sync with version_string below.  */
-static const char *   version_string = N_("Version 860");
-
-
+/* Version number.  NB: Keep the numeric and string versions in sync
+   Also, keep in sync with the major_version and minor_version definitions
+   in annocheck.c.  */
+static unsigned int   annobin_version = 862;
+static const char *   version_string = N_("Version 862");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"

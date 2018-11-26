@@ -57,7 +57,8 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -shared $srcdir/hello_lib.c
 
 # Link without system files as these may not have been hardened.
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
-     -nostartfiles -nostdlib -Wl,-e,0 \
+     -nostartfiles -nostdlib \
+     -Wl,-e,0x0 \
      -Wl,--defsym=__stack_chk_fail=0 \
      -Wl,--defsym=__stack_chk_fail_local=0 \
      -Wl,--defsym=__stack_chk_guard=0 \
@@ -69,5 +70,6 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
 # $OBJCOPY --merge-notes hardening-test.exe hardening-test-merged.exe
 
 # The s390 and PPC targets always create some gaps.  Have not found out why...
+# The entry point test (on x86/x86_64) will fail with a MAYBE result because the entry point is 0...
 
-$ANNOCHECK -v --ignore-gaps hardening-test.exe --enable-timing
+$ANNOCHECK -v --ignore-gaps --skip-entry hardening-test.exe --enable-timing

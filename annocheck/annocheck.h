@@ -57,6 +57,9 @@
 #define GNU_BUILD_ATTRIBUTE_PIC			7
 #define GNU_BUILD_ATTRIBUTE_SHORT_ENUM		8
 
+#ifndef NT_GNU_PROPERTY_TYPE_0
+#define NT_GNU_PROPERTY_TYPE_0  5
+#endif
 
 #define streq(a,b)	  (strcmp ((a), (b)) == 0)
 #define strneq(a,b,n)	  (strncmp ((a), (b), (n)) == 0)
