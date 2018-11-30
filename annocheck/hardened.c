@@ -1185,6 +1185,10 @@ interesting_seg (annocheck_data *    data,
 
   switch (seg->phdr->p_type)
     {
+    case PT_INTERP:
+      tests[TEST_ENTRY].num_maybe ++;
+      break;
+
     case PT_GNU_RELRO:
       tests[TEST_GNU_RELRO].num_pass ++;
       break;
@@ -1545,6 +1549,11 @@ skip_gap_sym (const char * sym)
 	  || (len > 8 + 12 && const_strneq (sym + 8, ".plt_branch."))
 	  || (len > 8 + 13 && const_strneq (sym + 8, ".long_branch.")))
 	return true;
+
+      /* The gdb server program contains special assembler stubs that
+	 are unannotated.  See BZ 1630564 for more details.  */
+      if (const_strneq (sym, "start_bcax_"))
+	return true;
     }
 
   return false;
@@ -1692,6 +1701,8 @@ show_ENTRY (annocheck_data * data, test * results)
   if (e_machine != EM_386 && e_machine != EM_X86_64)
     skip (data, "Entry point instruction.  (Not an x86 binary)");
   else if (e_type != ET_DYN && e_type != ET_EXEC)
+    skip (data, "Entry point instruction.  (Not a dynamic executable)");
+  else if (results->num_maybe == 0) /* Ie there was no PT_INTERP segment.  */
     skip (data, "Entry point instruction.  (Not an executable)");
   else if (e_entry == 0)
     maybe (data, "Entry point address is zero");

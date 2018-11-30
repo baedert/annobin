@@ -32,9 +32,10 @@
 
 /* Version number.  NB: Keep the numeric and string versions in sync
    Also, keep in sync with the major_version and minor_version definitions
-   in annocheck.c.  */
-static unsigned int   annobin_version = 862;
-static const char *   version_string = N_("Version 862");
+   in annocheck.c.
+   FIXME: This value should be defined in only one place...  */
+static unsigned int   annobin_version = 864;
+static const char *   version_string = N_("Version 864");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
