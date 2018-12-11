@@ -1683,22 +1683,6 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 }
 
 static void
-annobin_change_section (const char * suffix)
-{
-  if (*suffix)
-    {
-      if (annobin_enable_attach)
-	/* Since we have issued the .attach, make sure that we include it here.  */
-	fprintf (asm_out_file, "\t.pushsection %s%s, \"axG\", %%progbits, %s%s%s\n", CODE_SECTION, suffix,
-		 CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
-      else
-	fprintf (asm_out_file, "\t.pushsection %s%s\n", CODE_SECTION, suffix);
-    }
-  else
-    fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
-}
-
-static void
 annobin_emit_end_symbol (const char * suffix)
 {
   if (*suffix)
@@ -1742,23 +1726,6 @@ annobin_emit_end_symbol (const char * suffix)
       fprintf (asm_out_file, "\t.endif\n");
     }
 
-  fprintf (asm_out_file, "\t.popsection\n");
-}
-
-static void
-annobin_emit_symbol_correct (const char * sec_suffix, const char * suffix)
-{
-  annobin_change_section (sec_suffix);
-
-  /* Note: we cannot test "start sym > end sym" as these symbols may not have values
-     yet, (due to the possibility of linker relaxation).  But we are allowed to
-     test for symbol equality.  So we fudge things a little....  */
-     
-  fprintf (asm_out_file, "\t.if %s%s == %s%s + 2\n", annobin_current_filename, suffix,
-	   annobin_current_endname, suffix);
-  fprintf (asm_out_file, "\t  .set %s%s, %s%s\n", annobin_current_filename, suffix,
-	   annobin_current_endname, suffix);
-  fprintf (asm_out_file, "\t.endif\n");
   fprintf (asm_out_file, "\t.popsection\n");
 }
 
