@@ -34,8 +34,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 864;
-static const char *   version_string = N_("Version 864");
+static unsigned int   annobin_version = 865;
+static const char *   version_string = N_("Version 865");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -44,11 +44,13 @@ static const char *   version_string = N_("Version 864");
 #define ANNOBIN_GROUP_NAME    ".group"
 
 /* Section names (and section name prefixes) used by gcc.  */
-#define CODE_SECTION    ".text"
-#define HOT_SECTION     ".text.hot"
-#define COLD_SECTION    ".text.unlikely"
-#define STARTUP_SECTION ".text.startup"
-#define EXIT_SECTION    ".text.exit"
+#define HOT_SUFFIX       ".hot"
+#define COLD_SUFFIX      ".unliklely"
+#define CODE_SECTION     ".text"
+#define HOT_SECTION      CODE_SECTION HOT_SUFFIX
+#define COLD_SECTION     CODE_SECTION COLD_SUFFIX
+#define STARTUP_SECTION  CODE_SECTION ".startup"
+#define EXIT_SECTION     CODE_SECTION ".exit"
 
 /* Required by the GCC plugin API.  */
 int            plugin_is_GPL_compatible;
@@ -1287,8 +1289,10 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
     {
       if (current_func.unlikely_section_name)
 	{
-	  /* Emit the end symbol in the unlikely section.  */
-	  fprintf (asm_out_file, "\t.pushsection %s, \"ax\", %%progbits\n",
+	  /* Emit the end symbol in the unlikely section.
+	     Note - we attempt to create a new section that will be appended to the
+	     end of the sections that are going into the section group.  */
+	  fprintf (asm_out_file, "\t.pushsection %s.zzz, \"ax\", %%progbits\n",
 		   current_func.unlikely_section_name);
 	  annobin_emit_symbol (current_func.unlikely_end_sym);
 	  fprintf (asm_out_file, "\t.popsection\n");
@@ -1470,7 +1474,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     case 64:
       annobin_is_64bit = true; break;
     default:
-      annobin_inform (0, _("Unknown target pointer size: %d"), POINTER_SIZE);
+      annobin_inform (0, "Unknown target pointer size: %d", POINTER_SIZE);
     }
 
   if (annobin_enable_stack_size_notes)
@@ -1516,10 +1520,10 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      will be performed on a function, and hence a .text.hot and/or .text.unlikely
      section will be created.  So instead we create global notes to cover these
      two sections.  */
-  annobin_emit_start_sym_and_version_note (".hot", 'h');
-  annobin_emit_start_sym_and_version_note (".unlikely", 'h');
-  queue_attachment (HOT_SECTION, concat (HOT_SECTION, ".", ANNOBIN_GROUP_NAME, NULL));
-  queue_attachment (COLD_SECTION, concat (COLD_SECTION, ".", ANNOBIN_GROUP_NAME, NULL));
+  annobin_emit_start_sym_and_version_note (HOT_SUFFIX, 'h');
+  annobin_emit_start_sym_and_version_note (COLD_SUFFIX, 'h');
+  queue_attachment (HOT_SECTION, concat (HOT_SECTION, ANNOBIN_GROUP_NAME, NULL));
+  queue_attachment (COLD_SECTION, concat (COLD_SECTION, ANNOBIN_GROUP_NAME, NULL));
 
   /* Record the version of the compiler.  */
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
@@ -1697,7 +1701,21 @@ annobin_change_section (const char * suffix)
 static void
 annobin_emit_end_symbol (const char * suffix)
 {
-  annobin_change_section (suffix);
+  if (*suffix)
+    {
+      fprintf (asm_out_file, "\t.pushsection %s%s\n", CODE_SECTION, suffix);
+
+      /* Create a *new* section to contain the end symbol.  Ideally this
+	 symbol will be placed at the end of the section group.  */
+      if (annobin_enable_attach)
+	/* Since we have issued the .attach, make sure that we include it here.  */
+	fprintf (asm_out_file, "\t.section %s%s.zzz, \"axG\", %%progbits, %s%s%s\n", CODE_SECTION, suffix,
+		 CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
+      else
+	fprintf (asm_out_file, "\t.section %s%s.zzz\n", CODE_SECTION, suffix);
+    }
+  else
+    fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
 
   fprintf (asm_out_file, "\t%s %s%s\n",
 	   global_file_name_symbols ? ".global" : ".hidden",
@@ -1705,13 +1723,32 @@ annobin_emit_end_symbol (const char * suffix)
   fprintf (asm_out_file, "%s%s:\n", annobin_current_endname, suffix);
   fprintf (asm_out_file, "\t.type %s%s, STT_NOTYPE\n", annobin_current_endname, suffix);
   fprintf (asm_out_file, "\t.size %s%s, 0\n", annobin_current_endname, suffix);
+
+  /* If there is a bias to the start symbol, we can end up with the case where
+     the start symbol is after the end symbol.  (If the section is empty).
+     Catch that and adjust the start symbol.  This also pacifies eu-elflint
+     which complains about the start symbol being placed beyond the end of
+     the section.  */
+  if (target_start_sym_bias)
+    {
+      /* Note: we cannot test "start sym > end sym" as these symbols may not have values
+	 yet, (due to the possibility of linker relaxation).  But we are allowed to
+	 test for symbol equality.  So we fudge things a little....  */
+     
+      fprintf (asm_out_file, "\t.if %s%s == %s%s + 2\n", annobin_current_filename, suffix,
+	       annobin_current_endname, suffix);
+      fprintf (asm_out_file, "\t  .set %s%s, %s%s\n", annobin_current_filename, suffix,
+	       annobin_current_endname, suffix);
+      fprintf (asm_out_file, "\t.endif\n");
+    }
+
   fprintf (asm_out_file, "\t.popsection\n");
 }
 
 static void
-annobin_emit_symbol_correct (const char * suffix)
+annobin_emit_symbol_correct (const char * sec_suffix, const char * suffix)
 {
-  annobin_change_section (suffix);
+  annobin_change_section (sec_suffix);
 
   /* Note: we cannot test "start sym > end sym" as these symbols may not have values
      yet, (due to the possibility of linker relaxation).  But we are allowed to
@@ -1741,20 +1778,8 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
 	emit_queued_attachments ();
 
       annobin_emit_end_symbol ("");
-      annobin_emit_end_symbol (".hot");
-      annobin_emit_end_symbol (".unlikely");
-
-      /* If there is a bias to the start symbol, we can end up with the case where
-	 the start symbol is after the end symbol.  (If the section is empty).
-	 Catch that and adjust the start symbol.  This also pacifies eu-elflint
-	 which complains about the start symbol being placed beyond the end of
-	 the section.  */
-      if (target_start_sym_bias)
-	{
-	  annobin_emit_symbol_correct ("");
-	  annobin_emit_symbol_correct (".hot");
-	  annobin_emit_symbol_correct (".unlikely");
-	}
+      annobin_emit_end_symbol (HOT_SUFFIX);
+      annobin_emit_end_symbol (COLD_SUFFIX);
     }
 
   if (! annobin_enable_dynamic_notes)
