@@ -1689,14 +1689,28 @@ annobin_emit_end_symbol (const char * suffix)
     {
       fprintf (asm_out_file, "\t.pushsection %s%s\n", CODE_SECTION, suffix);
 
-      /* Create a *new* section to contain the end symbol.  Ideally this
-	 symbol will be placed at the end of the section group.  */
+      /* We want the end symbol to appear at the end of the section.
+	 But if we are creating a symbol for the hot or cold sections
+	 then there can be multiple copies of this section (with the
+	 same name and identical attributes)!  So we create a *new*
+	 section just for the end symbol.  The linker's normal section
+	 concatenation heuristic should then place this section after
+	 all the others.
+
+	 Note however that it we are reversing a symbol bias we cannot
+	 do this, as the arithmetic has to be between symbols defined
+	 in the same section.  Fortunately it appears that gcc does not
+	 perform hot/cold partitioning for the PPC64, and this is the
+	 only target that uses symbol biasing.  */
+      const char * extra_suffix = target_start_sym_bias ? "" : ".zzz";
+	
       if (annobin_enable_attach)
-	/* Since we have issued the .attach, make sure that we include it here.  */
-	fprintf (asm_out_file, "\t.section %s%s.zzz, \"axG\", %%progbits, %s%s%s\n", CODE_SECTION, suffix,
+	/* Since we have issued the .attach, make sure that we include the group here.  */
+	fprintf (asm_out_file, "\t.section %s%s%s, \"axG\", %%progbits, %s%s%s\n",
+		 CODE_SECTION, suffix, extra_suffix,
 		 CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
       else
-	fprintf (asm_out_file, "\t.section %s%s.zzz\n", CODE_SECTION, suffix);
+	fprintf (asm_out_file, "\t.section %s%s%s\n", CODE_SECTION, suffix, extra_suffix);
     }
   else
     fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
