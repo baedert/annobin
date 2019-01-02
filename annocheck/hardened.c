@@ -844,6 +844,8 @@ walk_build_notes (annocheck_data *     data,
 		     intentionally not compiling with -O2, so suppress warnings about it.  */
 		  report_i (VERBOSE, "%s: skip: (%s): compiled with -Og, so ignoring test for -O2+",
 			    data, sec, note_data, prefer_func_name, value);
+		  /* Add a pass result so that we do not complain about lack of optimization information.  */
+		  tests[TEST_OPTIMIZATION].num_pass ++;
 		}
 	      else
 		{

@@ -34,8 +34,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 865;
-static const char *   version_string = N_("Version 865");
+static unsigned int   annobin_version = 866;
+static const char *   version_string = N_("Version 866");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"

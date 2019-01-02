@@ -32,7 +32,7 @@ ulong         verbosity = 0;
    version_string definitions in annobin.cc.
    FIXME: This value should be defined in only one place...  */
 const uint              major_version = 8;
-const uint              minor_version = 65;
+const uint              minor_version = 66;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
