@@ -45,7 +45,7 @@ static const char *   version_string = N_("Version 866");
 
 /* Section names (and section name prefixes) used by gcc.  */
 #define HOT_SUFFIX       ".hot"
-#define COLD_SUFFIX      ".unliklely"
+#define COLD_SUFFIX      ".unlikely"
 #define CODE_SECTION     ".text"
 #define HOT_SECTION      CODE_SECTION HOT_SUFFIX
 #define COLD_SECTION     CODE_SECTION COLD_SUFFIX
