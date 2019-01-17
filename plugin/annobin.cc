@@ -34,7 +34,7 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 866;
+static unsigned int   annobin_version = 867;
 static const char *   version_string = N_("Version 866");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
@@ -104,6 +104,7 @@ static int            global_stack_clash_option = -1;
 #ifdef flag_cf_protection
 static int            global_cf_option = -1;
 #endif
+static bool           global_omit_frame_pointer;
 static bool           annobin_enable_attach = true;
 static signed int     target_start_sym_bias = 0;
 static unsigned int   annobin_note_count = 0;
@@ -755,6 +756,23 @@ record_cf_protection_note (const char * start, const char * end, int type, const
 }
 #endif
 
+static void
+record_frame_pointer_note (const char * start, const char * end, int type, const char * sec_name)
+{
+  char buffer [128];
+  unsigned len;
+
+  if (flag_omit_frame_pointer)
+    len = sprintf (buffer, "GA%comit_frame_pointer", BOOL_T);
+  else
+    len = sprintf (buffer, "GA%comit_frame_pointer", BOOL_F);
+
+  annobin_inform (1, "Record omit-frame-pointer status of %d", flag_omit_frame_pointer);
+  annobin_output_static_note (buffer, len + 1, true, "bool: -fomit-frame-pointer status",
+			      start, end, type, sec_name);
+}
+
+
 static const char *
 function_asm_name (void)
 {
@@ -901,6 +919,15 @@ annobin_emit_function_notes (bool force)
       start_sym = end_sym = NULL;
     }
 #endif
+
+  if (force || global_omit_frame_pointer != flag_omit_frame_pointer)
+    {
+      annobin_inform (1, "Recording omit_frame_pointer status of %d for %s",
+		      flag_omit_frame_pointer, func_name);
+
+      record_frame_pointer_note (start_sym, end_sym, FUNC, sec_name);
+      start_sym = end_sym = NULL;
+    }
 
   if (force
       || global_pic_option != compute_pic_option ())
@@ -1491,13 +1518,10 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   global_pic_option = compute_pic_option ();
   global_short_enums = flag_short_enums;
   global_GOWall_options = compute_GOWall_options ();
-
+  global_omit_frame_pointer = flag_omit_frame_pointer;
 
   if (annobin_active_checks && optimize < 2 && ! optimize_debug)
-    {
-      error ("optimization level is too low!");
-    }
-
+    error ("optimization level is too low!");
   
   /* Output a file name symbol to be referenced by the notes...  */
   if (annobin_current_filename == NULL)
@@ -1677,6 +1701,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums != 0,
 			    global_short_enums != 0 ? "bool: short-enums: on" : "bool: short-enums: off",
 			    NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
+
+  record_frame_pointer_note (NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
 
   /* Record target specific notes.  */
   annobin_record_global_target_notes ();

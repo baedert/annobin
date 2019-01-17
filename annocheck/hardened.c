@@ -327,30 +327,51 @@ skip_check (enum test_index check, const char * component_name)
       return true;
     }
 
-  static const char * skip_these_funcs[] =
-    {
-     /* We know that some glibc startup functions cannot be compiled
-	with stack protection enabled.  So do not complain about them.  */
-     "_init",
-      "_fini",
-      "__libc_csu_init",
-      "__libc_csu_fini",
-      "_start",
-     "static_reloc.c",
-     "_dl_relocate_static_pie",
-     /* Similarly the stack check support code does not need checking.  */
-      "__stack_chk_fail_local"
-      "stack_chk_fail_local.c"
-     /* Also the atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
-     "atexit",
-    };
+  const static struct ignore
+  {
+    const char *     func_name;
+    enum test_index  test_indicies[4];
+  }
+  skip_these_funcs[] =
+  {
+    /* We know that some glibc startup functions cannot be compiled
+       with stack protection enabled.  So do not complain about them.  */
+    { "_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "__libc_csu_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "__libc_csu_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+
+    /* FIXME: Not sure about these two - they need some tests skipping
+       but I do not think that they were stack tests...  */
+    { "static_reloc.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "_dl_relocate_static_pie", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+
+    /* The stack overflow support code does not need stack protection.  */
+    { "__stack_chk_fail_local", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "stack_chk_fail_local.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+   
+    /* Also the atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+    { "atexit", { TEST_PIC, TEST_PIE, TEST_MAX, 0 } }
+  };
+
   int i;
 
   for (i = ARRAY_SIZE (skip_these_funcs); i--;)
-    if (streq (component_name, skip_these_funcs[i]))
+    if (streq (component_name, skip_these_funcs[i].func_name))
       {
-	einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
-	return true;
+	for (i = 0; i < ARRAY_SIZE (skip_these_funcs[0].test_indicies); i++)
+	  if (skip_these_funcs[0].test_indicies[i] == check)
+	    {
+	      if (check < TEST_MAX)
+		einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
+	      else
+		einfo (VERBOSE2, "skipping tests of component %s", component_name);
+	      return true;
+	    }
+
+	/* No need to continue searching - we have already matched the name.  */
+	break;
       }
 
   return false;
@@ -780,7 +801,8 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 	    }
 	}
-      /* else report unknown annobin note ?  */
+      else
+	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
       break;
 
     case 'F':
@@ -821,6 +843,8 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 	    }
 	}
+      else
+	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
       break;
 
     case 'G':
@@ -865,7 +889,6 @@ walk_build_notes (annocheck_data *     data,
 		    }
 		}
 	    }
-	  break;
 	}
       else if (streq (attr, "GLIBCXX_ASSERTIONS"))
 	{
@@ -893,6 +916,8 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 	    }
 	}
+      else
+	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
       break;
 
     case 's':
@@ -954,9 +979,12 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 	    }
 	}
+      else
+	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
       break;
 
     default:
+      einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
       break;
     }
 
