@@ -27,15 +27,12 @@
 #include "diagnostic-core.h"
 #endif
 
-/* The version of the annotation specification supported by this plugin.  */
-#define SPEC_VERSION  3
-
 /* Version number.  NB: Keep the numeric and string versions in sync
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 867;
-static const char *   version_string = N_("Version 866");
+static unsigned int   annobin_version = 868;
+static const char *   version_string = N_("Version 868");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"

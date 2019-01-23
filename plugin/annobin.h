@@ -39,6 +39,9 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 
 #include <elf.h>
 
+/* The version of the annotation specification supported by this plugin.  */
+#define SPEC_VERSION  3
+
 #if 0 /* This would be the correct thing to do if elf/common.h did not conflict with elf.h.  */
 #include "elf/common.h"
 #else

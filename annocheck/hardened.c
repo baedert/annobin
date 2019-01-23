@@ -17,6 +17,9 @@
 
 #include "annocheck.h"
 
+/* The version of the annotation specification supported by this checker.  */
+#define SPEC_VERSION  3
+
 typedef struct hardened_note_data
 {
   ulong         start;
@@ -37,6 +40,7 @@ static ulong       text_section_name_index;
 static ulong       text_section_alignment;
 static bool        is_little_endian;
 static bool        debuginfo_file;
+static bool        compiled_code_seen;
 static int         num_fails;
 static int         num_maybes;
 static int         gcc_version;
@@ -161,6 +165,7 @@ start (annocheck_data * data)
   gcc_version = -1;
   text_section_name_index = -1;
   text_section_alignment = 0;
+  compiled_code_seen = false;
 
   if (num_allocated_ranges)
     {
@@ -599,11 +604,59 @@ walk_build_notes (annocheck_data *     data,
       value = 0;
       break;
     default:
+      einfo (VERBOSE, "ICE: Unrecognised annobin note type %d", attr_type);
       return false;
     }
 
   switch (* attr)
     {
+    case GNU_BUILD_ATTRIBUTE_VERSION:
+      if (value != -1)
+	{
+	  einfo (VERBOSE, "ICE: The version note should have a string attribute");
+	  break;
+	}
+
+      /* Check the Watermark protocol revision.  */
+      ++ attr;
+      if (* attr <= '0')
+	{
+	  einfo (VERBOSE, "ICE: The version contains an invalid specification number: %d", * attr - '0');
+	  break;
+	}
+
+      if (* attr > '0' + SPEC_VERSION)
+	einfo (WARN, "This checker only supports version %d of the Watermark protocol.  The data in the notes uses version %d",
+	       SPEC_VERSION, * attr - '0');
+
+      /* Check the note producer.  */
+      ++ attr;
+      switch (* attr)
+	{
+	case 'a': /* The assembler.  */
+	case 'l': /* The linker.  */
+	  break;
+	case 'h': /* The gcc plugin.  (From a hot/cold section).  */
+	case 'p': /* The gcc plugin.  */
+	  /* FIXME: Add code to check that the version of the note producer
+	     is not greater than our version.  */
+
+	  /* Note that we have seen compiler generated code.  (As opposed
+	     to assembler or linker generated code).  This means that we
+	     can expect to see notes for -D_FROTIFY_SOURCE and -D_GLIBCXX_ASSERTIONS,
+	     and if they are missing, we can complain.  We do not use
+	     the value of gcc_version because if the assembler source was
+	     built using gcc then it will have debug information associated
+	     with it, with a DW_AT_PRODUCER string that includes the *gcc*
+	     version number.  */
+	  compiled_code_seen = true;
+	  break;
+	default:
+	  einfo (VERBOSE2, "Unrecognised note producer '%d'", * attr);
+	  break;
+	}
+      break;
+
     case GNU_BUILD_ATTRIBUTE_TOOL:
       if (value != -1)
 	einfo (VERBOSE, "ICE: The tool note should have a string attribute");
@@ -657,8 +710,6 @@ walk_build_notes (annocheck_data *     data,
 	  /* Compiled wth -fpic not -fpie.  */
 	  if (e_type == ET_EXEC)
 	    {
-	      if (skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
-		return true;
 #if 0 /* Suppressed because ET_EXEC will already generate a failure...  */
 	      /* Building an executable with -fPIC rather than -fPIE is a bad thing
 		 as it means that the executable is located at a known address that
@@ -827,9 +878,6 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 
 	    case 0:
-	      if (skip_check (TEST_FORTIFY, get_component_name (data, sec, note_data, prefer_func_name)))
-		return true;
-	      /* Fall through.  */
 	    case 1:
 	      report_i (VERBOSE, "%s: FAIL: (%s): Insufficient value for -D_FORTIFY_SOURCE: %d",
 		      data, sec, note_data, prefer_func_name, value);
@@ -2138,8 +2186,11 @@ show_FORTIFY (annocheck_data * data, test * results)
   else if (results->num_pass > 0)
     pass (data, "Compiled with -D_FORTIFY_SOURCE=2");
 
-  else
+  else if (compiled_code_seen)
     maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
+
+  else
+    skip (data, "Test for -D_FORTIFY_SOURCE.  (No GCC compiled object files)");
 }
 
 static void
@@ -2202,10 +2253,10 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
       else
 	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
     }
+
   else if (gcc_version == -1)
-    {
-      skip (data, "Test for -D_GLIBCXX_ASSERTONS.  (The binary was not built by gcc)");
-    }
+    skip (data, "Test for -D_GLIBCXX_ASSERTONS.  (The binary was not built by gcc)");
+
   else if (results->num_maybe > 0)
     {
       if (results->num_pass > 0)
@@ -2218,14 +2269,15 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
       else
 	maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
     }
+
   else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
-    }
+    pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
+
+  else if (compiled_code_seen)
+    maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
+
   else
-    {
-      maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
-    }
+    skip (data, "The test for -D_GLIBCXX_ASSERTIONS.  (No compiled code seen)");
 }
 
 static void
