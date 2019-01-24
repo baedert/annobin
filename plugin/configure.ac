@@ -1,9 +1,9 @@
 # file      : configure.ac
-# copyright : Copyright (c) 2017-2018 Red Hat
+# copyright : Copyright (c) 2017-2019 Red Hat
 # license   : GNU GPL v3; see accompanying LICENSE file.
 
 AC_PREREQ(2.64)
-AC_INIT([Binary Annotation plugin for gcc], 3.1,,[annobin-plugin])
+AC_INIT([Binary Annotation plugin for gcc], 8.6,,[annobin-plugin])
 AC_CANONICAL_SYSTEM
 AC_USE_SYSTEM_EXTENSIONS
 GCC_TOPLEV_SUBDIRS
@@ -16,6 +16,8 @@ GCC_TOPLEV_SUBDIRS
 AM_INIT_AUTOMAKE([foreign no-dist no-define -Wall -Wno-portability])
 AM_MAINTAINER_MODE
 
+LT_INIT([disable-static])
+
 AC_PROG_CXX
 AC_SYS_LARGEFILE
 ACX_PROG_CC_WARNING_OPTS([-Wall], [ac_annobin_warn_cflags])
@@ -24,8 +26,9 @@ ACX_PROG_CC_WARNING_OPTS([-Wall], [ac_annobin_warn_cflags])
 saved_LDFLAGS="$LDFLAGS"
 LDFLAGS="$LDFLAGS -static-libgcc"
 AC_MSG_CHECKING([for -static-libgcc])
-AC_LINK_IFELSE([
-  int main() {}], [have_static_libgcc=yes], [have_static_libgcc=no])
+AC_LINK_IFELSE([AC_LANG_SOURCE([int main() {}])],
+  [have_static_libgcc=yes],
+  [have_static_libgcc=no])
 AC_MSG_RESULT($have_static_libgcc); 
 LDFLAGS="$saved_LDFLAGS"
 # Need -Wc to get it through libtool.

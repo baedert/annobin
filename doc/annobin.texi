@@ -5,9 +5,9 @@
 @setchapternewpage odd
 
 @c man begin INCLUDE
-@set VERSION 10.0
+@set VERSION 8.0
 @set VERSION_PACKAGE (Annobin) 
-@set UPDATED September 2018
+@set UPDATED September 2019
 @c man end
 
 @ifnottex
@@ -23,7 +23,7 @@
 This file documents the annobin plugin on the Fedora system.
 
 @c man begin COPYRIGHT
-Copyright @copyright{} 2018 Red Hat.
+Copyright @copyright{} 2018 - 2019 Red Hat.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -54,7 +54,7 @@ This manual describes the @sc{annobin} plugin and the
 what security features were used when a program was built. 
 
 @vskip 0pt plus 1filll
-Copyright @copyright{} 2018 Red Hat
+Copyright @copyright{} 2018 - 2019 Red Hat
 
       Permission is granted to copy, distribute and/or modify this document
       under the terms of the GNU Free Documentation License, Version 1.3
@@ -513,9 +513,10 @@ self-contained tools providing the checking functionality.
 Currently the following tools are implemented:
 
 @menu
-* Hardened::  Was the application built with the correct security options ?
-* Built-By::  Which tool(s) were used to build the application ?
-* Section-Size::  What is the cumulative size of specific sections in a set of files ?
+* Built-By::  Which tool(s) were used to build the file(s) ?
+* Hardened::  Were the file(s) built with the correct security options ?
+* Notes::     What annobin notes are inside the file(s) ?
+* Section-Size::  What is the cumulative size of specific sections in the file(s) ?
 * Timing::    How long did the checks take ?
 @end menu
 
@@ -567,6 +568,62 @@ information.
 
 @item --version
 Report the version of the tool and then exit.
+
+@end table
+
+@c man end
+
+@c -----------------------------------------------------------------
+@node Built-By
+@section The builder checker.
+
+@smallexample
+@c man begin SYNOPSIS annocheck
+
+annocheck
+  [@b{--disable-hardened}]
+  @b{--enable-builtby}
+  [@b{--all}]
+  [@b{--tool=}@var{name}]
+  [@b{--nottool=}@var{name}]
+  @var{file}@dots{}
+@c man end
+@end smallexample
+
+@c man begin DESCRIPTION annocheck
+
+The @var{built-by} tool is disabled by default, but it can be enabled
+by the command line option @option{--enable-builtby}.  The tool
+checks the specified files to see if any information is stored about
+how the file was built.
+
+Since the hardening checker is enabled by default it may also be
+useful to add the @option{--disable-hardened} option to the command
+line.
+
+The tool supports a few command line options to customise its
+behaviour:
+
+@table @code
+
+@item --all
+Report all builder identification strings.  The tool has several
+different heuristics for determining the builder.  By default it will
+report the information return by the first successful heuristic.  If
+the @option{--all} option is enabled then all successful results will
+be returned.
+
+@item --tool=@var{name}
+This option can be used to restrict the output to only those files
+which were built by a specific tool.  This can be useful when scanning
+a directory full of files searching for those built by a particular
+compiler.
+
+@item --nottool=@var{NAME}
+This option can be used to restrict the output to only those files
+which were not built by a specific tool.  This can be useful when
+scanning a directory full of files searching for those that were not
+built by a particular compiler.
 
 @end table
 
@@ -735,58 +792,29 @@ Disable the tool.
 @c man end
 
 @c -----------------------------------------------------------------
-@node Built-By
-@section The builder checker.
+@node Notes
+@section The annobin note displayer
 
 @smallexample
 @c man begin SYNOPSIS annocheck
 
 annocheck
   [@b{--disable-hardened}]
-  @b{--enable-builtby}
-  [@b{--all}]
-  [@b{--tool=}@var{name}]
-  [@b{--nottool=}@var{name}]
+  @b{--enable-notes}
   @var{file}@dots{}
 @c man end
 @end smallexample
 
 @c man begin DESCRIPTION annocheck
 
-The @var{built-by} tool is disabled by default, but it can be enabled
-by the command line option @option{--enable-builtby}.  The tool
-checks the specified files to see if any information is stored about
-how the file was built.
+The @var{notes} tool displays the contents of any annobin notes inside
+the specified files.  It groups the notes by address range, which
+can help locate missing details.
 
-Since the hardening checker is enabled by default it may also be
-useful to add the @option{--disable-hardened} option to the command
-line.
-
-The tool supports a few command line options to customise its
-behaviour:
-
-@table @code
-
-@item --all
-Report all builder identification strings.  The tool has several
-different heuristics for determining the builder.  By default it will
-report the information return by the first successful heuristic.  If
-the @option{--all} option is enabled then all successful results will
-be returned.
-
-@item --tool=@var{name}
-This option can be used to restrict the output to only those files
-which were built by a specific tool.  This can be useful when scanning
-a directory full of files searching for those built by a particular
-compiler.
-
-@item --nottool=@var{NAME}
-This option can be used to restrict the output to only those files
-which were not built by a specific tool.  This can be useful when
-scanning a directory full of files searching for those that were not
-built by a particular compiler.
-
-@end table
+The @var{notes} tool is disabled by default, but it can be enabled
+by the command line option @option{--enable-notes}.  Since the
+hardening checker is enabled by default it may also be useful to add
+the @option{--disable-hardened} option to the command line.
 
 @c man end
 

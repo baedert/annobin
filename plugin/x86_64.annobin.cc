@@ -1,5 +1,5 @@
 /* x86_64.annobin - x86_64 specific parts of the annobin plugin.
-   Copyright (c) 2017 - 2018 Red Hat.
+   Copyright (c) 2017 - 2019 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -84,7 +84,7 @@ record_cet_note (const char * start, const char * end, int type, const char * se
 #endif
 
 void
-annobin_record_global_target_notes (void)
+annobin_record_global_target_notes (const char * sec)
 {
   /* Note - most, but not all, bits in the ix86_isa_flags variable
      are significant for purposes of ABI compatibility.  We do not
@@ -93,7 +93,7 @@ annobin_record_global_target_notes (void)
   min_x86_isa = max_x86_isa = global_x86_isa = ix86_isa_flags;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
-			       "numeric: ABI", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
+			       "numeric: ABI", NULL, NULL, OPEN, sec);
   annobin_inform (1, "Record global isa of %lx", global_x86_isa);
 
   {
@@ -102,7 +102,7 @@ annobin_record_global_target_notes (void)
     char buffer [128];
     unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
     annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
-				NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
+				NULL, NULL, OPEN, sec);
     annobin_inform (1, "Record global stack realign setting of %s", global_stack_realign ? "false" : "true");
   }
 			       
@@ -112,7 +112,7 @@ annobin_record_global_target_notes (void)
   global_ibt = ix86_isa_flags2 & OPTION_MASK_ISA_IBT;
   global_shstk = ix86_isa_flags & OPTION_MASK_ISA_SHSTK;
 
-  record_cet_note (NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
+  record_cet_note (NULL, NULL, OPEN, sec);
 #endif
 }
 

@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "ANNOCHECK 1"
-.TH ANNOCHECK 1 "2018-10-10" "annobin-1" "RPM Development Tools"
+.TH ANNOCHECK 1 "2019-01-24" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -152,6 +152,14 @@ annocheck
   [\fB\-\-debug\-rpm=\fR\fIfile\fR]
   [\fB\-\-dwarf\-dir=\fR\fIdir\fR]
   [\fB\-\-prefix=\fR\fItext\fR]
+  \fIfile\fR...
+.PP
+annocheck
+  [\fB\-\-disable\-hardened\fR]
+  \fB\-\-enable\-builtby\fR
+  [\fB\-\-all\fR]
+  [\fB\-\-tool=\fR\fIname\fR]
+  [\fB\-\-nottool=\fR\fIname\fR]
   \fIfile\fR...
 .PP
 annocheck
@@ -182,10 +190,7 @@ annocheck
 .PP
 annocheck
   [\fB\-\-disable\-hardened\fR]
-  \fB\-\-enable\-builtby\fR
-  [\fB\-\-all\fR]
-  [\fB\-\-tool=\fR\fIname\fR]
-  [\fB\-\-nottool=\fR\fIname\fR]
+  \fB\-\-enable\-notes\fR
   \fIfile\fR...
 .PP
 annocheck
@@ -265,6 +270,40 @@ information.
 .el .IP "\f(CW\-\-version\fR" 4
 .IX Item "--version"
 Report the version of the tool and then exit.
+.PP
+The \fIbuilt-by\fR tool is disabled by default, but it can be enabled
+by the command line option \fB\-\-enable\-builtby\fR.  The tool
+checks the specified files to see if any information is stored about
+how the file was built.
+.PP
+Since the hardening checker is enabled by default it may also be
+useful to add the \fB\-\-disable\-hardened\fR option to the command
+line.
+.PP
+The tool supports a few command line options to customise its
+behaviour:
+.ie n .IP """\-\-all""" 4
+.el .IP "\f(CW\-\-all\fR" 4
+.IX Item "--all"
+Report all builder identification strings.  The tool has several
+different heuristics for determining the builder.  By default it will
+report the information return by the first successful heuristic.  If
+the \fB\-\-all\fR option is enabled then all successful results will
+be returned.
+.ie n .IP """\-\-tool=\fIname\fP""" 4
+.el .IP "\f(CW\-\-tool=\f(CIname\f(CW\fR" 4
+.IX Item "--tool=name"
+This option can be used to restrict the output to only those files
+which were built by a specific tool.  This can be useful when scanning
+a directory full of files searching for those built by a particular
+compiler.
+.ie n .IP """\-\-nottool=\fINAME\fP""" 4
+.el .IP "\f(CW\-\-nottool=\f(CINAME\f(CW\fR" 4
+.IX Item "--nottool=NAME"
+This option can be used to restrict the output to only those files
+which were not built by a specific tool.  This can be useful when
+scanning a directory full of files searching for those that were not
+built by a particular compiler.
 .PP
 The \fIhardened\fR tool checks that the specified files were compiled
 with the required security hardening options, as outlined in the
@@ -404,39 +443,14 @@ default.
 .IX Item "--disable-hardened"
 Disable the tool.
 .PP
-The \fIbuilt-by\fR tool is disabled by default, but it can be enabled
-by the command line option \fB\-\-enable\-builtby\fR.  The tool
-checks the specified files to see if any information is stored about
-how the file was built.
+The \fInotes\fR tool displays the contents of any annobin notes inside
+the specified files.  It groups the notes by address range, which
+can help locate missing details.
 .PP
-Since the hardening checker is enabled by default it may also be
-useful to add the \fB\-\-disable\-hardened\fR option to the command
-line.
-.PP
-The tool supports a few command line options to customise its
-behaviour:
-.ie n .IP """\-\-all""" 4
-.el .IP "\f(CW\-\-all\fR" 4
-.IX Item "--all"
-Report all builder identification strings.  The tool has several
-different heuristics for determining the builder.  By default it will
-report the information return by the first successful heuristic.  If
-the \fB\-\-all\fR option is enabled then all successful results will
-be returned.
-.ie n .IP """\-\-tool=\fIname\fP""" 4
-.el .IP "\f(CW\-\-tool=\f(CIname\f(CW\fR" 4
-.IX Item "--tool=name"
-This option can be used to restrict the output to only those files
-which were built by a specific tool.  This can be useful when scanning
-a directory full of files searching for those built by a particular
-compiler.
-.ie n .IP """\-\-nottool=\fINAME\fP""" 4
-.el .IP "\f(CW\-\-nottool=\f(CINAME\f(CW\fR" 4
-.IX Item "--nottool=NAME"
-This option can be used to restrict the output to only those files
-which were not built by a specific tool.  This can be useful when
-scanning a directory full of files searching for those that were not
-built by a particular compiler.
+The \fInotes\fR tool is disabled by default, but it can be enabled
+by the command line option \fB\-\-enable\-notes\fR.  Since the
+hardening checker is enabled by default it may also be useful to add
+the \fB\-\-disable\-hardened\fR option to the command line.
 .PP
 The \fIsection-size\fR tool records the size of named sections within
 a list of files and then reports the accumulated size at the end.
@@ -468,7 +482,7 @@ with the \fB\-\-usec\fR option.
 .IX Header "OPTIONS"
 .SH "COPYRIGHT"
 .IX Header "COPYRIGHT"
-Copyright (c) 2018 Red Hat.
+Copyright (c) 2018 \- 2019 Red Hat.
 .PP
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the \s-1GNU\s0 Free Documentation License, Version 1.3

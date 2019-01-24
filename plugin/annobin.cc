@@ -1,5 +1,5 @@
 /* annobin - a gcc plugin for annotating binary files.
-   Copyright (c) 2017 - 2018 Red Hat.
+   Copyright (c) 2017 - 2019 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -31,8 +31,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 868;
-static const char *   version_string = N_("Version 868");
+static unsigned int   annobin_version = 869;
+static const char *   version_string = N_("Version 869");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -41,13 +41,15 @@ static const char *   version_string = N_("Version 868");
 #define ANNOBIN_GROUP_NAME    ".group"
 
 /* Section names (and section name prefixes) used by gcc.  */
-#define HOT_SUFFIX       ".hot"
-#define COLD_SUFFIX      ".unlikely"
 #define CODE_SECTION     ".text"
+#define HOT_SUFFIX       ".hot"
 #define HOT_SECTION      CODE_SECTION HOT_SUFFIX
+#define COLD_SUFFIX      ".unlikely"
 #define COLD_SECTION     CODE_SECTION COLD_SUFFIX
-#define STARTUP_SECTION  CODE_SECTION ".startup"
-#define EXIT_SECTION     CODE_SECTION ".exit"
+#define STARTUP_SUFFIX   ".startup"
+#define STARTUP_SECTION  CODE_SECTION STARTUP_SUFFIX
+#define EXIT_SUFFIX      ".exit"
+#define EXIT_SECTION     CODE_SECTION EXIT_SUFFIX
 
 /* Required by the GCC plugin API.  */
 int            plugin_is_GPL_compatible;
@@ -109,8 +111,8 @@ static unsigned int   global_GOWall_options = 0;
 static int            global_stack_prot_option = 0;
 static int            global_pic_option = 0;
 static int            global_short_enums = 0;
-static int            current_fortify_level = -1;
-static int            current_glibcxx_assertions = -1;
+static int            global_fortify_level = -1;
+static int            global_glibcxx_assertions = -1;
 static char *         compiler_version = NULL;
 static unsigned       verbose_level = 0;
 static const char *   annobin_extra_prefix = "";
@@ -799,7 +801,7 @@ function_asm_name (void)
 }
 
 static void
-record_fortify_level (int level, int type)
+record_fortify_level (int level, int type, const char * sec)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cFORTIFY", NUMERIC);
@@ -807,22 +809,19 @@ record_fortify_level (int level, int type)
   buffer[++len] = level;
   buffer[++len] = 0;
   annobin_output_note (buffer, len + 1, false, "FORTIFY SOURCE level",
-		       NULL, NULL, 0, false, type, GNU_BUILD_ATTRS_SECTION_NAME);
+		       NULL, NULL, 0, false, type, sec);
   annobin_inform (1, "Record a FORTIFY SOURCE level of %d", level);
-
-  current_fortify_level = level;
 }
 
 static void
-record_glibcxx_assertions (bool on, int type)
+record_glibcxx_assertions (bool on, int type, const char * sec)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS", on ? BOOL_T : BOOL_F);
 
   annobin_output_note (buffer, len + 1, false, on ? "_GLIBCXX_ASSERTIONS defined" : "_GLIBCXX_ASSERTIONS not defined",
-		       NULL, NULL, 0, false, type, GNU_BUILD_ATTRS_SECTION_NAME);
+		       NULL, NULL, 0, false, type, sec);
   annobin_inform (1, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
-  current_glibcxx_assertions = on;
 }
 
 /* This structure provides various names associated with the current
@@ -977,8 +976,8 @@ annobin_emit_function_notes (bool force)
 
   if (force)
     {
-      record_fortify_level (current_fortify_level, FUNC);
-      record_glibcxx_assertions (current_glibcxx_assertions, FUNC);
+      record_fortify_level (global_fortify_level, FUNC, sec_name);
+      record_glibcxx_assertions (global_glibcxx_assertions, FUNC, sec_name);
     }
 }
 
@@ -1153,7 +1152,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	current_func.group_name = concat (current_func.section_name, ANNOBIN_GROUP_NAME, NULL);
 
       /* Include a group name in our attribute section name.  */
-      current_func.attribute_section_string = concat (GNU_BUILD_ATTRS_SECTION_NAME, ".", current_func.section_name,
+      current_func.attribute_section_string = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
 						      ", \"G\", %note, ",
 						      current_func.group_name,
 						      current_func.comdat ? ", comdat" : "",
@@ -1465,6 +1464,54 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 }
 
 static void
+emit_global_notes (const char * suffix)
+{
+  const char * sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix, NULL);
+
+  /* Record the version of the compiler.  */
+  annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
+			      "string: build-tool", NULL, NULL, OPEN, sec);
+
+  /* Record optimization level, -W setting and -g setting  */
+  record_GOW_settings (global_GOWall_options, false, NULL, NULL, NULL, sec);
+
+  /* Record -fstack-protector option.  */
+  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
+			       /* See BZ 1563141 for an example where global_stack_protection can be -1.  */
+			       global_stack_prot_option >=0 ? global_stack_prot_option : 0,
+			       "numeric: -fstack-protector status",
+			       NULL, NULL, OPEN, sec);
+
+#ifdef flag_stack_clash_protection
+  /* Record -fstack-clash-protection option.  */
+  record_stack_clash_note (NULL, NULL, OPEN, sec);
+#endif
+#ifdef flag_cf_protection
+  /* Record -fcf-protection option.  */
+  record_cf_protection_note (NULL, NULL, OPEN, sec);
+#endif
+
+  record_fortify_level (global_fortify_level, OPEN, sec);
+  record_glibcxx_assertions (global_glibcxx_assertions, OPEN, sec);
+
+  /* Record the PIC status.  */
+  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
+			       "numeric: PIC", NULL, NULL, OPEN, sec);
+
+  /* Record enum size.  */
+  annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums != 0,
+			    global_short_enums != 0 ? "bool: short-enums: on" : "bool: short-enums: off",
+			    NULL, NULL, OPEN, sec);
+
+  record_frame_pointer_note (NULL, NULL, OPEN, sec);
+
+  /* Record target specific notes.  */
+  annobin_record_global_target_notes (sec);
+
+  free ((void *) sec);
+}
+
+static void
 annobin_create_global_notes (void * gcc_data, void * user_data)
 {
   int i;
@@ -1530,45 +1577,6 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
       annobin_current_filename = (char *) "unknown_source";
     }
 
-  /* It is possible that no code will end up in the .text section.
-     Eg because the compilation was run with the -ffunction-sections option.
-     Nevertheless we generate this symbol in the .text section
-     as at this point we cannot know which section(s) will be used
-     by compiled code.  */
-  annobin_emit_start_sym_and_version_note ("", 'p');
-
-  /* GCC does not provide any way for a plugin to detect if hot/cold partitioning
-     will be performed on a function, and hence a .text.hot and/or .text.unlikely
-     section will be created.  So instead we create global notes to cover these
-     two sections.  */
-  annobin_emit_start_sym_and_version_note (HOT_SUFFIX, 'h');
-  annobin_emit_start_sym_and_version_note (COLD_SUFFIX, 'h');
-  queue_attachment (HOT_SECTION, concat (HOT_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  queue_attachment (COLD_SECTION, concat (COLD_SECTION, ANNOBIN_GROUP_NAME, NULL));
-
-  /* Record the version of the compiler.  */
-  annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
-			      "string: build-tool", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
-
-  /* Record optimization level, -W setting and -g setting  */
-  record_GOW_settings (global_GOWall_options, false, NULL, NULL, NULL, GNU_BUILD_ATTRS_SECTION_NAME);
-
-  /* Record -fstack-protector option.  */
-  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
-			       /* See BZ 1563141 for an example where global_stack_protection can be -1.  */
-			       global_stack_prot_option >=0 ? global_stack_prot_option : 0,
-			       "numeric: -fstack-protector status",
-			       NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
-
-#ifdef flag_stack_clash_protection
-  /* Record -fstack-clash-protection option.  */
-  record_stack_clash_note (NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
-#endif
-#ifdef flag_cf_protection
-  /* Record -fcf-protection option.  */
-  record_cf_protection_note (NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
-#endif
-
   /* Look for -D _FORTIFY_SOURCE=<n> and -D_GLIBCXX_ASSERTIONS on the
      original gcc command line.  Scan backwards so that we record the
      last version of the option, should multiple versions be set.  */
@@ -1587,13 +1595,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
 	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
 	    {
-	      if (current_fortify_level == -1)
-		record_fortify_level (0, OPEN);
+	      if (global_fortify_level == -1)
+		global_fortify_level = 0;
 	    }
 	  else if (strncmp (save_decoded_options[i].arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
 	    {
-	      if (current_glibcxx_assertions == -1)
-		record_glibcxx_assertions (false, OPEN);
+	      if (global_glibcxx_assertions == -1)
+		global_glibcxx_assertions = false;
 	    }
 	}
       else if (save_decoded_options[i].opt_index == OPT_D)
@@ -1614,19 +1622,19 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 		  level = 0;
 		}
 
-	      if (current_fortify_level == -1)
-		record_fortify_level (level, OPEN);
+	      if (global_fortify_level == -1)
+		global_fortify_level = level;
 	    }
 
 	  else if (strncmp (save_decoded_options[i].arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
 	    {
-	      if (current_glibcxx_assertions == -1)
-		record_glibcxx_assertions (true, OPEN);
+	      if (global_glibcxx_assertions == -1)
+		global_glibcxx_assertions = true;
 	    }
 	}
     }
 
-  if (current_fortify_level == -1 || current_glibcxx_assertions == -1)
+  if (global_fortify_level == -1 || global_glibcxx_assertions == -1)
     {
       /* Not all gcc command line options get passed on to cc1 (or cc1plus).
 	 So if we have not see one of the options that interests us we check
@@ -1635,7 +1643,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
       if (cgo != NULL)
 	{
-	  if (current_fortify_level == -1)
+	  if (global_fortify_level == -1)
 	    {
 	      int level = -1;
 	      const char * fort = cgo;
@@ -1660,11 +1668,11 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 		      level = 0;
 		    }
 
-		  record_fortify_level (level, OPEN);
+		  global_fortify_level = level;
 		}
 	    }
 
-	  if (current_glibcxx_assertions == -1)
+	  if (global_glibcxx_assertions == -1)
 	    {
 	      int on = -1;
 	      const char * glca = cgo;
@@ -1680,29 +1688,40 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 		}
 
 	      if (on != -1)
-		record_glibcxx_assertions (on, OPEN);
+		global_glibcxx_assertions = on;
 	    }
 	}
     }
 
-  if (current_fortify_level == -1)
-    record_fortify_level (-1, OPEN);
-  if (current_glibcxx_assertions == -1)
-    record_glibcxx_assertions (0, OPEN);
+  /* It is possible that no code will end up in the .text section.
+     Eg because the compilation was run with the -ffunction-sections option.
+     Nevertheless we generate this symbol in the .text section
+     as at this point we cannot know which section(s) will be used
+     by compiled code.  */
+  annobin_emit_start_sym_and_version_note ("", 'p');
+  emit_global_notes ("");
 
-  /* Record the PIC status.  */
-  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
-			       "numeric: PIC", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
+  /* GCC does not provide any way for a plugin to detect if hot/cold partitioning
+     will be performed on a function, and hence a .text.hot and/or .text.unlikely
+     section will be created.  So instead we create global notes to cover these
+     two sections.  */
+  annobin_emit_start_sym_and_version_note (HOT_SUFFIX, 'h');
+  queue_attachment (HOT_SECTION, concat (HOT_SECTION, ANNOBIN_GROUP_NAME, NULL));
+  emit_global_notes (HOT_SUFFIX);
 
-  /* Record enum size.  */
-  annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums != 0,
-			    global_short_enums != 0 ? "bool: short-enums: on" : "bool: short-enums: off",
-			    NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
+  annobin_emit_start_sym_and_version_note (COLD_SUFFIX, 'c');
+  queue_attachment (COLD_SECTION, concat (COLD_SECTION, ANNOBIN_GROUP_NAME, NULL));
+  emit_global_notes (COLD_SUFFIX);
 
-  record_frame_pointer_note (NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
+  /* *sigh* As of gcc 9, a .text.startup section can also be created.  */
+  annobin_emit_start_sym_and_version_note (STARTUP_SUFFIX, 's');
+  queue_attachment (COLD_SECTION, concat (STARTUP_SECTION, ANNOBIN_GROUP_NAME, NULL));
+  emit_global_notes (STARTUP_SUFFIX);
 
-  /* Record target specific notes.  */
-  annobin_record_global_target_notes ();
+  /* Presumably a .text.exit section can also be created, although I have not seen that yet.  */
+  annobin_emit_start_sym_and_version_note (EXIT_SUFFIX, 'e');
+  queue_attachment (COLD_SECTION, concat (EXIT_SECTION, ANNOBIN_GROUP_NAME, NULL));
+  emit_global_notes (EXIT_SUFFIX);
 }
 
 static void
@@ -1784,6 +1803,8 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
       annobin_emit_end_symbol ("");
       annobin_emit_end_symbol (HOT_SUFFIX);
       annobin_emit_end_symbol (COLD_SUFFIX);
+      annobin_emit_end_symbol (STARTUP_SUFFIX);
+      annobin_emit_end_symbol (EXIT_SUFFIX);
     }
 
   if (! annobin_enable_dynamic_notes)
@@ -1899,7 +1920,10 @@ plugin_init (struct plugin_name_args *   plugin_info,
 	 be sufficient...  */
       if (strncmp (version->basever, gcc_version.basever, strchr (version->basever, '.') - version->basever))
 	{
-	  annobin_inform (0, _("Error: plugin built for compiler version (%s) but run with compiler version (%s)"),
+	  /* Use fprintf here rather than annobin_inform as the latter
+	     references main_input_filename, which is a gcc variable and
+	     may not be accessible.  */
+	  fprintf (stderr, _("Error: annobin plugin built for compiler version (%s) but run with compiler version (%s)\n"),
 			  gcc_version.basever, version->basever);
 	  fail = true;
 	}

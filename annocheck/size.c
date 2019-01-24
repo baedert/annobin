@@ -1,5 +1,5 @@
 /* Computes the cumulative size of section(s) in binary files. 
-   Copyright (c) 2018 Red Hat.
+   Copyright (c) 2018 - 2019 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -220,7 +220,7 @@ size_version (void)
 
 struct checker size_checker = 
 {
-  "Section_Size",
+  "Section Size",
   NULL, /* file_start */
   size_interesting_sec,
   NULL, /* check_sec */

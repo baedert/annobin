@@ -1,5 +1,5 @@
 /* Checks the hardened status of the given file.
-   Copyright (c) 2018 Red Hat.
+   Copyright (c) 2018 - 2019 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -393,10 +393,12 @@ record_range (ulong start, ulong end)
   if (next_free_range >= num_allocated_ranges)
     {
       num_allocated_ranges += RANGE_ALLOC_DELTA;
+      size_t num = num_allocated_ranges * sizeof ranges[0];
+
       if (ranges == NULL)
-	ranges = xmalloc (num_allocated_ranges * sizeof ranges[0]);
+	ranges = xmalloc (num);
       else
-	ranges = xrealloc (ranges, num_allocated_ranges * sizeof ranges[0]);
+	ranges = xrealloc (ranges, num);
     }
 
   /* Nothing clever here.  Just record the data.  */
@@ -605,7 +607,7 @@ walk_build_notes (annocheck_data *     data,
       break;
     default:
       einfo (VERBOSE, "ICE: Unrecognised annobin note type %d", attr_type);
-      return false;
+      return true;
     }
 
   switch (* attr)
@@ -636,7 +638,10 @@ walk_build_notes (annocheck_data *     data,
 	case 'a': /* The assembler.  */
 	case 'l': /* The linker.  */
 	  break;
-	case 'h': /* The gcc plugin.  (From a hot/cold section).  */
+	case 'h': /* The gcc plugin.  (From a .text.hot section).  */
+	case 'c': /* The gcc plugin.  (From a .text.cold section).  */
+	case 's': /* The gcc plugin.  (From a .text.startup section).  */
+	case 'e': /* The gcc plugin.  (From a .text.exit section).  */
 	case 'p': /* The gcc plugin.  */
 	  /* FIXME: Add code to check that the version of the note producer
 	     is not greater than our version.  */
@@ -1031,8 +1036,18 @@ walk_build_notes (annocheck_data *     data,
 	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
       break;
 
+    case 'o':
+      if (streq (attr, "omit_frame_pointer"))
+	break;
+      /* Fall through.  */
+
     default:
       einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
+      break;
+
+    case GNU_BUILD_ATTRIBUTE_RELRO:
+    case GNU_BUILD_ATTRIBUTE_ABI:
+    case GNU_BUILD_ATTRIBUTE_STACK_SIZE:
       break;
     }
 
@@ -2401,7 +2416,7 @@ finish (annocheck_data * data)
 static void
 version (void)
 {
-  einfo (INFO, "version 1.1");
+  einfo (INFO, "Version 1.1");
 }
 
 static void

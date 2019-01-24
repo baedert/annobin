@@ -1,5 +1,5 @@
 /* powerpc64le.annobin - PowerPC64 specific parts of the annobin plugin.
-   Copyright (c) 2017 - 2018 Red Hat.
+   Copyright (c) 2017 - 2019 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -35,7 +35,7 @@ annobin_target_start_symbol_bias (void)
 }
 
 void
-annobin_record_global_target_notes (void)
+annobin_record_global_target_notes (const char * sec)
 {
   if (!annobin_is_64bit)
     annobin_inform (0, "ICE: Should be 64-bit target");
@@ -43,7 +43,7 @@ annobin_record_global_target_notes (void)
   saved_tls_size = rs6000_tls_size;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
-			       "numeric: ABI: TLS size", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
+			       "numeric: ABI: TLS size", NULL, NULL, OPEN, sec);
   annobin_inform (1, "Recording global TLS size of %d", saved_tls_size);
 }
 

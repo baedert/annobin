@@ -1,5 +1,5 @@
 /* annocheck - A tool for checking security features of binares.
-   Copyright (c) 2018 Red Hat.
+   Copyright (c) 2018 - 2019 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -32,7 +32,7 @@ ulong         verbosity = 0;
    version_string definitions in annobin.cc.
    FIXME: This value should be defined in only one place...  */
 const uint              major_version = 8;
-const uint              minor_version = 68;
+const uint              minor_version = 69;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -191,6 +191,7 @@ print_version (void)
     if (tool->version)
       {
 	push_component (tool);
+	einfo (PARTIAL, " ");
 	tool->version ();
 	pop_component ();
       }

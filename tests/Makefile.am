@@ -1,4 +1,4 @@
-## Copyright (C) 2017-2018 Red Hat
+## Copyright (C) 2017-2019 Red Hat
 
 ## You should have received a copy of the GNU General Public License
 ## along with this program; see the file COPYING3.  If not see
@@ -15,7 +15,7 @@ TESTS=compile-test \
       function-sections-test \
       assembler-gap-test \
       dynamic-notes-test \
-      section-size-test \
+      section-size-test 
 
 XFAIL_TESTS=hardening-fail-test \
       missing-notes-test \

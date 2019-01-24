@@ -1,5 +1,5 @@
 /* annobin - Header file for the gcc plugin for annotating binary files.
-   Copyright (c) 2017 - 2018 Red Hat.
+   Copyright (c) 2017 - 2019 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -87,8 +87,8 @@ extern void annobin_save_target_specific_information (void);
 
 /* Called during PLUGIN_START_UNIT.
    Should only produce notes for the static tools, ie
-   notes in the .gnu.build.attributes section.  */
-extern void annobin_record_global_target_notes (void);
+   notes in the SECNAME section.  */
+extern void annobin_record_global_target_notes (const char * SECNAME);
 
 /* Called during PLUGIN_ALL_PASSES_START.
    Should produce notes specific to the function just compiled.

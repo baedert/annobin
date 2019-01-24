@@ -1,9 +1,9 @@
 # file      : configure.ac
-# copyright : Copyright (c) 2017-2018 Red Hat
+# copyright : Copyright (c) 2017-2019 Red Hat
 # license   : GNU GPL v3; see accompanying LICENSE file.
 
 AC_PREREQ(2.64)
-AC_INIT([Binary Annotations], 6.1,,[annobin-plugin])
+AC_INIT([Binary Annotations], 8.6,,[annobin-plugin])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_SRCDIR([plugin/annobin.h])
 

@@ -3,7 +3,7 @@ annobin.texi.
 
 This file documents the annobin plugin on the Fedora system.
 
-   Copyright (C) 2018 Red Hat.
+   Copyright (C) 2018 - 2019 Red Hat.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -27,7 +27,7 @@ This manual describes the ANNOBIN plugin and the 'annocheck' program,
 and how you can use them to determine what security features were used
 when a program was built.
 
-   This manual is for 'annobin' (Annobin) version 10.0.
+   This manual is for 'annobin' (Annobin) version 8.0.
 
    This document is distributed under the terms of the GNU Free
 Documentation License version 1.3.  A copy of the license is included in
@@ -441,9 +441,10 @@ tools are implemented:
 
 * Menu:
 
-* Hardened::  Was the application built with the correct security options ?
-* Built-By::  Which tool(s) were used to build the application ?
-* Section-Size::  What is the cumulative size of specific sections in a set of files ?
+* Built-By::  Which tool(s) were used to build the file(s) ?
+* Hardened::  Were the file(s) built with the correct security options ?
+* Notes::     What annobin notes are inside the file(s) ?
+* Section-Size::  What is the cumulative size of specific sections in the file(s) ?
 * Timing::    How long did the checks take ?
 
    The 'annocheck' program is able to scan inside rpm files and
@@ -492,9 +493,54 @@ that are used regardless of which tools are enabled.
      Report the version of the tool and then exit.
 
 
-File: annobin.info,  Node: Hardened,  Next: Built-By,  Up: Annocheck
+File: annobin.info,  Node: Built-By,  Next: Hardened,  Up: Annocheck
 
-4.1 The security checker.
+4.1 The builder checker.
+========================
+
+
+     annocheck
+       [-disable-hardened]
+       -enable-builtby
+       [-all]
+       [-tool=NAME]
+       [-nottool=NAME]
+       FILE...
+
+   The BUILT-BY tool is disabled by default, but it can be enabled by
+the command line option '--enable-builtby'.  The tool checks the
+specified files to see if any information is stored about how the file
+was built.
+
+   Since the hardening checker is enabled by default it may also be
+useful to add the '--disable-hardened' option to the command line.
+
+   The tool supports a few command line options to customise its
+behaviour:
+
+'--all'
+     Report all builder identification strings.  The tool has several
+     different heuristics for determining the builder.  By default it
+     will report the information return by the first successful
+     heuristic.  If the '--all' option is enabled then all successful
+     results will be returned.
+
+'--tool=NAME'
+     This option can be used to restrict the output to only those files
+     which were built by a specific tool.  This can be useful when
+     scanning a directory full of files searching for those built by a
+     particular compiler.
+
+'--nottool=NAME'
+     This option can be used to restrict the output to only those files
+     which were not built by a specific tool.  This can be useful when
+     scanning a directory full of files searching for those that were
+     not built by a particular compiler.
+
+
+File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annocheck
+
+4.2 The security checker.
 =========================
 
 
@@ -631,54 +677,30 @@ code to support the test.
      Disable the tool.
 
 
-File: annobin.info,  Node: Built-By,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
+File: annobin.info,  Node: Notes,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
 
-4.2 The builder checker.
-========================
+4.3 The annobin note displayer
+==============================
 
 
      annocheck
        [-disable-hardened]
-       -enable-builtby
-       [-all]
-       [-tool=NAME]
-       [-nottool=NAME]
+       -enable-notes
        FILE...
 
-   The BUILT-BY tool is disabled by default, but it can be enabled by
-the command line option '--enable-builtby'.  The tool checks the
-specified files to see if any information is stored about how the file
-was built.
+   The NOTES tool displays the contents of any annobin notes inside the
+specified files.  It groups the notes by address range, which can help
+locate missing details.
 
-   Since the hardening checker is enabled by default it may also be
-useful to add the '--disable-hardened' option to the command line.
-
-   The tool supports a few command line options to customise its
-behaviour:
-
-'--all'
-     Report all builder identification strings.  The tool has several
-     different heuristics for determining the builder.  By default it
-     will report the information return by the first successful
-     heuristic.  If the '--all' option is enabled then all successful
-     results will be returned.
-
-'--tool=NAME'
-     This option can be used to restrict the output to only those files
-     which were built by a specific tool.  This can be useful when
-     scanning a directory full of files searching for those built by a
-     particular compiler.
-
-'--nottool=NAME'
-     This option can be used to restrict the output to only those files
-     which were not built by a specific tool.  This can be useful when
-     scanning a directory full of files searching for those that were
-     not built by a particular compiler.
+   The NOTES tool is disabled by default, but it can be enabled by the
+command line option '--enable-notes'.  Since the hardening checker is
+enabled by default it may also be useful to add the '--disable-hardened'
+option to the command line.
 
 
-File: annobin.info,  Node: Section-Size,  Next: Timing,  Prev: Built-By,  Up: Annocheck
+File: annobin.info,  Node: Section-Size,  Next: Timing,  Prev: Notes,  Up: Annocheck
 
-4.3 The section size recorder
+4.4 The section size recorder
 =============================
 
 
@@ -707,7 +729,7 @@ nearest byte, kibibyte, mebibyte or gibibyte, as appropriate.
 
 File: annobin.info,  Node: Timing,  Prev: Section-Size,  Up: Annocheck
 
-4.4 How long did the check take ?
+4.5 How long did the check take ?
 =================================
 
 
@@ -1657,26 +1679,27 @@ their use in free software.
 
 
 Tag Table:
-Node: Top698
-Node: Introduction1675
-Node: Invocation3758
-Node: Examining9378
-Node: The Version Encoding12049
-Node: The STACK Encoding12440
-Node: The PIC Encoding13038
-Node: The GOW Encoding13666
-Node: The CF Encoding15114
-Node: The ENUM Encoding16186
-Node: Annocheck16543
-Node: Hardened19021
-Node: Built-By23804
-Node: Section-Size25355
-Node: Timing26479
-Node: Legacy Scripts27126
-Node: Who Built Me27893
-Node: ABI Checking30653
-Node: Hardening Checks32767
-Node: Checking Archives36853
-Node: GNU FDL39275
+Node: Top705
+Node: Introduction1681
+Node: Invocation3764
+Node: Examining9384
+Node: The Version Encoding12055
+Node: The STACK Encoding12446
+Node: The PIC Encoding13044
+Node: The GOW Encoding13672
+Node: The CF Encoding15120
+Node: The ENUM Encoding16192
+Node: Annocheck16549
+Node: Built-By19075
+Node: Hardened20605
+Node: Notes25402
+Node: Section-Size26046
+Node: Timing27167
+Node: Legacy Scripts27814
+Node: Who Built Me28581
+Node: ABI Checking31341
+Node: Hardening Checks33455
+Node: Checking Archives37541
+Node: GNU FDL39963
 
 End Tag Table

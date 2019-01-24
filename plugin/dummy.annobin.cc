@@ -1,5 +1,5 @@
 /* dummy.annobin - Empty target specific parts of the annobin plugin.
-   Copyright (c) 2017 Red Hat.
+   Copyright (c) 2019 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -35,7 +35,7 @@ annobin_save_target_specific_information (void)
 }
 
 void
-annobin_record_global_target_notes (void)
+annobin_record_global_target_notes (const char * sec)
 {
 }
 
