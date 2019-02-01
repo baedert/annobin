@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "ANNOCHECK 1"
-.TH ANNOCHECK 1 "2019-01-24" "annobin-1" "RPM Development Tools"
+.TH ANNOCHECK 1 "2019-02-01" "annobin-1" "RPM Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -195,8 +195,10 @@ annocheck
 .PP
 annocheck
   [\fB\-\-disable\-hardened\fR]
-  \fB\-\-section\-size=\fR\fIname\fR
-  [\fB\-\-human\fR]
+  [\fB\-\-size\-sec=\fR\fIname\fR]
+  [\fB\-\-size\-sec\-flags=\fR\fI!WAX\fR]
+  [\fB\-\-size\-seg\-flags=\fR\fI!WRX\fR]
+  [\fB\-\-size\-human\fR]
   \fIfile\fR...
 .PP
 annocheck
@@ -318,7 +320,8 @@ creating the necessary code to support the test.
 .el .IP "\f(CWBIND_NOW\fR" 4
 .IX Item "BIND_NOW"
 Lazy binding must not have been enabled via the linker option
-\&\fB\-z now\fR.
+\&\fB\-z lazy\fR.  Instead the \fB\-z now\fR option must have been
+used.
 Disabled by \fB\-\-skip\-bind\-now\fR.
 .ie n .IP """Non executable stack""" 4
 .el .IP "\f(CWNon executable stack\fR" 4
@@ -339,7 +342,7 @@ Disabled by \fB\-\-skip\-rwx\-seg\fR.
 .ie n .IP """No text relocations""" 4
 .el .IP "\f(CWNo text relocations\fR" 4
 .IX Item "No text relocations"
-The should be no relocations against executable code.
+There should be no relocations against executable code.
 Disabled by \fB\-\-skip\-textrel\fR.
 .ie n .IP """Correct runpaths""" 4
 .el .IP "\f(CWCorrect runpaths\fR" 4
@@ -457,17 +460,36 @@ a list of files and then reports the accumulated size at the end.
 Since it is part of the \fBannocheck\fR framework, it is able to
 handle directories and rpms files as well as ordinary binary files.
 .PP
-The \fB\-\-section\-size=\fR\fIname\fR option enables the tool and
+The \fB\-\-size\-sec=\fR\fIname\fR option enables the tool and
 tells it to record the size of section \fIname\fR.  The option can be
 repeated multiple times to record the sizes of multiple sections.  It
 may also be useful to add the \fB\-\-disable\-hardened\fR option to
 the command line as otherwise the security hardening will be run at
 the same time.
 .PP
+Instead of searching for named sections, it is also possible to search
+for sections with specific flags.  The \fB\-\-size\-sec\-flags=<flags>\fR
+option will search for any section that has all of the specified
+\&\fI<flags>\fR set.  Currently only \fIW\fR, \fIA\fR and \fIX\fR are
+recognised as flags, indicating that the section must have the
+\&\fIWrite\fR, \fIAlloc\fR or \fIExecute\fR flags set respectively.  If
+the \fI!\fR exclamation mark character is present then it negates the
+meaning of the following flags.  Thus \fB\-\-section\-sec\-flags=W\fR
+option will search for any writeable section whereas the
+\&\fB\-\-size\-sec\-flags=W!A\fR option will search only for sections
+that are writeable but not allocated.
+.PP
+Instead of searching for sections by flags it is also possible to
+search for segments by flags using the
+\&\fB\-\-size\-seg\-flags=<flags>\fR option.  The flags recognised for
+segments are \fIW\fR for writeable, \fIR\fR for readable and \fIX\fR
+for executable.  Again the \fI!\fR character can be used to invert the
+meaning of the flags that follow it.
+.PP
 If the \fB\-\-verbose\fR option is enabled, then the tool will also
 report the size of the named section(s) in each file it encounters.
-If the \fB\-\-human\fR option is enabled then sizes will be rounded
-down to the nearest byte, kibibyte, mebibyte or gibibyte, as
+If the \fB\-\-size\-human\fR option is enabled then sizes will be
+rounded down to the nearest byte, kibibyte, mebibyte or gibibyte, as
 appropriate.
 .PP
 The \fItiming\fR tool reports on the time taken by other tools to

@@ -679,7 +679,8 @@ creating the necessary code to support the test.
 
 @item BIND_NOW
 Lazy binding must not have been enabled via the linker option
-@option{-z now}.
+@option{-z lazy}.  Instead the @option{-z now} option must have been
+used.
 Disabled by @option{--skip-bind-now}.
 
 @item Non executable stack
@@ -696,7 +697,7 @@ execute permission bits set.
 Disabled by @option{--skip-rwx-seg}.
 
 @item No text relocations
-The should be no relocations against executable code.
+There should be no relocations against executable code.
 Disabled by @option{--skip-textrel}.
 
 @item Correct runpaths
@@ -827,8 +828,10 @@ the @option{--disable-hardened} option to the command line.
 
 annocheck
   [@b{--disable-hardened}]
-  @b{--section-size=@var{name}}
-  [@b{--human}]
+  [@b{--size-sec=@var{name}}]
+  [@b{--size-sec-flags=@var{!WAX}}]
+  [@b{--size-seg-flags=@var{!WRX}}]
+  [@b{--size-human}]
   @var{file}@dots{}
 @c man end
 @end smallexample
@@ -839,17 +842,36 @@ a list of files and then reports the accumulated size at the end.
 Since it is part of the @command{annocheck} framework, it is able to
 handle directories and rpms files as well as ordinary binary files.
 
-The @option{--section-size=@var{name}} option enables the tool and
+The @option{--size-sec=@var{name}} option enables the tool and
 tells it to record the size of section @var{name}.  The option can be
 repeated multiple times to record the sizes of multiple sections.  It
 may also be useful to add the @option{--disable-hardened} option to
 the command line as otherwise the security hardening will be run at
 the same time.
 
+Instead of searching for named sections, it is also possible to search
+for sections with specific flags.  The @option{--size-sec-flags=<flags>}
+option will search for any section that has all of the specified
+@var{<flags>} set.  Currently only @var{W}, @var{A} and @var{X} are
+recognised as flags, indicating that the section must have the
+@var{Write}, @var{Alloc} or @var{Execute} flags set respectively.  If
+the @var{!} exclamation mark character is present then it negates the
+meaning of the following flags.  Thus @option{--section-sec-flags=W}
+option will search for any writeable section whereas the
+@option{--size-sec-flags=W!A} option will search only for sections
+that are writeable but not allocated.
+
+Instead of searching for sections by flags it is also possible to
+search for segments by flags using the
+@option{--size-seg-flags=<flags>} option.  The flags recognised for
+segments are @var{W} for writeable, @var{R} for readable and @var{X}
+for executable.  Again the @var{!} character can be used to invert the
+meaning of the flags that follow it.
+
 If the @option{--verbose} option is enabled, then the tool will also
 report the size of the named section(s) in each file it encounters.
-If the @option{--human} option is enabled then sizes will be rounded
-down to the nearest byte, kibibyte, mebibyte or gibibyte, as
+If the @option{--size-human} option is enabled then sizes will be
+rounded down to the nearest byte, kibibyte, mebibyte or gibibyte, as
 appropriate.
 
 @c man end

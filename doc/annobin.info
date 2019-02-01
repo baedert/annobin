@@ -582,7 +582,8 @@ code to support the test.
 
 'BIND_NOW'
      Lazy binding must not have been enabled via the linker option '-z
-     now'.  Disabled by '--skip-bind-now'.
+     lazy'.  Instead the '-z now' option must have been used.  Disabled
+     by '--skip-bind-now'.
 
 'Non executable stack'
      The program must not have a stack in an executable region of
@@ -597,8 +598,8 @@ code to support the test.
      execute permission bits set.  Disabled by '--skip-rwx-seg'.
 
 'No text relocations'
-     The should be no relocations against executable code.  Disabled by
-     '--skip-textrel'.
+     There should be no relocations against executable code.  Disabled
+     by '--skip-textrel'.
 
 'Correct runpaths'
      The runpath information used to locate shared libraries at runtime
@@ -706,8 +707,10 @@ File: annobin.info,  Node: Section-Size,  Next: Timing,  Prev: Notes,  Up: Annoc
 
      annocheck
        [-disable-hardened]
-       -section-size=NAME
-       [-human]
+       [-size-sec=NAME]
+       [-size-sec-flags=!WAX]
+       [-size-seg-flags=!WRX]
+       [-size-human]
        FILE...
 
    The SECTION-SIZE tool records the size of named sections within a
@@ -715,15 +718,32 @@ list of files and then reports the accumulated size at the end.  Since
 it is part of the 'annocheck' framework, it is able to handle
 directories and rpms files as well as ordinary binary files.
 
-   The '--section-size=NAME' option enables the tool and tells it to
-record the size of section NAME.  The option can be repeated multiple
-times to record the sizes of multiple sections.  It may also be useful
-to add the '--disable-hardened' option to the command line as otherwise
-the security hardening will be run at the same time.
+   The '--size-sec=NAME' option enables the tool and tells it to record
+the size of section NAME.  The option can be repeated multiple times to
+record the sizes of multiple sections.  It may also be useful to add the
+'--disable-hardened' option to the command line as otherwise the
+security hardening will be run at the same time.
+
+   Instead of searching for named sections, it is also possible to
+search for sections with specific flags.  The '--size-sec-flags=<flags>'
+option will search for any section that has all of the specified <FLAGS>
+set.  Currently only W, A and X are recognised as flags, indicating that
+the section must have the WRITE, ALLOC or EXECUTE flags set
+respectively.  If the ! exclamation mark character is present then it
+negates the meaning of the following flags.  Thus
+'--section-sec-flags=W' option will search for any writeable section
+whereas the '--size-sec-flags=W!A' option will search only for sections
+that are writeable but not allocated.
+
+   Instead of searching for sections by flags it is also possible to
+search for segments by flags using the '--size-seg-flags=<flags>'
+option.  The flags recognised for segments are W for writeable, R for
+readable and X for executable.  Again the ! character can be used to
+invert the meaning of the flags that follow it.
 
    If the '--verbose' option is enabled, then the tool will also report
 the size of the named section(s) in each file it encounters.  If the
-'--human' option is enabled then sizes will be rounded down to the
+'--size-human' option is enabled then sizes will be rounded down to the
 nearest byte, kibibyte, mebibyte or gibibyte, as appropriate.
 
 
@@ -1692,14 +1712,14 @@ Node: The ENUM Encoding16192
 Node: Annocheck16549
 Node: Built-By19075
 Node: Hardened20605
-Node: Notes25402
-Node: Section-Size26046
-Node: Timing27167
-Node: Legacy Scripts27814
-Node: Who Built Me28581
-Node: ABI Checking31341
-Node: Hardening Checks33455
-Node: Checking Archives37541
-Node: GNU FDL39963
+Node: Notes25460
+Node: Section-Size26104
+Node: Timing28258
+Node: Legacy Scripts28905
+Node: Who Built Me29672
+Node: ABI Checking32432
+Node: Hardening Checks34546
+Node: Checking Archives38632
+Node: GNU FDL41054
 
 End Tag Table
