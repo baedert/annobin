@@ -915,7 +915,7 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
     }
 
   /* Failed to find the file.  */
-  einfo (VERBOSE, "%s: Could not find separate debug file: %s", data->filename, link);
+  einfo (VERBOSE, "%s: warn: Could not find separate debug file: %s", data->filename, link);
   
   free (canon_dir);
   free (debugfile);
@@ -930,7 +930,7 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
   Dwarf * separate_debug_file = dwarf_begin (fd, DWARF_C_READ);
 
   if (separate_debug_file == NULL)
-    einfo (VERBOSE, "%s: Failed to open separate debug file: %s", data->filename, debugfile);
+    einfo (VERBOSE, "%s: warn: Failed to open separate debug file: %s", data->filename, debugfile);
   else
     einfo (VERBOSE2, "%s: Opened separate debug file: %s", data->filename, debugfile);
 

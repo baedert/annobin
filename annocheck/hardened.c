@@ -1069,6 +1069,7 @@ walk_property_notes (annocheck_data *     data,
     {
       einfo (VERBOSE, "%s: FAIL: Unexpected GNU Property note type (%x)", data->filename, note->n_type);
       tests[TEST_PROPERTY_NOTE].num_fail ++;
+      return false;
     }
   else
     {
@@ -1077,8 +1078,9 @@ walk_property_notes (annocheck_data *     data,
 	  /* More than one note in an executable is an error.  */
 	  if (tests[TEST_PROPERTY_NOTE].num_pass)
 	    {
-	      einfo (VERBOSE, "%s: FAIL: More than one GNU Property note", data->filename);
+	      einfo (VERBOSE, "%s: FAIL: More than one GNU Property note.  (Loader will not enable CET)", data->filename);
 	      tests[TEST_PROPERTY_NOTE].num_fail ++;
+	      return false;
 	    }
 	}
 
@@ -1792,11 +1794,11 @@ static void
 show_ENTRY (annocheck_data * data, test * results)
 {
   if (e_machine != EM_386 && e_machine != EM_X86_64)
-    skip (data, "Entry point instruction.  (Not an x86 binary)");
+    skip (data, "Entry point instruction is ENDBR.  (Not an x86 binary)");
   else if (e_type != ET_DYN && e_type != ET_EXEC)
-    skip (data, "Entry point instruction.  (Not a dynamic executable)");
+    skip (data, "Entry point instruction is ENDBR.  (Not a dynamic executable)");
   else if (results->num_maybe == 0) /* Ie there was no PT_INTERP segment.  */
-    skip (data, "Entry point instruction.  (Not an executable)");
+    skip (data, "Entry point instruction is ENDBR.  (Not an executable)");
   else if (e_entry == 0)
     maybe (data, "Entry point address is zero");
   else if (results->num_fail > 0)
@@ -1843,9 +1845,9 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
   else if (results->num_fail > 0)
     {
       if (BE_VERBOSE)
-	fail (data, "Bad GNU Property note");
+	fail (data, "Bad GNU Property note(s)");
       else
-	fail (data, "Bad GNU Property note.  Run with -v to see what is wrong");
+	fail (data, "Bad GNU Property note(s).  Run with -v to see what is wrong");
     }
   else if (results->num_maybe > 0)
     maybe (data, "Corrupt GNU Property note");
