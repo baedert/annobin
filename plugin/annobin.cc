@@ -31,8 +31,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 870;
-static const char *   version_string = N_("Version 870");
+static unsigned int   annobin_version = 871;
+static const char *   version_string = N_("Version 871");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -1254,7 +1254,7 @@ queue_attachment (const char * section_name, const char * group_name)
   attach_item * item = (attach_item *) xmalloc (sizeof item);
 
   item->section_name = concat (section_name, NULL);
-  item->group_name = concat (group_name, NULL);
+ item->group_name = concat (group_name, NULL);
   item->next = attach_list;
   attach_list = item;
 }
@@ -1279,8 +1279,12 @@ emit_queued_attachments (void)
       fprintf (asm_out_file, "\n");
       fprintf (asm_out_file, "\t.popsection\n");
 
-      free ((void *) item->section_name);
-      free ((void *) item->group_name);
+      // FIXME: BZ 1684148: These free()s are triggering "attempt to free unallocated
+      // memory" errors from the address sanitizer.  I have no idea why, as they were
+      // allocated by concat.  So for now, just leave them be.  The memory will be
+      // released when gcc terminates.
+      // free ((void *) item->section_name);
+      // free ((void *) item->group_name);
       next = item->next;
       // FIXME: BZ #1638371 reports that this free() triggers an "invalid pointer"
       // error when running under MALLOC_CHECK_.  I have no idea why, as the
