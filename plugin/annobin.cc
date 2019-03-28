@@ -29,7 +29,7 @@
 
 /* Version number.  NB: Keep the numeric and string versions in sync
    Also, keep in sync with the major_version and minor_version definitions
-   in annocheck.c.
+   in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
 static unsigned int   annobin_version = 871;
 static const char *   version_string = N_("Version 871");

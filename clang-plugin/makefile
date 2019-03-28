@@ -23,7 +23,7 @@ annobin.so: annobin.cpp
 
 run-annobin: annobin.so
 	clang++ -fplugin=./annobin.so \
-   -Xclang -plugin-arg-annobin -Xclang help \
+   -Xclang -plugin-arg-annobin -Xclang version \
    --compile annobin.cpp \
    -mtbm
 

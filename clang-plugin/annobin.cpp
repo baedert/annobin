@@ -1,3 +1,16 @@
+/* annobin - a clang plugin for annotating the output binary file.
+   Copyright (c) 2019 Red Hat.
+   Created by Nick Clifton.
+
+  This is free software; you can redistribute it and/or modify it
+  under the terms of the GNU General Public License as published
+  by the Free Software Foundation; either version 3, or (at your
+  option) any later version.
+
+  It is distributed in the hope that it will be useful, but
+  WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.  */
 
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "clang/AST/AST.h"
@@ -9,50 +22,159 @@
 #include "llvm/Support/raw_ostream.h"
 using namespace clang;
 
-/* Version number.  NB: Keep the numeric and string versions in sync
-   Also, keep in sync with the major_version and minor_version definitions
-   in annocheck/annocheck.c.
-   FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 901;
-static const char *   version_string = N_("Version 901");
-
-
 namespace
 {
-  // Dummy AST consumer, needed because plugins must have one.
+  /* Version number.  NB: Keep the numeric and string versions in sync
+     Also, keep in sync with the major_version and minor_version definitions
+     in annocheck/annocheck.c.
+     FIXME: This value should be defined in only one place...  */
+  static unsigned int   annobin_version = 901;
+  static const char *   version_string = "901";
+
+  static bool be_verbose = false;
+
+  static void
+  inform (const char * format, ...)
+  {
+    va_list args;
+
+    fflush (stdout);
+
+    fprintf (stderr, "Annobin plugin: ");
+
+    va_start (args, format);
+    vfprintf (stderr, format, args);
+    va_end (args);
+
+    putc ('\n', stderr);
+  }
+
+  // FIXME: Find a C++ way of encoding this function.
+  static void
+  verbose (const char * format, ...)
+  {
+    va_list args;
+
+    if (! be_verbose)
+      return;
+
+    fflush (stdout);
+
+    fprintf (stderr, "Annobin plugin: ");
+
+    va_start (args, format);
+    vfprintf (stderr, format, args);
+    va_end (args);
+
+    putc ('\n', stderr);
+  }
+
   class AnnobinConsumer : public ASTConsumer
   {
-    CompilerInstance &Instance;
+    CompilerInstance& Instance;
 
   public:
-    AnnobinConsumer(CompilerInstance &Instance) : Instance(Instance) {}
+    AnnobinConsumer (CompilerInstance& Instance) : Instance (Instance)
+    {
+    }
 
     bool
-    HandleTopLevelDecl (DeclGroupRef DG) override
+    HandleTopLevelDecl (DeclGroupRef DGR) override
     {
       return true;
     }
 
     void
-    HandleTranslationUnit (ASTContext& context) override
+    HandleTranslationUnit (ASTContext& Context) override
     {
-    }   
+      CheckOptions (Instance);
+    }
+
+  private:
+    void
+    CheckOptions (CompilerInstance& CI)
+    {
+      const CodeGenOptions& CodeOpts = CI.getCodeGenOpts ();
+
+      verbose ("cf-protection: %s", CodeOpts.CFProtectionReturn ? "on" : "off");
+
+      
+      const LangOptions& lang_opts = CI.getLangOpts ();
+      if (lang_opts.ModuleFeatures.empty ())
+	{
+	  verbose ("No language module features");
+	}
+      else
+	{
+	  for (StringRef Feature : lang_opts.ModuleFeatures)
+	    verbose ("Language module features: %s",  Feature.str().c_str());
+	}
+
+      verbose ("setjmp exceptions: %s", lang_opts.SjLjExceptions);
+
+      const PreprocessorOptions &pre_opts = CI.getPreprocessorOpts ();
+      if (pre_opts.Macros.empty ())
+	{
+	  verbose ("No preprocessor macros");
+	}
+      else
+	{
+	  for (std::vector<std::pair<std::string, bool/*isUndef*/> >::const_iterator
+		 i = pre_opts.Macros.begin (),
+		 iEnd = pre_opts.Macros.end ();
+	       i != iEnd; ++i)
+	    {
+	      if (! i->second)
+		verbose ("Define: %s", i->first.c_str());
+	    }
+	}
+
+      const TargetOptions &targ_opts = CI.getTargetOpts ();
+      if (targ_opts.FeaturesAsWritten.empty ())
+	{
+	  verbose ("No target options");
+	}
+      else
+	{
+	  for (unsigned i = targ_opts.FeaturesAsWritten.size(); i -- > 0;)
+	    verbose ("Target feature: %s", targ_opts.FeaturesAsWritten[i].c_str());
+	}
+    }    
   };
 
-  // The real work of annobin is done in this class.
+  class AnnobinDummyConsumer : public ASTConsumer
+  {
+    CompilerInstance& Instance;
+
+  public:
+    AnnobinDummyConsumer (CompilerInstance& Instance) : Instance (Instance)
+    {}
+
+    bool
+    HandleTopLevelDecl (DeclGroupRef DGR) override
+    {
+      return true;
+    }
+
+    void
+    HandleTranslationUnit (ASTContext& Context) override
+    {
+    }
+  };
+  
   class AnnobinAction : public PluginASTAction
   {
   private:
     bool enabled = true;
-    bool verbose = false;
 
   protected:
     std::unique_ptr<ASTConsumer>
-    CreateASTConsumer (CompilerInstance &CI, llvm::StringRef) override
+    CreateASTConsumer (CompilerInstance& CI, llvm::StringRef) override
     {
-      CheckOptions (CI);
-      // We have to have an AST consumer, even if it is a dummy.
-      return llvm::make_unique<AnnobinConsumer>(CI);
+      if (enabled)
+	return llvm::make_unique<AnnobinConsumer>(CI);
+      else
+	return llvm::make_unique<AnnobinDummyConsumer>(CI);
     }
 
     // Automatically run the plugin
@@ -71,83 +193,30 @@ namespace
 
     // Handle any options passed to the plugin.
     bool
-    ParseArgs (const CompilerInstance &CI, const std::vector<std::string> &args) override
+    ParseArgs (const CompilerInstance& CI, const std::vector<std::string>& args) override
     {
       for (unsigned i = 0, e = args.size(); i < e; ++i)
 	{
 	  if (args[i] == "help")
-	    llvm::errs() << "Annobin plugin: supported options:\n\
+	    inform ("supported options:\n\
   help      Display this message\n\
   disable   Disable the plugin\n\
   enable    Reenable the plugin if it has been disabled\n\
   version   Displays the version number\n\
-  verbose   Produce descriptive messages whilst working\n";
+  verbose   Produce descriptive messages whilst working");
 	  else if (args[i] == "disable")
 	    enabled = false;
 	  else if (args[i] == "enable")
 	    enabled = true;
 	  else if (args[i] == "version")
-	    llvn::errs() << "Annobin plugin for clang version " << annobin_version << "\n";
+	    inform ("plugin version %s", version_string);
 	  else if (args[i] == "verbose")
-	    verbose = true;
+	    be_verbose = true;
 	  else
-	    llvm::errs() << "Annobin plugin: error: unknown option: " << args[i] << "\n";
+	    inform ("error: unknown option: %s", args[i].c_str());
 	}
 
       return true;
-    }
-
-    void
-    CheckOptions (CompilerInstance &CI)
-    {
-      if (! enabled)
-	return;
-
-      const CodeGenOptions &CodeOpts = CI.getCodeGenOpts ();
-
-      llvm::errs() << "cf-protection: " << CodeOpts.CFProtectionReturn << "\n";
-
-      
-      const LangOptions &lang_opts = CI.getLangOpts ();
-      if (lang_opts.ModuleFeatures.empty ())
-	{
-	  llvm::errs() << "No language module features\n";
-	}
-      else
-	{
-	  for (StringRef Feature : lang_opts.ModuleFeatures)
-	    llvm::errs() << "Language module features: " << Feature << "\n";
-	}
-
-      llvm::errs() << "setjmp exceptions: " << lang_opts.SjLjExceptions << "\n";
-
-      const PreprocessorOptions &pre_opts = CI.getPreprocessorOpts ();
-      if (pre_opts.Macros.empty ())
-	{
-	  llvm::errs() << "No preprocessor macros\n";
-	}
-      else
-	{
-	  for (std::vector<std::pair<std::string, bool/*isUndef*/> >::const_iterator
-		 i = pre_opts.Macros.begin (),
-		 iEnd = pre_opts.Macros.end ();
-	       i != iEnd; ++i)
-	    {
-	      if (! i->second)
-		llvm::errs() << "Define: " << i->first << "\n";
-	    }
-	}
-
-      const TargetOptions &targ_opts = CI.getTargetOpts ();
-      if (targ_opts.FeaturesAsWritten.empty ())
-	{
-	  llvm::errs() << "No target opts\n";
-	}
-      else
-	{
-	  for (unsigned i = targ_opts.FeaturesAsWritten.size(); i -- > 0;)
-	    llvm::errs() << "Target feature: " << targ_opts.FeaturesAsWritten[i] << "\n";
-	}
     }
   };
 }
