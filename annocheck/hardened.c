@@ -828,6 +828,9 @@ walk_build_notes (annocheck_data *     data,
 	      tests[TEST_CF_PROTECTION].num_maybe ++;
 	      break;
 
+	      /* Note - the annobin plugin adds one to the value of gcc's flag_cf_protection,
+		 thus a setting of CF_FULL (3) is actually recorded as 4, and so on.  */
+
 	    case 4: /* CF_FULL.  */
 	    case 8: /* CF_FULL | CF_SET */
 	      report_i (VERBOSE2, "%s: PASS: (%s): cf-protection enabled (%x)",

@@ -31,8 +31,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 871;
-static const char *   version_string = N_("Version 871");
+static unsigned int   annobin_version = 872;
+static const char *   version_string = N_("Version 872");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -648,13 +648,13 @@ compute_GOWall_options (void)
 	 this can happen, but handle it anyway.  Since DWARF prior to v2 is
 	 deprecated, we use 2 as the version level.  */
       val |= (2 << 6);
-      annobin_inform (1, "dwarf version level %d recorded as 2\n", dwarf_version);
+      annobin_inform (1, "dwarf version level %d recorded as 2", dwarf_version);
     }
   else if (dwarf_version > 7)
     {
       /* FIXME: We only have 3 bits to record the debug level...  */
       val |= (7 << 6);
-      annobin_inform (1, "dwarf version level %d recorded as 7\n", dwarf_version);
+      annobin_inform (1, "dwarf version level %d recorded as 7", dwarf_version);
     }
   else
     val |= (dwarf_version << 6);
@@ -1472,6 +1472,8 @@ emit_global_notes (const char * suffix)
 {
   const char * sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix, NULL);
 
+  annobin_inform (1, "Emit global notes for section .text%s...", suffix);
+
   /* Record the version of the compiler.  */
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
 			      "string: build-tool", NULL, NULL, OPEN, sec);
@@ -1482,9 +1484,10 @@ emit_global_notes (const char * suffix)
   /* Record -fstack-protector option.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
 			       /* See BZ 1563141 for an example where global_stack_protection can be -1.  */
-			       global_stack_prot_option >=0 ? global_stack_prot_option : 0,
+			       global_stack_prot_option >= 0 ? global_stack_prot_option : 0,
 			       "numeric: -fstack-protector status",
 			       NULL, NULL, OPEN, sec);
+  annobin_inform (1, "Record stack protector setting of %d", global_stack_prot_option >= 0 ? global_stack_prot_option : 0);
 
 #ifdef flag_stack_clash_protection
   /* Record -fstack-clash-protection option.  */
