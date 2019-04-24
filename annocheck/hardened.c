@@ -1273,12 +1273,23 @@ interesting_seg (annocheck_data *    data,
     return false;
 
   if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R)
+#if 0
       && seg->phdr->p_type != PT_GNU_STACK
+#endif
       && ! skip_check (TEST_RWX_SEG, NULL))
     {
-      einfo (VERBOSE, "%s: FAIL: seg %d has Read, Write and eXecute flags\n",
-	     data->filename, seg->number);
-      tests[TEST_RWX_SEG].num_fail ++;
+      if (seg->phdr->p_type == PT_GNU_STACK)
+	{
+	  einfo (VERBOSE, "%s: FAIL: The GNU stack segment is executable\n",
+		 data->filename);
+	  tests[TEST_GNU_STACK].num_fail ++;
+	}
+      else
+	{
+	  einfo (VERBOSE, "%s: FAIL: seg %d has Read, Write and eXecute flags\n",
+		 data->filename, seg->number);
+	  tests[TEST_RWX_SEG].num_fail ++;
+	}
     }
 
   switch (seg->phdr->p_type)
@@ -1292,7 +1303,15 @@ interesting_seg (annocheck_data *    data,
       break;
 
     case PT_GNU_STACK:
-      tests[TEST_GNU_STACK].num_pass ++;
+      if ((seg->phdr->p_flags & (PF_W | PF_R)) != (PF_W | PF_R))
+	{
+	  einfo (VERBOSE, "%s: FAIL: The GNU stack segment does not have both read & write permissions\n",
+		 data->filename);
+	  tests[TEST_GNU_STACK].num_fail ++;
+	}
+      /* If the segment has the PF_X flag set it will have been reported as a failure above.  */
+      else if ((seg->phdr->p_flags & PF_X) == 0)
+	tests[TEST_GNU_STACK].num_pass ++;
       break;
 
     case PT_DYNAMIC:
@@ -1922,7 +1941,7 @@ show_GNU_STACK (annocheck_data * data, test * results)
   if (e_type == ET_REL)
     skip (data, "Test of stack segment.  (Object files do not have segments)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "Executable stack found");
+    fail (data, "The GNU stack segment has the wrong permissions");
   else if (results->num_pass > 1)
     maybe (data, "Multiple GNU stack segments found!");
   else if (results->num_pass == 1)
