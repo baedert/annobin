@@ -127,6 +127,34 @@ builtby_check_sec (annocheck_data *     data,
   return true; /* Allow the search to continue.  */
 }
 
+enum producer
+{
+  PRODUCER_UNKNOWN,
+  PRODUCER_GCC,
+  PRODUCER_GAS,
+  PRODUCER_CLANG,
+  PRODUCER_RUST,
+  PRODUCER_GO
+};
+   
+typedef struct tool_id
+{
+  const char *  producer_string;
+  enum producer producer_id;
+} tool_id;
+
+static const tool_id tools[] =
+{
+ /* { "GNU C++", PRODUCER_GXX }, */
+  { "GNU C", PRODUCER_GCC },
+  { "rustc version", PRODUCER_RUST },
+  { "clang version", PRODUCER_CLANG },
+  { "clang LLVM", PRODUCER_CLANG }, /* Is this right ?  */
+  { "Go cmd/compile", PRODUCER_GO },
+  { "GNU AS", PRODUCER_GAS },
+  { NULL, 0 }
+};
+
 /* Look for DW_AT_producer attributes.  */
 
 static bool
@@ -142,7 +170,29 @@ builtby_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, voi
   if (string == NULL)
     return einfo (ERROR, "%s: DWARF DW_AT_producer attribute does not have a string value", data->filename);
 
-  found ("DWARF attribute", data->filename, string);
+  einfo (VERBOSE, "%s: DW_AT_producer string: %s", data->filename, string);
+  
+  const tool_id *  tool;
+  enum producer    producer = PRODUCER_UNKNOWN;
+
+  for (tool = tools; tool->producer_string != NULL; tool ++)
+    if (strstr (string, tool->producer_string))
+      {
+	producer = tool->producer_id;
+	break;
+      }
+
+  switch (producer)
+    {
+    default:
+    case PRODUCER_UNKNOWN: found ("DWARF attribute", data->filename, string); break;
+    case PRODUCER_GCC:     found ("DWARF attribute", data->filename, "gcc"); break;
+    case PRODUCER_RUST:    found ("DWARF attribute", data->filename, "rust"); break;
+    case PRODUCER_CLANG:   found ("DWARF attribute", data->filename, "clang"); break;
+    case PRODUCER_GO:      found ("DWARF attribute", data->filename, "go"); break;
+    case PRODUCER_GAS:     found ("DWARF attribute", data->filename, "gas"); break;
+    }
+  
   return all;
 }
 

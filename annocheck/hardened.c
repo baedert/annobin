@@ -43,7 +43,23 @@ static bool        debuginfo_file;
 static bool        compiled_code_seen;
 static int         num_fails;
 static int         num_maybes;
-static int         gcc_version;
+
+enum tool
+{
+  TOOL_UNKNOWN,
+  TOOL_MIXED,
+  TOOL_GCC,
+  TOOL_GAS,
+  TOOL_CLANG,
+  TOOL_GO,
+  TOOL_RUST
+};
+  
+static struct producer
+{
+  enum tool     tool;
+  unsigned int  version;
+} producer;
 
 static hardened_note_data *  ranges = NULL;
 static unsigned              num_allocated_ranges = 0;
@@ -162,10 +178,11 @@ start (annocheck_data * data)
 
   /* Initialise other per-file variables.  */
   debuginfo_file = false;
-  gcc_version = -1;
   text_section_name_index = -1;
   text_section_alignment = 0;
   compiled_code_seen = false;
+  producer.tool = TOOL_UNKNOWN;
+  producer.version = 0;
 
   if (num_allocated_ranges)
     {
@@ -251,7 +268,7 @@ interesting_sec (annocheck_data *     data,
   if (sec->shdr.sh_size == 0)
     return false;
 
-  if (gcc_version == -1 && streq (sec->secname, ".comment"))
+  if (streq (sec->secname, ".comment"))
     return true;
 
   /* These types of section need further processing.  */
@@ -442,6 +459,43 @@ report_s (einfo_type           type,
     return;
 
   einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
+}
+
+static void
+set_producer (annocheck_data *     data,
+	      enum tool            tool,
+	      unsigned int         version,
+	      const char *         source)
+{
+  einfo (VERBOSE2, "record producer type %d version %u source %s", tool, version, source);
+
+  if (producer.tool == TOOL_UNKNOWN)
+    {
+      producer.tool = tool;
+      producer.version = version;
+    }
+  else if (producer.tool == tool)
+    {
+      if (producer.version != version)
+	{
+	  einfo (VERBOSE, "%s: Warning: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
+		 data->filename, version, producer.version);
+	  if (producer.version < version)
+	    producer.version = version;
+	}
+    }
+  else
+    {
+      einfo (VERBOSE, "%s: Warning: this binary was built by more than one tool",
+	     data->filename);
+      if (tool == TOOL_GCC)
+	producer.tool = TOOL_GCC;
+      else if (producer.tool != TOOL_GCC)
+	{
+	  producer.tool = TOOL_MIXED;
+	  producer.version = 0;
+	}
+    }
 }
 
 static bool
@@ -650,7 +704,7 @@ walk_build_notes (annocheck_data *     data,
 	     to assembler or linker generated code).  This means that we
 	     can expect to see notes for -D_FROTIFY_SOURCE and -D_GLIBCXX_ASSERTIONS,
 	     and if they are missing, we can complain.  We do not use
-	     the value of gcc_version because if the assembler source was
+	     the value of producer.tool because if the assembler source was
 	     built using gcc then it will have debug information associated
 	     with it, with a DW_AT_PRODUCER string that includes the *gcc*
 	     version number.  */
@@ -669,6 +723,7 @@ walk_build_notes (annocheck_data *     data,
 	{
 	  /* Parse the tool attribute looking for the version of gcc used to build the component.  */
 	  const char * gcc = strstr (attr, "gcc");
+
 	  if (gcc)
 	    {
 	      /* FIXME: This assumes that the tool string looks like: "gcc 7.x.x......"  */
@@ -677,16 +732,11 @@ walk_build_notes (annocheck_data *     data,
 	      report_i (VERBOSE2, "%s: (%s) built-by gcc version %u",
 			data, sec, note_data, prefer_func_name, version);
 
-	      if (gcc_version == -1)
-		gcc_version = version;
-	      else if (gcc_version != version)
-		{
-		  einfo (VERBOSE, "%s: Warning: Multiple versions of gcc were used to build this file - the highest version will be used",
-			 data->filename);
-		  if (gcc_version < version)
-		    gcc_version = version;
-		}
+	      set_producer (data, TOOL_GCC, version, "GNU Build Attribute");
 	    }
+	  else
+	    report_s (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
+		      data, sec, note_data, prefer_func_name, attr);
 	}
       break;
 
@@ -1226,25 +1276,42 @@ check_dynamic_section (annocheck_data *    data,
 }
 
 static bool
-check_code_section (annocheck_data *     data,
-		    annocheck_section *  sec)
+check_progbits_section (annocheck_data *     data,
+			annocheck_section *  sec)
 {
-  if (gcc_version == -1
-      && sec->data->d_size > 11
-      && streq (sec->secname, ".comment"))
+  if (sec->data->d_size <= 11 || ! streq (sec->secname, ".comment"))
+    return true;
+
+  const char * tool = (const char *) sec->data->d_buf;
+
+  if (tool[0] == 0)
+    tool ++; /* Not sure why this can happen, but it does.  */
+
+  unsigned int version;
+  const char * where;
+  static const char * gcc_prefix = "GCC: (GNU) ";
+  if ((where = strstr (tool, gcc_prefix)) != NULL)
     {
-      const char * tool = (const char *) sec->data->d_buf;
-
-      if (tool[0] == 0)
-	tool ++; /* Not sure why this can happen, but it does.  */
-
-      /* FIXME: This assumes that the tool string looks like: "GCC: (GNU) 8.1.1""  */
-      unsigned int version = (unsigned int) strtoul (tool + 11, NULL, 10);
-
-      einfo (VERBOSE2, "%s: built by gcc version %u (extracted from %s)", data->filename, version, tool);
-      if (version)
-	gcc_version = version;
+      /* FIXME: This assumes that the gcc identifier looks like: "GCC: (GNU) 8.1.1""  */
+      version = (unsigned int) strtod (where + strlen (gcc_prefix), NULL);
+      set_producer (data, TOOL_GCC, version, "comment section");
+      einfo (VERBOSE2, "%s: built by gcc version %u (extracted from '%s' in comment section)",
+	     data->filename, version, where);
     }
+
+  static const char * clang_prefix = "clang version ";
+  if ((where = strstr (tool, clang_prefix)) != NULL)
+    {
+      /* FIXME: This assumes that the clang identifier looks like: "clang version 7.0.1""  */
+      version = (unsigned int) strtod (where + strlen (clang_prefix), NULL);
+      set_producer (data, TOOL_CLANG, version, "comment section");
+      einfo (VERBOSE2, "%s: built by clang version %u (extracted from '%s' in comment section)",
+	     data->filename, version, where);
+    }
+
+  /* FIXME:
+     Should we report comment strings that we did not recognise ?
+     Are there other compilers that put IDs into the comment section ?  */
 
   return true;
 }
@@ -1260,7 +1327,7 @@ check_sec (annocheck_data *     data,
     case SHT_NOTE:     return check_note_section (data, sec);
     case SHT_STRTAB:   return check_string_section (data, sec);
     case SHT_DYNAMIC:  return check_dynamic_section (data, sec);
-    case SHT_PROGBITS: return check_code_section (data, sec);
+    case SHT_PROGBITS: return check_progbits_section (data, sec);
     default:           return true;
     }
 }
@@ -1273,9 +1340,6 @@ interesting_seg (annocheck_data *    data,
     return false;
 
   if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R)
-#if 0
-      && seg->phdr->p_type != PT_GNU_STACK
-#endif
       && ! skip_check (TEST_RWX_SEG, NULL))
     {
       if (seg->phdr->p_type == PT_GNU_STACK)
@@ -1433,6 +1497,179 @@ check_seg (annocheck_data *    data,
 	tests[TEST_PROPERTY_NOTE].num_pass ++;
     }
 
+  return true;
+}
+
+typedef struct tool_id
+{
+  const char *  producer_string;
+  enum tool     tool_type;
+} tool_id;
+
+static const tool_id tools[] =
+{
+ /* { "GNU C++", TOOL_GXX }, */
+  { "GNU C", TOOL_GCC },
+  { "rustc version", TOOL_RUST },
+  { "clang version", TOOL_CLANG },
+  { "clang LLVM", TOOL_CLANG }, /* Is this right ?  */
+  { "Go cmd/compile", TOOL_GO },
+  { "GNU AS", TOOL_GAS },
+  { NULL, 0 }
+};
+
+/* Look for DW_AT_producer attributes.  */
+
+static bool
+hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, void * ptr ATTRIBUTE_UNUSED)
+{
+  Dwarf_Attribute  attr;
+  const char *     string;
+
+  if (dwarf_attr (die, DW_AT_producer, & attr) == NULL)
+    return true;
+
+  string = dwarf_formstring (& attr);
+  if (string == NULL)
+    {
+      unsigned int form = dwarf_whatform (& attr);
+
+      if (form == DW_FORM_GNU_strp_alt)
+	einfo (VERBOSE2, "ICE: DW_FORM_GNU_strp_alt not yet handled");
+      else
+	einfo (VERBOSE2, "%s: WARN: DWARF DW_AT_producer attribute uses non-string form %x",
+	       data->filename, form);
+      /* Keep scanning - there may be another DW_AT_producer attribute.  */
+      return true;
+    }
+
+  einfo (VERBOSE2, "%s: DW_AT_producer = %s", data->filename, string);
+
+  /* See if we can determine exactly which tool did produce this binary.  */
+  const tool_id *  tool;
+  const char *     where;
+  enum tool        madeby = TOOL_UNKNOWN;
+  unsigned int     version = 0;
+
+  for (tool = tools; tool->producer_string != NULL; tool ++)
+    if ((where = strstr (string, tool->producer_string)) != NULL)
+      {
+	madeby = tool->tool_type;
+	/* Look for a space after the ID string.  */
+	where = strchr (where + strlen (tool->producer_string), ' ');
+	if (where != NULL)
+	  version = strtod (where, NULL);
+	break;
+      }
+
+  if (madeby == TOOL_UNKNOWN)
+    {
+      einfo (VERBOSE, "%s: Unable to determine the binary's producer from its DW_AT_producer string",
+	     data->filename);
+      /* Keep scanning.  */
+      return true;
+    }
+
+  if (madeby != TOOL_GCC && producer.tool == TOOL_UNKNOWN)
+    einfo (VERBOSE, "%s: note: Discovered non-gcc code producer, skipping gcc specific checks",
+	   data->filename);
+
+  set_producer (data, madeby, version, "DW_AT_producer");
+
+  /* The DW_AT_producer string may also contain some of the command
+     line options that were used to compile the binary.  This happens
+     when using the -grecord-gcc-switches option for example.  So we
+     have an opportunity to check for producer-specific command line
+     options.  Note - this is suboptimal since these options do not
+     necessarily apply to the entire binary, but in the absence of
+     annobin data they are better than nothing.  */
+  switch (madeby)
+    {
+    default:
+      break;
+      
+    case TOOL_CLANG:
+      /* Try to determine if there are any command line options recorded in the
+	 DW_AT_producer string.  FIXME: This is not a very good heuristic.  */
+      if (strstr (string, "-f") || strstr (string, "-g") || strstr (string, "-O"))
+	{
+	  if (! skip_check (TEST_OPTIMIZATION, NULL))
+	    {
+	      if (strstr (string, " -O2") || strstr (string, " -O3"))
+		{
+		  tests[TEST_OPTIMIZATION].num_pass ++;
+		  einfo (VERBOSE2, "%s: PASS: Compiled with sufficient optimization", data->filename);
+		}
+	      else if (strstr (string, " -O0") || strstr (string, " -O1"))
+		{
+		  /* FIXME: This may not be a failure.  GCC needs -O2 or
+		     better for -D_FORTIFY_SOURCE to work properly, but
+		     other compilers may not.  */
+		  tests[TEST_OPTIMIZATION].num_fail ++;
+		  einfo (VERBOSE, "%s: FAIL: Built with insufficient optimization", data->filename);
+		}
+	      else
+		einfo (VERBOSE2, "%s: MAYB: Optimization level not found in DW_AT_producer string", data->filename);
+	    }
+
+	  if (! skip_check (TEST_PIC, NULL))
+	    {
+	      if (strstr (string, " -fpic") || strstr (string, " -fPIC")
+		  || strstr (string, " -fpie") || strstr (string, " -fPIE"))
+		{
+		  tests[TEST_PIC].num_pass ++;
+		  einfo (VERBOSE2, "%s: PASS: Compiled with -fpic/-fpie", data->filename);
+		}
+	      else
+		{
+		  tests[TEST_PIC].num_fail ++;
+		  einfo (VERBOSE, "%s: FAIL: Not compiled with -fpic/-fpie", data->filename);
+		}
+	    }
+
+	  if (! skip_check (TEST_STACK_PROT, NULL))
+	    {
+	      if (strstr (string, "-fstack-protector-strong")
+		  || strstr (string, "-fstack-protector-all"))
+		{
+		  tests[TEST_STACK_PROT].num_pass ++;
+		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient stack protection", data->filename);
+		}
+	      else if (strstr (string, "-fstack-protector"))
+		{
+		  tests[TEST_STACK_PROT].num_fail ++;
+		  einfo (VERBOSE, "%s: FAIL: Compiled with insufficient stack protection", data->filename);
+		}
+	      else
+		{
+		  tests[TEST_STACK_PROT].num_fail ++;
+		  einfo (VERBOSE, "%s: FAIL: Not compiled with -fstack-protector-strong", data->filename);
+		}
+	    }
+
+	  if ((e_machine == EM_386 || e_machine == EM_X86_64)
+	      && ! skip_check (TEST_CF_PROTECTION, NULL))
+	    {
+	      if (strstr (string, "-fcf-protection"))
+		{
+		  tests[TEST_CF_PROTECTION].num_pass ++;
+		  einfo (VERBOSE, "%s: PASS: Compiled with control flow protection enabled", data->filename);
+		}
+	      else
+		{
+		  tests[TEST_CF_PROTECTION].num_fail ++;
+		  einfo (VERBOSE, "%s: FAIL: Not compiled with control flow protection enabled", data->filename);
+		}
+	    }
+	}
+      else
+	einfo (VERBOSE, "%s: Warning - command line options not recorded by -grecord-gcc-switches",
+	       data->filename);
+      break;
+    }
+
+  /* Keep scanning - there may be another DW_AT_producer attribute.
+     FIXME: This could take some time - is it worth it ?  */
   return true;
 }
 
@@ -1812,6 +2049,18 @@ check_for_gaps (annocheck_data * data)
     fail (data, "Gaps were detected in the annobin coverage");
 }
 
+static inline bool
+built_by_compiler (void)
+{
+  return producer.tool == TOOL_GCC || producer.tool == TOOL_CLANG;
+}
+
+static inline bool
+built_by_gcc (void)
+{
+  return producer.tool == TOOL_GCC;
+}
+
 static void
 show_ENTRY (annocheck_data * data, test * results)
 {
@@ -1852,8 +2101,8 @@ show_SHORT_ENUM (annocheck_data * data, test * results)
     maybe (data, "Corrupt notes on the -fshort-enum setting detected");
   else if (results->num_fail > 0 || results->num_pass > 0)
     pass (data, "Consistent use of the -fshort-enum option");
-  else if (gcc_version == -1)
-    skip (data, "No enum size notes were found, but the binary was not built with gcc");
+  else if (! built_by_gcc ())
+    skip (data, "Test of enum size.  (Not built by gcc)");
   else
     maybe (data, "No data about the use of -fshort-enum available");
 }
@@ -1877,10 +2126,10 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
     pass (data, "Good GNU Property note");
   else if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
     {
-      if (gcc_version == -1)
-	skip (data, "-fcf-protection is enabled, but some parts of the binary have been created by a non-GCC tool, and so do not have the necessary markup.  This means that CET protection will *not* be enabled for any part of the binary");
+      if (! built_by_gcc ())
+	skip (data, "Control flow is enabled, but some parts of the binary have been created by a non-GCC tool, and so do not have the necessary markup.  This means that CET protection will *not* be enabled for any part of the binary");
       else
-	fail (data, "GNU Property note is missing, but -fcf-protection is enabled");
+	fail (data, "GNU Property note is missing, but control flow protection is enabled");
     }
   else
     pass (data, "GNU Property note not needed");
@@ -1895,9 +2144,9 @@ show_BIND_NOW (annocheck_data * data, test * results)
     skip (data, "Test for -Wl,-z,now.  (No dynamic segment present)");
   else if (results->num_maybe == 0)
     skip (data, "Test for -Wl,-z-now.  (Dynamic segment present, but no dynamic relocations found)");
-  else if (gcc_version == -1)
+  else if (producer.tool == TOOL_GO)
     /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
-    skip (data, "Test for -Wl,-z,now.  (Binary was not built by gcc)");
+    skip (data, "Test for -Wl,-z,now.  (Binary was built by GO)");
   else if (results->num_pass == 0 || results->num_fail > 0)
     fail (data, "Not linked with -Wl,-z,now");
   else
@@ -1925,9 +2174,9 @@ show_GNU_RELRO (annocheck_data * data, test * results)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic segment present)");
   else if (tests [TEST_BIND_NOW].num_maybe == 0)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic relocations)");
-  else if (gcc_version == -1)
+  else if (producer.tool == TOOL_GO)
     /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
-    skip (data, "Test for -Wl,z,relro. (Not built by gcc)");
+    skip (data, "Test for -Wl,z,relro. (Built by GO)");
   else if (results->num_pass == 0 || results->num_fail > 0)
     fail (data, "Not linked with -Wl,-z,relro");
   else
@@ -2023,10 +2272,6 @@ show_OPTIMIZATION (annocheck_data * data, test * results)
       else
 	fail (data, "The binary was compiled without sufficient optimization");
     }
-  else if (gcc_version == -1)
-    {
-      skip (data, "Test of optimization level.  (The binary was not built by gcc)");
-    }
   else if (results->num_maybe > 0)
     {
       if (results->num_pass > 0)
@@ -2042,6 +2287,10 @@ show_OPTIMIZATION (annocheck_data * data, test * results)
   else if (results->num_pass > 0)
     {
       pass (data, "Compiled with sufficient optimization");
+    }
+  else if (! built_by_compiler ())
+    {
+      skip (data, "Test of optimization level.  (Not built by gcc/clang)");
     }
   else
     {
@@ -2064,10 +2313,6 @@ show_PIC (annocheck_data * data, test * results)
       else
 	fail (data, "The binary was compiled without -fPIC/-fPIE specified");
     }
-  else if (gcc_version == -1)
-    {
-      skip (data, "Test for PIC compilation.  (The binary was not built by gcc)");
-    }
   else if (results->num_maybe > 0)
     {
       if (results->num_pass > 0)
@@ -2084,6 +2329,10 @@ show_PIC (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with PIC/PIE");
     }
+  else if (! built_by_compiler ())
+    {
+      skip (data, "Test for PIC compilation.  (Not built by gcc/clang)");
+    }
   else
     {
       maybe (data, "The PIC/PIE setting was not recorded");
@@ -2093,8 +2342,8 @@ show_PIC (annocheck_data * data, test * results)
 static void
 show_PIE (annocheck_data * data, test * results)
 {
-  if (gcc_version == -1)
-    skip (data, "Test for -pie.  (Not built with gcc)");
+  if (! built_by_compiler ())
+    skip (data, "Test for -pie.  (Not built with gcc/clang)");
 
   else if (results->num_fail > 0)
     fail (data, "Not linked as a position independent executable (ie need to add '-pie' to link command line)");
@@ -2118,10 +2367,6 @@ show_STACK_PROT (annocheck_data * data, test * results)
       else
 	fail (data, "The binary was compiled without -fstack-protector-strong");
     }
-  else if (gcc_version == -1)
-    {
-      skip (data, "Test for stack protection.  (The binary was not built by gcc)");
-    }
   else if (results->num_maybe > 0)
     {
       if (results->num_pass > 0)
@@ -2138,6 +2383,10 @@ show_STACK_PROT (annocheck_data * data, test * results)
     {
       pass (data, "Compiled with sufficient stack protection");
     }
+  else if (! built_by_compiler ())
+    {
+      skip (data, "Test for stack protection.  (Not built by gcc/clang)");
+    }
   else
     {
       maybe (data, "The stack protection setting was not recorded");
@@ -2150,10 +2399,10 @@ show_STACK_CLASH (annocheck_data * data, test * results)
   if (e_machine == EM_ARM)
     skip (data, "Test for stack clash support.  (Not enabled on the ARM)");
 
-  else if (gcc_version == -1)
+  else if (! built_by_gcc ())
     skip (data, "Test for stack clash support.  (Not built by gcc)");
 
-  else if (gcc_version < 7)
+  else if (producer.version < 7)
     skip (data, "Test for stack clash support.  (Needs gcc 7+)");
 
   else if (results->num_fail > 0)
@@ -2206,8 +2455,8 @@ show_FORTIFY (annocheck_data * data, test * results)
 	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
     }
 
-  else if (gcc_version == -1)
-    skip (data, "Test for -D_FORTIFY_SOURCE=2.  (The binary was not built by gcc)");
+  else if (! built_by_compiler ())
+    skip (data, "Test for -D_FORTIFY_SOURCE=2.  (Not built by gcc/clang)");
 
   else if (results->num_maybe > 0)
     {
@@ -2238,10 +2487,10 @@ show_CF_PROTECTION (annocheck_data * data, test * results)
   if (e_machine != EM_386 && e_machine != EM_X86_64)
     skip (data, "Test for control flow protection.  (Only supported on x86 binaries)");
 
-  else if (gcc_version == -1)
-    skip (data, "Test for control flow protection.  (Not built by gcc)");
+  else if (! built_by_compiler ())
+    skip (data, "Test for control flow protection.  (Not built by gcc/clang)");
 
-  else if (gcc_version < 8)
+  else if (built_by_gcc () && producer.version < 8)
     skip (data, "Test for control flow protection.  (Needs gcc v8+)");
 
   else if (results->num_fail > 0)
@@ -2282,7 +2531,7 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
 {
   if (results->num_fail > 0)
     {
-      if (results->num_pass > 0 || results->num_maybe > 0 || gcc_version == -1)
+      if (results->num_pass > 0 || results->num_maybe > 0 || ! built_by_compiler ())
 	{
 	  if (BE_VERBOSE)
 	    fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS");
@@ -2293,8 +2542,8 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
 	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
     }
 
-  else if (gcc_version == -1)
-    skip (data, "Test for -D_GLIBCXX_ASSERTONS.  (The binary was not built by gcc)");
+  else if (! built_by_compiler ())
+    skip (data, "Test for -D_GLIBCXX_ASSERTONS.  (Not built by gcc/clang)");
 
   else if (results->num_maybe > 0)
     {
@@ -2325,7 +2574,7 @@ show_STACK_REALIGN (annocheck_data * data, test * results)
   if (e_machine != EM_386)
     skip (data, "Test for stack realignment support.  (Only needed on i686 binaries)");
 
-  else if (gcc_version == -1)
+  else if (! built_by_gcc ())
     skip (data, "Test for stack realignment support.  (Not built by gcc)");
 
   else if (results->num_fail > 0)
@@ -2360,58 +2609,21 @@ show_STACK_REALIGN (annocheck_data * data, test * results)
     maybe (data, "The -mstack-realign option was not seen");
 }
 
-/* Look for DW_AT_producer attributes.  */
-
-static bool
-hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, void * ptr)
-{
-  Dwarf_Attribute  attr;
-  const char *     string;
-
-  if (dwarf_attr (die, DW_AT_producer, & attr) == NULL)
-    return true;
-
-  string = dwarf_formstring (& attr);
-  if (string == NULL)
-    {
-      unsigned int form = dwarf_whatform (& attr);
-
-      if (form == DW_FORM_GNU_strp_alt)
-	einfo (VERBOSE2, "ICE: DW_FORM_GNU_strp_alt not yet handled");
-      else
-	einfo (VERBOSE2, "%s: WARN: DWARF DW_AT_producer attribute uses non-string form %x",
-	       data->filename, form);
-      return true;
-    }
-
-  if (strstr (string, "GNU") == NULL)
-    {
-      /* Note - we assume that GAS will be able to produce notes...  */
-      einfo (VERBOSE, "%s: note: Discovered non-GNU code producer (%s), skipping compiler specific checks",
-	     data->filename, string);
-      gcc_version = -1;
-      return false;
-    }
-
-  return true;
-}
-
 static bool
 finish (annocheck_data * data)
 {
   if (disabled || debuginfo_file)
     return true;
 
-  if (gcc_version != -1)
-    /* Check to see if something other than gcc produced parts
-       of this binary.  */
-    (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
+  /* Check to see if something other than gcc produced parts
+     of this binary.  */
+  (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
 
   if (! ignore_gaps)
     {
       if (e_type == ET_REL)
 	skip (data, "Not checking for gaps (object file)");
-      else if (gcc_version == -1)
+      else if (! built_by_gcc ())
 	skip (data, "Not checking for gaps (non-gcc compiled binary)");
       else
 	check_for_gaps (data);
@@ -2440,7 +2652,7 @@ finish (annocheck_data * data)
 static void
 version (void)
 {
-  einfo (INFO, "Version 1.1");
+  einfo (INFO, "Version 1.2");
 }
 
 static void
