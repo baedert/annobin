@@ -2588,6 +2588,12 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
 	  else
 	    maybe (data, "Some parts of the binary do not record whether -D_GLIBCXX_ASSERTIONS was used");
 	}
+      /* If we know that we have seen -D_FORTIFY_SOURCE then we should also
+	 have seen -D_GLIBCXX_ASSERTIONS.  Hence its absence is a failure.  */
+      else if (tests[TEST_FORTIFY].num_pass > 0)
+	{
+	  fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
+	}
       else
 	maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
     }
