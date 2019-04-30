@@ -163,6 +163,18 @@ static test tests [TEST_MAX] =
 };
 
 
+static inline bool
+built_by_compiler (void)
+{
+  return producer.tool == TOOL_GCC || producer.tool == TOOL_CLANG;
+}
+
+static inline bool
+built_by_gcc (void)
+{
+  return producer.tool == TOOL_GCC;
+}
+
 static bool
 start (annocheck_data * data)
 {
@@ -461,18 +473,35 @@ report_s (einfo_type           type,
   einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
 }
 
+static const char *
+get_producer_name (enum tool tool)
+{
+  switch (tool)
+    {
+    default:           return "<unrecognised>";
+    case TOOL_UNKNOWN: return "<unknown>";
+    case TOOL_MIXED:   return "<mixed>";
+    case TOOL_GCC:     return "gcc";
+    case TOOL_GAS:     return "gas";
+    case TOOL_CLANG:   return "clang";
+    case TOOL_GO:      return "go";
+    case TOOL_RUST:    return "rust";
+    }
+}
+
 static void
 set_producer (annocheck_data *     data,
 	      enum tool            tool,
 	      unsigned int         version,
 	      const char *         source)
 {
-  einfo (VERBOSE2, "record producer type %d version %u source %s", tool, version, source);
+  einfo (VERBOSE2, "record producer %s version %u source %s", get_producer_name (tool), version, source);
 
   if (producer.tool == TOOL_UNKNOWN)
     {
       producer.tool = tool;
       producer.version = version;
+      einfo (VERBOSE, "%s: binary producer %s version %u", data->filename, get_producer_name (tool), version);
     }
   else if (producer.tool == tool)
     {
@@ -800,6 +829,14 @@ walk_build_notes (annocheck_data *     data,
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
       if (skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
 	break;
+
+      /* We can get stack protection notes without tool notes.  See BZ 1703788 for an example.  */
+      if (value != 2 && value != 3 && ! built_by_compiler ())
+	{
+	  report_s (VERBOSE, "%s: skip: (%s): Insufficient stack protection (%s) - ignoring because not in compiled code",
+		    data, sec, note_data, prefer_func_name, stack_prot_type (value));
+	  break;
+	}
 
       switch (value)
 	{
@@ -1629,6 +1666,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 
 	  if (! skip_check (TEST_STACK_PROT, NULL))
 	    {
+einfo (INFO, "STACK PROT 2\n");
 	      if (strstr (string, "-fstack-protector-strong")
 		  || strstr (string, "-fstack-protector-all"))
 		{
@@ -2049,18 +2087,6 @@ check_for_gaps (annocheck_data * data)
     fail (data, "Gaps were detected in the annobin coverage");
 }
 
-static inline bool
-built_by_compiler (void)
-{
-  return producer.tool == TOOL_GCC || producer.tool == TOOL_CLANG;
-}
-
-static inline bool
-built_by_gcc (void)
-{
-  return producer.tool == TOOL_GCC;
-}
-
 static void
 show_ENTRY (annocheck_data * data, test * results)
 {
@@ -2366,6 +2392,7 @@ show_STACK_PROT (annocheck_data * data, test * results)
 	}
       else
 	fail (data, "The binary was compiled without -fstack-protector-strong");
+einfo (INFO, "STACK PROT fail %d maybe %d pass %d\n", results->num_fail, results->num_maybe, results->num_pass);
     }
   else if (results->num_maybe > 0)
     {
@@ -2466,6 +2493,13 @@ show_FORTIFY (annocheck_data * data, test * results)
 	    maybe (data, "Some parts of the binary do not record if -D_FORTIFY_SOURCE=2 was used.  Run with -v to see where");
 	  else
 	    maybe (data, "Some parts of the binary do not record if -D_FORTIFY_SOURCE=2 was used");
+	}
+      /* If we know that we have seen -D_GLIBCXX_ASSERTIONS then we
+	 should also have seen -D_FORTIFY_SOURCE.  Hence its absence
+	 is a failure.  */
+      else if (tests[TEST_GLIBCXX_ASSERTIONS].num_pass > 0)
+	{
+	  fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
 	}
       else
 	maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
