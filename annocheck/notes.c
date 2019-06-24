@@ -169,13 +169,13 @@ notes_walk (annocheck_data *     data,
 	{
 	  if (is_little_endian)
 	    {
-	      start = descdata[0] | (descdata[1] << 8) | (descdata[2] << 16) | (descdata[3] << 24);
-	      end   = descdata[4] | (descdata[5] << 8) | (descdata[6] << 16) | (descdata[7] << 24);
+	      start = descdata[0] | (descdata[1] << 8) | (descdata[2] << 16) | (((unsigned int) descdata[3]) << 24);
+	      end   = descdata[4] | (descdata[5] << 8) | (descdata[6] << 16) | (((unsigned int) descdata[7]) << 24);
 	    }
 	  else
 	    {
-	      start = descdata[3] | (descdata[2] << 8) | (descdata[1] << 16) | (descdata[0] << 24);
-	      end   = descdata[7] | (descdata[6] << 8) | (descdata[5] << 16) | (descdata[4] << 24);
+	      start = descdata[3] | (descdata[2] << 8) | (descdata[1] << 16) | (((unsigned int) descdata[0]) << 24);
+	      end   = descdata[7] | (descdata[6] << 8) | (descdata[5] << 16) | (((unsigned int) descdata[4]) << 24);
 	    }
 	}
       else

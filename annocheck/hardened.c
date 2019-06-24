@@ -967,7 +967,7 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 
 	    case 0xff:
-	      report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE setting not recorded",
+	      report_s (VERBOSE, "%s: FAIL: (%s): -D_FORTIFY_SOURCE missing from command line",
 		      data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_FORTIFY].num_maybe ++;
 	      break;
@@ -1666,7 +1666,6 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 
 	  if (! skip_check (TEST_STACK_PROT, NULL))
 	    {
-einfo (INFO, "STACK PROT 2\n");
 	      if (strstr (string, "-fstack-protector-strong")
 		  || strstr (string, "-fstack-protector-all"))
 		{
@@ -2153,9 +2152,9 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
   else if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
     {
       if (! built_by_gcc ())
-	skip (data, "Control flow is enabled, but some parts of the binary have been created by a non-GCC tool, and so do not have the necessary markup.  This means that CET protection will *not* be enabled for any part of the binary");
+	skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a non-GCC tool, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
       else
-	fail (data, "GNU Property note is missing, but control flow protection is enabled");
+	fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled.");
     }
   else
     pass (data, "GNU Property note not needed");
@@ -2392,7 +2391,6 @@ show_STACK_PROT (annocheck_data * data, test * results)
 	}
       else
 	fail (data, "The binary was compiled without -fstack-protector-strong");
-einfo (INFO, "STACK PROT fail %d maybe %d pass %d\n", results->num_fail, results->num_maybe, results->num_pass);
     }
   else if (results->num_maybe > 0)
     {
@@ -2490,9 +2488,9 @@ show_FORTIFY (annocheck_data * data, test * results)
       if (results->num_pass > 0)
 	{
 	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record if -D_FORTIFY_SOURCE=2 was used.  Run with -v to see where");
+	    fail (data, "Some parts of the binary were not compiled with -D_FORTIFY_SOURCE=2.  Run with -v to see where");
 	  else
-	    maybe (data, "Some parts of the binary do not record if -D_FORTIFY_SOURCE=2 was used");
+	    fail (data, "Some parts of the binary were not compiled with -D_FORTIFY_SOURCE=2");
 	}
       /* If we know that we have seen -D_GLIBCXX_ASSERTIONS then we
 	 should also have seen -D_FORTIFY_SOURCE.  Hence its absence

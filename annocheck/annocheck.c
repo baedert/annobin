@@ -32,7 +32,7 @@ ulong         verbosity = 0;
    version_string definitions in annobin.cc.
    FIXME: This value should be defined in only one place...  */
 const uint              major_version = 8;
-const uint              minor_version = 76;
+const uint              minor_version = 77;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -130,7 +130,14 @@ einfo (einfo_type type, const char * format, ...)
     fprintf (file, "%s: ", component);
 
   const char *  do_newline;
-  const char    c = format[strlen (format) - 1];
+  char          c;
+  size_t        len = strlen (format);
+  if (len < 1)
+    {
+      fprintf (stderr, "ICE: einfo called without a valid format string\n");
+      exit (-1);
+    }
+  c = format[len - 1];
   if (c == '\n' || c == ' ')
     do_newline = "";
   else if (c == '.' || c == ':')

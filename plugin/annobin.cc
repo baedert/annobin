@@ -31,8 +31,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 876;
-static const char *   version_string = N_("Version 876");
+static unsigned int   annobin_version = 877;
+static const char *   version_string = N_("Version 877");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -974,11 +974,10 @@ annobin_emit_function_notes (bool force)
 	annobin_max_stack_size = current_function_static_stack_size;
     }
 
-  if (force)
-    {
-      record_fortify_level (global_fortify_level, FUNC, sec_name);
-      record_glibcxx_assertions (global_glibcxx_assertions, FUNC, sec_name);
-    }
+  /* Always record the fortify and assertion levels as we cannot be sure that
+     the global values have been recorded.  cf BZ 1703500.  */
+  record_fortify_level (global_fortify_level, FUNC, sec_name);
+  record_glibcxx_assertions (global_glibcxx_assertions, FUNC, sec_name);
 }
 
 static const char *
