@@ -31,8 +31,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 877;
-static const char *   version_string = N_("Version 877");
+static unsigned int   annobin_version = 878;
+static const char *   version_string = N_("Version 878");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -1250,7 +1250,7 @@ static attach_item * attach_list = NULL;
 static void
 queue_attachment (const char * section_name, const char * group_name)
 {
-  attach_item * item = (attach_item *) xmalloc (sizeof item);
+  attach_item * item = (attach_item *) xmalloc (sizeof * item);
 
   item->section_name = concat (section_name, NULL);
  item->group_name = concat (group_name, NULL);
