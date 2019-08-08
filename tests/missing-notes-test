@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2017-2018 Red Hat.
+# Copyright (c) 2017-2019 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -14,9 +14,9 @@
 
 rm -f hello.o hello2.o hello3.o libhello.so missing-notes-test.exe
 
-GCC=gcc
-
-PLUGIN=../plugin/.libs/annobin.so
+GCC=${GCC:-gcc}
+ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
+PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
@@ -72,4 +72,4 @@ $GCC -L . -pie -Wl,-z,now -Wl,-z,relro \
 # readelf --wide --notes --sections --syms missing-notes-test.exe
 
 # FIXME - we should check that the notes were parsed correctly...
-../annocheck/annocheck -v missing-notes-test.exe
+$ANNOCHECK -v missing-notes-test.exe

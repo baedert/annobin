@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2017-2018 Red Hat.
+# Copyright (c) 2017-2019 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -14,11 +14,11 @@
 
 rm -f hello.o hello2.o hello3.o libhello.so abi-test.exe
 
-GCC=gcc
-READELF=readelf
-OBJCOPY=objcopy
+GCC=${GCC:-gcc}
+READELF=${READELF:-readelf}
+OBJCOPY=${OBJCOPY:-objcopy}
+PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 
-PLUGIN=../plugin/.libs/annobin.so
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 

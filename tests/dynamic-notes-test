@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2018 Red Hat.
+# Copyright (c) 2018-2019 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -17,9 +17,8 @@
 
 rm -f hello.o
 
-GCC=gcc
-READELF=readelf
-
-PLUGIN=../plugin/.libs/annobin.so
+GCC=${GCC:-gcc}
+READELF=${READELF:-readelf}
+PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 
 $GCC -fplugin=$PLUGIN -c -fplugin-arg-annobin-no-static-notes $srcdir/hello.c -fplugin-arg-annobin-dynamic-notes

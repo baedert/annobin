@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2018 Red Hat.
+# Copyright (c) 2018-2019 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -14,9 +14,9 @@
 
 rm -f hello.o hello2.o hello3.o libhello.so hardening-fail-test.exe
 
-GCC=gcc
+GCC=${GCC:-gcc}
+PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 
-PLUGIN=../plugin/.libs/annobin.so
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach -fplugin-arg-annobin-active-checks"
 
 OPTS="-c"

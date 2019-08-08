@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2018 Red Hat.
+# Copyright (c) 2018-2019 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -17,14 +17,14 @@
 
 rm -f hello.o hello2.o hello3.o hello_lib.o section-size.exe
 
-GCC=gcc
-
-PLUGIN=../plugin/.libs/annobin.so
+GCC=${GCC:-gcc}
+ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
+PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $srcdir/hello.c $srcdir/hello2.c $srcdir/hello3.c $srcdir/hello_lib.c
 $GCC hello.o hello2.o hello3.o hello_lib.o -o section-size.exe
 
-../annocheck/annocheck -v --disable-hardened --section-size=.gnu.build.attributes --human --ignore-unknown .
+$ANNOCHECK -v --disable-hardened --section-size=.gnu.build.attributes --human --ignore-unknown .
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2018 Red Hat.
+# Copyright (c) 2018-2019 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -19,13 +19,12 @@ rm -f hello.o hello2.o hello3.o
 rm -f gap1.o assembler-gap-test1.exe assembler-gas-test1.out
 rm -f gap2.o assembler-gap-test2.exe assembler-gas-test2.out
 
-GAS=as
-# GAS=/work/builds/binutils/current/x86_64-pc-linux-gnu/gas/as-new 
-GCC=gcc
-READELF=readelf
-ANNOCHECK=../annocheck/annocheck
+GAS=${GAS:-as}
+GCC=${GCC:-gcc}
+READELF=${READELF:-readelf}
+ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
+PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 
-PLUGIN=../plugin/.libs/annobin.so
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
 # Assemble the file, and include debug information which will

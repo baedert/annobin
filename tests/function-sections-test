@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2017-2018 Red Hat.
+# Copyright (c) 2017-2019 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -14,9 +14,10 @@
 
 rm -f hello.o hello2.o function-sections-test.exe unused_code.o unused_code.i unused_code.s fred.map
 
-GCC=gcc
-READELF=readelf
-PLUGIN=../plugin/.libs/annobin.so
+GCC=${GCC:-gcc}
+READELF=${READELF:-readelf}
+ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
+PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
@@ -66,4 +67,4 @@ $GCC -pie \
 
 # FIXME - we should check that the notes were parsed correctly...
 # FIXME - we should check for gaps.
-../annocheck/annocheck --ignore-gaps --skip-entry function-sections-test.exe
+$ANNOCHECK --ignore-gaps --skip-entry function-sections-test.exe
