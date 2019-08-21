@@ -31,8 +31,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 879;
-static const char *   version_string = N_("Version 879");
+static unsigned int   annobin_version = 880;
+static const char *   version_string = N_("Version 880");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -113,7 +113,8 @@ static int            global_pic_option = 0;
 static int            global_short_enums = 0;
 static int            global_fortify_level = -1;
 static int            global_glibcxx_assertions = -1;
-static char *         compiler_version = NULL;
+static char *         build_version = NULL;
+static char *         run_version = NULL;
 static unsigned       verbose_level = 0;
 static const char *   annobin_extra_prefix = "";
 static char *         annobin_current_filename = NULL;
@@ -770,7 +771,6 @@ record_frame_pointer_note (const char * start, const char * end, int type, const
   annobin_output_static_note (buffer, len + 1, true, "bool: -fomit-frame-pointer status",
 			      start, end, type, sec_name);
 }
-
 
 static const char *
 function_asm_name (void)
@@ -1474,7 +1474,10 @@ emit_global_notes (const char * suffix)
   annobin_inform (1, "Emit global notes for section .text%s...", suffix);
 
   /* Record the version of the compiler.  */
-  annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, compiler_version,
+  annobin_inform (1, "Annobin compiler versions: %s, %s", build_version, run_version);
+  annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, run_version,
+			      "string: build-tool", NULL, NULL, OPEN, sec);
+  annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, build_version,
 			      "string: build-tool", NULL, NULL, OPEN, sec);
 
   /* Record optimization level, -W setting and -g setting  */
@@ -1696,6 +1699,38 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	      if (on != -1)
 		global_glibcxx_assertions = on;
 	    }
+	}
+    }
+
+  if (in_lto_p)
+    {
+      /* In LTO mode the preprocessed options are not passed on.
+	 For now, assume that they were present when the original object files
+	 were compiled.
+	 
+	 FIXME: What we should do is examine the input object files and
+	 extract the fortify and glibcxx notes from them.  But I do not know
+	 if one plugin can access the data in another one...  */
+      if (global_fortify_level == -1)
+	global_fortify_level = 2;
+      if (global_glibcxx_assertions == -1)
+	global_glibcxx_assertions = 1;
+    }
+  else if (flag_generate_lto)
+    {
+      /* Because of the hack above, if we know that we are generating a
+	 lto object file and the preprocessor values are insufficient,
+	 then we generate a warning message for the user.  */
+      if (global_fortify_level != 2)
+	{
+	  if (global_fortify_level == -1)
+	    annobin_inform (0, _("Warning: -D_FORTIFY_SOURCE not defined"));
+	  else
+	    annobin_inform (0, _("Warning: -D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
+	}
+      if (global_glibcxx_assertions != 1)
+	{
+	  annobin_inform (0, _("Warning: -D_GLIBCXX_ASSERTIONS not defined"));
 	}
     }
 
@@ -2020,9 +2055,11 @@ plugin_init (struct plugin_name_args *   plugin_info,
       return 0;
     }
 
-  /* Record global compiler options.  */
-  compiler_version = (char *) xmalloc (strlen (version->basever) + strlen (version->datestamp) + 6);
-  sprintf (compiler_version, "gcc %s %s", version->basever, version->datestamp);
+  /* Record global compiler options.
+     NB/ The format of these strings is important, as knowledge
+     of their layout is embedded into hardended.c.  */
+  run_version   = concat ("running gcc ", version->basever, " ", version->datestamp, NULL);
+  build_version = concat ("annobin gcc ", gcc_version.basever, " ", gcc_version.datestamp, NULL);
 
   annobin_save_target_specific_information ();
 

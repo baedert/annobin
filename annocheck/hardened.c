@@ -501,7 +501,7 @@ set_producer (annocheck_data *     data,
     {
       producer.tool = tool;
       producer.version = version;
-      einfo (VERBOSE, "%s: binary producer %s version %u", data->filename, get_producer_name (tool), version);
+      einfo (VERBOSE, "%s: set binary producer to %s version %u", data->filename, get_producer_name (tool), version);
     }
   else if (producer.tool == tool)
     {
@@ -751,9 +751,44 @@ walk_build_notes (annocheck_data *     data,
       else
 	{
 	  /* Parse the tool attribute looking for the version of gcc used to build the component.  */
-	  const char * gcc = strstr (attr, "gcc");
 
-	  if (gcc)
+	  /* As of version 8.80 there are two BUILT_ATTRIBUTE_TOOL version strings,
+	     one for the compiler that built the annobin plugin and one for the
+	     compiler that ran the annobin plugin.  Look for these here.  Their
+	     format is "annobin gcc X.Y.Z DATE" and "running gcc X.Y.Z DATE".  */
+	  static unsigned int run_major, run_minor, run_rel;
+	  if (sscanf (attr + 1, "running gcc %u.%u.%u", & run_major, & run_minor, & run_rel) == 3)
+	    {
+	      einfo (VERBOSE, "Annobin plugin running on gcc version %u.%u.%u",
+		     run_major, run_minor, run_rel);
+	      set_producer (data, TOOL_GCC, run_major, "GNU Build Attribute Tool");
+	      break;
+	    }
+
+	  unsigned int anno_major, anno_minor, anno_rel;
+	  if (sscanf (attr + 1, "annobin gcc %u.%u.%u", & anno_major, & anno_minor, & anno_rel) == 3)
+	    {
+	      einfo (VERBOSE, "Annobin plugin built by gcc version %u.%u.%u",
+		     anno_major, anno_minor, anno_rel);
+
+	      /* Verify that the versions are compatible.  */
+	      if (anno_major != run_major)
+		einfo (INFO, "ICE: Annobin plugin was built by gcc version %u but run on gcc version %u",
+		       anno_major, run_major);
+	      else if (anno_minor != run_minor || anno_rel != run_rel)
+		{
+		  einfo (VERBOSE, "WARN: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
+			 anno_major, anno_minor, anno_rel,
+			 run_major, run_minor, run_rel);
+		  einfo (VERBOSE, "WARN: If there are FAIL results that appear to be incorrect, it could be due to this version discrepancy.");
+		}
+	      break;
+	    }
+	  
+	  /* Otherwise look for the normal BUILD_ATTRIBUTE_TOOL string.  */
+	  const char * gcc = strstr (attr + 1, "gcc");
+
+	  if (gcc != NULL)
 	    {
 	      /* FIXME: This assumes that the tool string looks like: "gcc 7.x.x......"  */
 	      unsigned int version = (unsigned int) strtoul (gcc + 4, NULL, 10);
