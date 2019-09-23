@@ -21,7 +21,9 @@ annobin_CXXFLAGS = $(AM_CXXFLAGS) -I /usr/include/libabigail
 annobin_la_LDFLAGS = -module
 annobin_la_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) \
-	$(annobin_la_LDFLAGS) $(LTLDFLAGS) -o $@ -labigail
+	$(annobin_la_LDFLAGS) $(LTLDFLAGS) -o $@
+
+#       $(annobin_la_LDFLAGS) $(LTLDFLAGS) -o $@ -labigail
 
 # Remove the .la file from the final install.
 #
