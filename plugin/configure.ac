@@ -3,7 +3,7 @@
 # license   : GNU GPL v3; see accompanying LICENSE file.
 
 AC_PREREQ(2.64)
-AC_INIT([Binary Annotation plugin for gcc], 8.6,,[annobin-plugin])
+AC_INIT([Binary Annotation plugin for gcc], 8.8,,[annobin-plugin])
 AC_CANONICAL_SYSTEM
 AC_USE_SYSTEM_EXTENSIONS
 GCC_TOPLEV_SUBDIRS

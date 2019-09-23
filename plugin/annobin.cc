@@ -18,6 +18,23 @@
 #include <stdio.h>
 #include <intl.h>
 
+// #define USE_LIBABIGAIL 1
+
+#ifdef USE_LIBABIGAIL
+#include <abg-config.h>
+#include <abg-ir.h>
+#include <abg-comp-filter.h>
+#include <abg-suppression.h>
+#include <abg-tools-utils.h>
+#include <abg-reader.h>
+#include <abg-dwarf-reader.h>
+using std::vector;
+using abigail::ir::environment;
+using abigail::ir::environment_sptr;
+using abigail::corpus_sptr;
+using abigail::suppr::suppressions_type;
+#endif // USE_LIBABIGAIL
+
 /* Needed to access some of GCC's internal structures.  */
 #include "cgraph.h"
 #include "target.h"
@@ -31,8 +48,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 880;
-static const char *   version_string = N_("Version 880");
+static unsigned int   annobin_version = 881;
+static const char *   version_string = N_("Version 881");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -1945,6 +1962,60 @@ parse_args (unsigned argc, struct plugin_argument * argv)
   return true;
 }
 
+#ifdef USE_LIBABIGAIL
+static void
+generate_corpus (void)
+{
+  annobin_inform (0, "Creating a libabigail corpus");
+
+  environment_sptr env (new environment);
+  vector<char**> prepared_di_root_paths1;
+
+  // Note - we use /proc/self/exe to get a link to the compiler (cc1, cc1plus) that invoked us.
+  abigail::dwarf_reader::read_context_sptr ctxt =
+    abigail::dwarf_reader::create_read_context
+    ("/proc/self/exe",
+     prepared_di_root_paths1,
+     env.get());
+
+  if (ctxt)
+    annobin_inform (0, "created read context");
+  else
+    {
+      annobin_inform (0, "Failed to create a read context for libabigail");
+      return;
+    }
+
+  // Create a suppress file so that we only profile the types used by annobin.
+  suppressions_type supprs;
+  std::istringstream input ("\
+[suppress_type]\n\
+name_regexp = (?!global_options)\n\
+drop = yes\n");
+  read_suppressions (input, supprs);
+  add_read_context_suppressions (*ctxt, supprs);
+  annobin_inform (0, "added suppressions", supprs);
+    
+  annobin_inform (0, "creating corpus...");
+  corpus_sptr c1;
+  abigail::dwarf_reader::status c1_status = abigail::dwarf_reader::STATUS_OK;
+  c1 = abigail::dwarf_reader::read_corpus_from_elf (*ctxt, c1_status);
+
+  if (c1)
+    annobin_inform (0, "corpus created");
+  else
+    {
+      if (c1_status == dwarf_reader::STATUS_DEBUG_INFO_NOT_FOUND)
+	annobin_inform (0, "failed to create libabaigail corpus (debug info missing)");
+      else if (c1_status == dwarf_reader::STATUS_NO_SYMBOLS_FOUND)
+	annobin_inform (0, "failed to create libabaigail corpus (symbols missing)");
+      else
+	annobin_inform (0, "failed to create libabaigail corpus (reason unknown)");
+      return;
+    }
+}
+#endif // USE_LIBABIGAIL
+
 int
 plugin_init (struct plugin_name_args *   plugin_info,
              struct plugin_gcc_version * version)
@@ -2038,8 +2109,15 @@ plugin_init (struct plugin_name_args *   plugin_info,
 
       if (fail)
 	return 1;
+#ifdef USE_LIBABIGAIL
+      else
+	{
+	  generate_corpus ();
+	  compare_corpus_against_original ();
+	}
+#endif
     }
-
+  
   if (! parse_args (plugin_info->argc, plugin_info->argv))
     {
       annobin_inform (1, _("failed to parse arguments to the plugin"));

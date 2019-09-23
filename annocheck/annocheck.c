@@ -32,7 +32,7 @@ ulong         verbosity = 0;
    version_string definitions in annobin.cc.
    FIXME: This value should be defined in only one place...  */
 const uint              major_version = 8;
-const uint              minor_version = 80;
+const uint              minor_version = 81;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -937,7 +937,7 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
   Dwarf * separate_debug_file = dwarf_begin (fd, DWARF_C_READ);
 
   if (separate_debug_file == NULL)
-    einfo (VERBOSE, "%s: warn: Failed to open separate debug file: %s", data->filename, debugfile);
+    einfo (VERBOSE, "%s: warn: Failed to parse separate debug file: %s", data->filename, debugfile);
   else
     einfo (VERBOSE2, "%s: Opened separate debug file: %s", data->filename, debugfile);
 

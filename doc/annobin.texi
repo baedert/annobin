@@ -5,7 +5,7 @@
 @setchapternewpage odd
 
 @c man begin INCLUDE
-@set VERSION 8.0
+@set VERSION 8.8
 @set VERSION_PACKAGE (Annobin) 
 @set UPDATED September 2019
 @c man end

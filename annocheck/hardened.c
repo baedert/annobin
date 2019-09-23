@@ -495,35 +495,38 @@ set_producer (annocheck_data *     data,
 	      unsigned int         version,
 	      const char *         source)
 {
-  einfo (VERBOSE2, "record producer %s version %u source %s", get_producer_name (tool), version, source);
+  einfo (VERBOSE2, "info: Record producer %s version %u source %s", get_producer_name (tool), version, source);
 
   if (producer.tool == TOOL_UNKNOWN)
     {
       producer.tool = tool;
       producer.version = version;
-      einfo (VERBOSE, "%s: set binary producer to %s version %u", data->filename, get_producer_name (tool), version);
+      einfo (VERBOSE, "%s: info: Set binary producer to %s version %u", data->filename, get_producer_name (tool), version);
     }
   else if (producer.tool == tool)
     {
       if (producer.version != version)
 	{
-	  einfo (VERBOSE, "%s: Warning: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
+	  einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
 		 data->filename, version, producer.version);
 	  if (producer.version < version)
 	    producer.version = version;
 	}
     }
-  else
+  else if ((producer.tool == TOOL_GAS && tool == TOOL_GCC)
+	   || (producer.tool == TOOL_GCC && tool == TOOL_GAS))
     {
-      einfo (VERBOSE, "%s: Warning: this binary was built by more than one tool",
+      einfo (VERBOSE, "%s: info: Mixed assembler and GCC detected - treating as pure GCC",
 	     data->filename);
-      if (tool == TOOL_GCC)
-	producer.tool = TOOL_GCC;
-      else if (producer.tool != TOOL_GCC)
-	{
-	  producer.tool = TOOL_MIXED;
-	  producer.version = 0;
-	}
+      producer.tool = TOOL_GCC;
+    }
+  else if (producer.tool != TOOL_MIXED)
+    {
+      einfo (VERBOSE, "%s: warn: This binary was built by more than one tool",
+	     data->filename);
+
+      producer.tool = TOOL_MIXED;
+      producer.version = 0;
     }
 }
 
@@ -689,7 +692,7 @@ walk_build_notes (annocheck_data *     data,
       value = 0;
       break;
     default:
-      einfo (VERBOSE, "ICE: Unrecognised annobin note type %d", attr_type);
+      einfo (VERBOSE, "ICE:  Unrecognised annobin note type %d", attr_type);
       return true;
     }
 
@@ -698,7 +701,7 @@ walk_build_notes (annocheck_data *     data,
     case GNU_BUILD_ATTRIBUTE_VERSION:
       if (value != -1)
 	{
-	  einfo (VERBOSE, "ICE: The version note should have a string attribute");
+	  einfo (VERBOSE, "ICE:  The version note should have a string attribute");
 	  break;
 	}
 
@@ -706,7 +709,7 @@ walk_build_notes (annocheck_data *     data,
       ++ attr;
       if (* attr <= '0')
 	{
-	  einfo (VERBOSE, "ICE: The version contains an invalid specification number: %d", * attr - '0');
+	  einfo (VERBOSE, "ICE:  The version contains an invalid specification number: %d", * attr - '0');
 	  break;
 	}
 
@@ -740,14 +743,15 @@ walk_build_notes (annocheck_data *     data,
 	  compiled_code_seen = true;
 	  break;
 	default:
-	  einfo (VERBOSE2, "Unrecognised note producer '%d'", * attr);
+	  einfo (VERBOSE2, "%s: warn: Unrecognised note producer '%d'",
+		 data->filename, * attr);
 	  break;
 	}
       break;
 
     case GNU_BUILD_ATTRIBUTE_TOOL:
       if (value != -1)
-	einfo (VERBOSE, "ICE: The tool note should have a string attribute");
+	einfo (VERBOSE, "ICE:  The tool note should have a string attribute");
       else
 	{
 	  /* Parse the tool attribute looking for the version of gcc used to build the component.  */
@@ -759,7 +763,7 @@ walk_build_notes (annocheck_data *     data,
 	  static unsigned int run_major, run_minor, run_rel;
 	  if (sscanf (attr + 1, "running gcc %u.%u.%u", & run_major, & run_minor, & run_rel) == 3)
 	    {
-	      einfo (VERBOSE, "Annobin plugin running on gcc version %u.%u.%u",
+	      einfo (VERBOSE, "info: Annobin plugin ran on gcc version %u.%u.%u",
 		     run_major, run_minor, run_rel);
 	      set_producer (data, TOOL_GCC, run_major, "GNU Build Attribute Tool");
 	      break;
@@ -768,19 +772,20 @@ walk_build_notes (annocheck_data *     data,
 	  unsigned int anno_major, anno_minor, anno_rel;
 	  if (sscanf (attr + 1, "annobin gcc %u.%u.%u", & anno_major, & anno_minor, & anno_rel) == 3)
 	    {
-	      einfo (VERBOSE, "Annobin plugin built by gcc version %u.%u.%u",
-		     anno_major, anno_minor, anno_rel);
+	      einfo (VERBOSE, "%s: info: Annobin plugin built by gcc version %u.%u.%u",
+		     data->filename, anno_major, anno_minor, anno_rel);
 
 	      /* Verify that the versions are compatible.  */
 	      if (anno_major != run_major)
-		einfo (INFO, "ICE: Annobin plugin was built by gcc version %u but run on gcc version %u",
-		       anno_major, run_major);
+		einfo (INFO, "%s: ICE:  Annobin plugin was built by gcc version %u but run on gcc version %u",
+		       data->filename, anno_major, run_major);
 	      else if (anno_minor != run_minor || anno_rel != run_rel)
 		{
-		  einfo (VERBOSE, "WARN: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
-			 anno_major, anno_minor, anno_rel,
+		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
+			 data->filename, anno_major, anno_minor, anno_rel,
 			 run_major, run_minor, run_rel);
-		  einfo (VERBOSE, "WARN: If there are FAIL results that appear to be incorrect, it could be due to this version discrepancy.");
+		  einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this version discrepancy.",
+			 data->filename);
 		}
 	      break;
 	    }
@@ -1002,8 +1007,12 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 
 	    case 0xff:
-	      report_s (VERBOSE, "%s: FAIL: (%s): -D_FORTIFY_SOURCE missing from command line",
-		      data, sec, note_data, prefer_func_name, NULL);
+	      if (built_by_compiler ())
+		report_s (VERBOSE, "%s: FAIL: (%s): -D_FORTIFY_SOURCE missing from command line",
+			  data, sec, note_data, prefer_func_name, NULL);
+	      else
+		report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE missing from command line",
+			  data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_FORTIFY].num_maybe ++;
 	      break;
 
@@ -1240,6 +1249,11 @@ check_note_section (annocheck_data *    data,
   if (e_machine == EM_X86_64 && streq (sec->secname, ".note.gnu.property"))
     {
       return annocheck_walk_notes (data, sec, walk_property_notes, NULL);
+    }
+
+  if (streq (sec->secname, ".note.go.buildid"))
+    {
+      set_producer (data, TOOL_GO, 0, ".note.go.buildid");
     }
 
   return true;
@@ -1544,14 +1558,14 @@ check_seg (annocheck_data *    data,
     {
       if (seg->phdr->p_align != 4)
 	{
-	  einfo (VERBOSE, "%s: Note segment not 4 or 8 byte aligned (alignment: %ld)",
+	  einfo (VERBOSE, "%s: warn: Note segment not 4 or 8 byte aligned (alignment: %ld)",
 		 data->filename, (long) seg->phdr->p_align);
 	  tests[TEST_PROPERTY_NOTE].num_fail ++;
 	}
 
       if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
 	{
-	  einfo (VERBOSE, "%s: GNU Property note segment not 8 byte aligned",
+	  einfo (VERBOSE, "%s: warn: GNU Property note segment not 8 byte aligned",
 		 data->filename);
 	  tests[TEST_PROPERTY_NOTE].num_fail ++;
 	}
@@ -1561,7 +1575,7 @@ check_seg (annocheck_data *    data,
     {
       if (offset != 0)
 	{
-	  einfo (VERBOSE, "%s: More than one GNU Property note in note segment",
+	  einfo (VERBOSE, "%s: warn: More than one GNU Property note in note segment",
 		 data->filename);
 	  tests[TEST_PROPERTY_NOTE].num_fail ++;
 	}
@@ -1636,7 +1650,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 
   if (madeby == TOOL_UNKNOWN)
     {
-      einfo (VERBOSE, "%s: Unable to determine the binary's producer from its DW_AT_producer string",
+      einfo (VERBOSE, "%s: warn: Unable to determine the binary's producer from its DW_AT_producer string",
 	     data->filename);
       /* Keep scanning.  */
       return true;
@@ -1735,7 +1749,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 	    }
 	}
       else
-	einfo (VERBOSE, "%s: Warning - command line options not recorded by -grecord-gcc-switches",
+	einfo (VERBOSE, "%s: warn: Command line options not recorded by -grecord-gcc-switches",
 	       data->filename);
       break;
     }
@@ -2207,6 +2221,9 @@ show_BIND_NOW (annocheck_data * data, test * results)
   else if (producer.tool == TOOL_GO)
     /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
     skip (data, "Test for -Wl,-z,now.  (Binary was built by GO)");
+  else if (producer.tool == TOOL_MIXED)
+    /* FIXME: Should be changed once GO supports PIE & BIND_NOW.  */
+    skip (data, "Test for -Wl,-z,now.  (Binary was built by different compilers)");
   else if (results->num_pass == 0 || results->num_fail > 0)
     fail (data, "Not linked with -Wl,-z,now");
   else
