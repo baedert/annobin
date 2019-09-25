@@ -32,13 +32,11 @@ ulong         verbosity = 0;
    version_string definitions in annobin.cc.
    FIXME: This value should be defined in only one place...  */
 const uint              major_version = 8;
-const uint              minor_version = 81;
+const uint              minor_version = 82;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
 static const char *     progname;
-static const char *	base_component = "annocheck";
-static const char *	component = "annocheck";
 static bool             ignore_unknown = true;
 static char *           saved_args = NULL;
 static char *           prefix = "";
@@ -73,6 +71,35 @@ typedef struct checker_internal
 } checker_internal;
   
 /* -------------------------------------------------------------------- */
+
+#define COMPONENT_NAME_DEPTH 4
+static const char * component_names[COMPONENT_NAME_DEPTH] = {[0] = "annocheck"};
+static unsigned int component_name_index = 0;
+#define CURRENT_COMPONENT_NAME component_names[component_name_index]
+
+static void
+push_component (checker * tool)
+{
+  ++ component_name_index;
+  if (component_name_index >= COMPONENT_NAME_DEPTH)
+    {
+      --component_name_index;
+      einfo (WARN, "Out of component name stack");
+    }
+  else
+    component_names[component_name_index] = tool->name;
+}
+
+static void
+pop_component (void)
+{
+  if (component_name_index > 0)
+    -- component_name_index;
+  else
+    einfo (WARN, "Empty component name stack");
+}
+
+/* -------------------------------------------------------------------- */
 /* Print a message on stdout or stderr.  Returns FALSE (for error
    messages) so that it can be used as a terminator in boolean functions.  */
 
@@ -89,29 +116,29 @@ einfo (einfo_type type, const char * format, ...)
     case WARN:
     case SYS_WARN:
       pref = "Warning";
-      file   = stderr;
+      file = stderr;
       break;
     case ERROR:
     case SYS_ERROR:
       pref = "Error";
-      file   = stderr;
+      file = stderr;
       break;
     case FAIL:
       pref = "Internal Failure";
-      file   = stderr;
+      file = stderr;
       break;
     case VERBOSE2:
     case VERBOSE:
-      file   = stdout;
-      res    = true;
+      file = stdout;
+      res  = true;
       break;
     case INFO:
-      file   = stdout;
-      res    = true;
+      file = stdout;
+      res  = true;
       break;
     case PARTIAL:
-      file   = stdout;
-      res    = true;
+      file = stdout;
+      res  = true;
       break;
     default:
       fprintf (stderr, "ICE: Unknown einfo type %x\n", type);
@@ -127,7 +154,7 @@ einfo (einfo_type type, const char * format, ...)
   fflush (stdout);
 
   if (type != PARTIAL)
-    fprintf (file, "%s: ", component);
+    fprintf (file, "%s: ", CURRENT_COMPONENT_NAME);
 
   const char *  do_newline;
   char          c;
@@ -166,20 +193,6 @@ einfo (einfo_type type, const char * format, ...)
 /* -------------------------------------------------------------------- */
 
 static void
-push_component (checker * tool)
-{
-  component = tool->name;
-}
-
-static void
-pop_component (void)
-{
-  component = base_component;
-}
-
-/* -------------------------------------------------------------------- */
-
-static void
 add_file (const char * filename)
 {
   if (num_files == MAX_NUM_FILES)
@@ -208,7 +221,7 @@ static void
 usage (void)
 {
   einfo (INFO, "Runs various scans on the given files");
-  einfo (INFO, "Useage: %s [options] <file(s)>", component);
+  einfo (INFO, "Useage: %s [options] <file(s)>", CURRENT_COMPONENT_NAME);
   einfo (INFO, " Options are:");
   einfo (INFO, "   --debug-rpm=<RPM>  [Find separate dwarf debug information in <RPM>]");
   einfo (INFO, "   --debug-file=<FILE>[Find separate dwarf debug information in <FILE>]");
@@ -522,6 +535,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
   data.full_filename = filename;
   data.filename = BE_VERBOSE ? filename : lbasename (filename);
   data.fd = fd;
+  data.dwarf_fd = -1;
   data.elf = elf;
   data.is_32bit = gelf_getclass (elf) == ELFCLASS32;
 
@@ -732,13 +746,18 @@ extract_rpm_file (const char * filename)
     }									\
   while (0)
 
-static Dwarf *
-follow_debuglink (annocheck_data * data, Dwarf * dwarf)
+static bool
+follow_debuglink (annocheck_data * data)
 {
   char *  canon_dir = NULL;
   char *  debugfile = NULL;
   int     fd;
 
+  /* Initialise the dwarf specific fields of the data structure.  */
+  data->dwarf = NULL;
+  data->dwarf_fd = -1;
+  data->dwarf_filename = NULL;
+  
   /* First try the build-id method.  */
   ssize_t       build_id_len;
   const void *  build_id_ptr;
@@ -926,7 +945,7 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
   
   free (canon_dir);
   free (debugfile);
-  return NULL;
+  return false;
 
  found:
   /* FIXME: We should verify the CRC value.  */
@@ -935,14 +954,27 @@ follow_debuglink (annocheck_data * data, Dwarf * dwarf)
 
   /* Now open the file...  */
   Dwarf * separate_debug_file = dwarf_begin (fd, DWARF_C_READ);
-
   if (separate_debug_file == NULL)
-    einfo (VERBOSE, "%s: warn: Failed to parse separate debug file: %s", data->filename, debugfile);
-  else
-    einfo (VERBOSE2, "%s: Opened separate debug file: %s", data->filename, debugfile);
+    {
+      int err = dwarf_errno ();
 
-  free (debugfile);
-  return separate_debug_file;
+      if (err)
+	einfo (VERBOSE, "%s: warn: Failed to parse separate debug file '%s', (%s)",
+	       data->filename, debugfile, dwarf_errmsg (err));
+      else
+	einfo (VERBOSE, "%s: warn: Failed to parse separate debug file '%s', (no error message available)",
+	       data->filename, debugfile);	
+      
+      free (debugfile);
+      return false;
+    }
+
+  einfo (VERBOSE2, "%s: Opened separate debug file: %s", data->filename, debugfile);
+  data->dwarf_fd = fd;
+  data->dwarf_filename = debugfile;
+  data->dwarf_searched = false;
+  data->dwarf = separate_debug_file;
+  return true;
 }
 
 /* -------------------------------------------------------------------- */
@@ -986,15 +1018,15 @@ annocheck_walk_dwarf (annocheck_data * data, dwarf_walker func, void * ptr)
     {
       dwarf = dwarf_begin (data->fd, DWARF_C_READ);
 
-      if (dwarf == NULL)
-	dwarf = follow_debuglink (data, dwarf);
-
-      data->dwarf_searched = true;
-
-      if (dwarf == NULL)
-	return einfo (VERBOSE2, "%s: Does not contain any DWARF information", data->filename);
-
-      data->dwarf = dwarf;
+      if (dwarf != NULL)
+	{
+	  data->dwarf = dwarf;
+	  data->dwarf_fd = data->fd;
+	  data->dwarf_filename = data->filename;
+	  data->dwarf_searched = true;
+	}
+      else if (! follow_debuglink (data))
+	return einfo (VERBOSE2, "%s: Does not contain or link to any DWARF information", data->filename);
     }
 
   if ((dwarf = data->dwarf) == NULL)
@@ -1476,6 +1508,143 @@ process_file (const char * filename)
 
   if (close (fd))
     return einfo (SYS_WARN, "Unable to close: %s", filename);
+
+  return ret;
+}
+
+/* Runs the given CHECKER over the sections and segments in FD.
+   The filename associated with FD is assumed to be FILENAME.  */
+
+bool
+annocheck_process_extra_file (checker *     checker,
+			      const char *  extra_filename,
+			      const char *  original_filename,
+			      int           fd)
+{
+  Elf * elf = elf_begin (fd, ELF_C_READ, NULL);
+
+  if (elf == NULL)
+    return einfo (WARN, "Unable to parse extra file '%s'", extra_filename);
+
+  bool ret = true;
+  if (elf_kind (elf) != ELF_K_ELF)
+    return einfo (WARN, "%s: is not an ELF executable file", extra_filename);
+
+  annocheck_data data;
+
+  memset (& data, 0, sizeof data);
+  data.full_filename = extra_filename;
+  data.filename = original_filename;
+  data.fd = fd;
+  data.dwarf_fd = -1;
+  data.elf = elf;
+  data.is_32bit = gelf_getclass (elf) == ELFCLASS32;
+
+  /* Run the start_file callback, if defined.  */
+  if (checker->start_file)
+    {
+      push_component (checker);
+      checker->start_file (& data);
+      pop_component ();
+    }
+
+  size_t shstrndx;
+
+  if (elf_getshdrstrndx (elf, & shstrndx) < 0)
+    return einfo (WARN, "%s: Unable to locate string section", extra_filename);
+	      
+  Elf_Scn * scn = NULL;
+
+  while ((scn = elf_nextscn (elf, scn)) != NULL)
+    {
+      annocheck_section  sec;
+
+      memset (& sec, 0, sizeof sec);
+
+      sec.scn = scn;
+      read_section_header (& data, scn, & sec.shdr);
+      sec.secname = elf_strptr (elf, shstrndx, sec.shdr.sh_name);	  
+
+      /* Note - do not skip empty sections, they may still be interesting to some tools.
+	 If a tool is not interested in an empty section, it can always determine this
+	 in its interesting_sec() function.  */
+      einfo (VERBOSE2, "%s: Examining section %s", extra_filename, sec.secname);
+
+      if (checker->interesting_sec == NULL)
+	continue;
+
+      push_component (checker);
+      if (checker->interesting_sec (& data, & sec))
+	{
+	  /* Delay loading the section contents until a checker expresses interest.  */
+	  if (sec.data == NULL)
+	    {
+	      sec.data = elf_getdata (scn, NULL);
+	      if (sec.data == NULL)
+		ret = einfo (ERROR, "%s: Failed to read in section %s", extra_filename, sec.secname);
+	    }
+
+	  if (sec.data != NULL)
+	    {
+	      einfo (VERBOSE2, "is interested in section %s", sec.secname);
+
+	      assert (checker->check_sec != NULL);
+	      ret &= checker->check_sec (& data, & sec);
+	    }
+	}
+      else
+	einfo (VERBOSE2, "is not interested in %s", sec.secname);
+
+      pop_component ();
+    }
+
+  size_t phnum, cnt;
+
+  elf_getphdrnum (elf, & phnum);
+
+  for (cnt = 0; cnt < phnum; ++cnt)
+    {
+      GElf_Phdr   mem;
+      annocheck_segment seg;
+
+      memset (& seg, 0, sizeof seg);
+
+      seg.phdr = gelf_getphdr (elf, cnt, & mem);
+      seg.number = cnt;
+
+      einfo (VERBOSE2, "%s: considering segment %lu", extra_filename, (unsigned long) cnt);
+
+      if (checker->interesting_seg == NULL)
+	continue;
+
+      push_component (checker);
+
+      if (checker->interesting_seg (& data, & seg))
+	{
+	  /* Delay loading the contents of the segment until they are actually needed.  */
+	  if (seg.data == NULL)
+	    seg.data = elf_getdata_rawchunk (elf, seg.phdr->p_offset,
+					     seg.phdr->p_filesz, ELF_T_BYTE);
+
+	  assert (checker->check_seg != NULL);
+	  ret &= checker->check_seg (& data, & seg);
+	}
+      else
+	einfo (VERBOSE2, "is not interested in segment %lu", (unsigned long) cnt);
+
+      pop_component ();
+    }
+
+  /* Run the end_file callback, if defined.  */
+  if (checker->end_file)
+    {
+      push_component (checker);
+      checker->end_file (& data);
+      pop_component ();
+    }
+
+  if (elf_end (elf))
+    return einfo (WARN, "Failed to close extra file: %s", extra_filename);
 
   return ret;
 }

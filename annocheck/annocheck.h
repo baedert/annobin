@@ -78,7 +78,9 @@ typedef struct annocheck_data
   bool                 is_32bit;
   Elf_Data *           syms;
   Dwarf *              dwarf;
+  int                  dwarf_fd;
   bool                 dwarf_searched;
+  const char *         dwarf_filename;
 } annocheck_data;
 
 typedef struct annocheck_section
@@ -224,6 +226,11 @@ extern bool      annocheck_add_checker (struct checker * CHECKER, uint MAJOR);
    Returns NULL if no symbol could be found.  */
 extern const char *  annocheck_find_symbol_for_address_range
   (annocheck_data * DATA, annocheck_section * SEC, ulong START, ulong ADDR, bool PREFER_FUNC);
+
+/* Runs the given CHECKER over the sections and segments in FD.
+   The filename associated with FD is assumed to be EXTRA_FILENAME.
+   the filename associated with the file that prompted the need for these extra checks is ORIGINAL_FILENAME.  */
+extern bool annocheck_process_extra_file (checker * CHECKER, const char * EXTRA_FILENAME, const char * ORIGINAL_FILENAME, int FD);
 
 /* An enum controlling the behaviour of the einfo function:  */
 typedef enum einfo_type

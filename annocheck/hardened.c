@@ -41,6 +41,7 @@ static ulong       text_section_alignment;
 static bool        is_little_endian;
 static bool        debuginfo_file;
 static bool        compiled_code_seen;
+static bool        build_notes_seen;
 static int         num_fails;
 static int         num_maybes;
 
@@ -175,6 +176,20 @@ built_by_gcc (void)
   return producer.tool == TOOL_GCC;
 }
 
+static void
+warn (annocheck_data * data, const char * message)
+{
+  /* We use the VERBOSE setting rather than WARN because that way
+     we not get a prefix.  */
+  einfo (VERBOSE, "%s: WARN: %s", data->filename, message);
+}
+
+static void
+info (annocheck_data * data, const char * message)
+{
+  einfo (VERBOSE, "%s: info: %s", data->filename, message);
+}
+
 static bool
 start (annocheck_data * data)
 {
@@ -193,6 +208,7 @@ start (annocheck_data * data)
   text_section_name_index = -1;
   text_section_alignment = 0;
   compiled_code_seen = false;
+  build_notes_seen = false;
   producer.tool = TOOL_UNKNOWN;
   producer.version = 0;
 
@@ -287,6 +303,16 @@ interesting_sec (annocheck_data *     data,
   return sec->shdr.sh_type == SHT_DYNAMIC
     || sec->shdr.sh_type == SHT_NOTE
     || sec->shdr.sh_type == SHT_STRTAB;
+}
+
+static bool
+interesting_note_sec (annocheck_data *     data,
+		      annocheck_section *  sec)
+{
+  if (disabled)
+    return false;
+
+  return sec->shdr.sh_type == SHT_NOTE;
 }
 
 static inline unsigned long
@@ -516,14 +542,12 @@ set_producer (annocheck_data *     data,
   else if ((producer.tool == TOOL_GAS && tool == TOOL_GCC)
 	   || (producer.tool == TOOL_GCC && tool == TOOL_GAS))
     {
-      einfo (VERBOSE, "%s: info: Mixed assembler and GCC detected - treating as pure GCC",
-	     data->filename);
+      info (data, "Mixed assembler and GCC detected - treating as pure GCC");
       producer.tool = TOOL_GCC;
     }
   else if (producer.tool != TOOL_MIXED)
     {
-      einfo (VERBOSE, "%s: warn: This binary was built by more than one tool",
-	     data->filename);
+      warn (data, "This binary was built by more than one tool");
 
       producer.tool = TOOL_MIXED;
       producer.version = 0;
@@ -714,8 +738,8 @@ walk_build_notes (annocheck_data *     data,
 	}
 
       if (* attr > '0' + SPEC_VERSION)
-	einfo (WARN, "This checker only supports version %d of the Watermark protocol.  The data in the notes uses version %d",
-	       SPEC_VERSION, * attr - '0');
+	einfo (WARN, "%s: This checker only supports version %d of the Watermark protocol.  The data in the notes uses version %d",
+	       data->filename, SPEC_VERSION, * attr - '0');
 
       /* Check the note producer.  */
       ++ attr;
@@ -743,8 +767,7 @@ walk_build_notes (annocheck_data *     data,
 	  compiled_code_seen = true;
 	  break;
 	default:
-	  einfo (VERBOSE2, "%s: warn: Unrecognised note producer '%d'",
-		 data->filename, * attr);
+	  warn (data, "Unrecognised annobin note producer");
 	  break;
 	}
       break;
@@ -1243,6 +1266,7 @@ check_note_section (annocheck_data *    data,
       hard_data.start = 0;
       hard_data.end = 0;
 
+      build_notes_seen = true;
       return annocheck_walk_notes (data, sec, walk_build_notes, (void *) & hard_data);
     }
 
@@ -1565,8 +1589,7 @@ check_seg (annocheck_data *    data,
 
       if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
 	{
-	  einfo (VERBOSE, "%s: warn: GNU Property note segment not 8 byte aligned",
-		 data->filename);
+	  warn (data, "GNU Property note segment not 8 byte aligned");
 	  tests[TEST_PROPERTY_NOTE].num_fail ++;
 	}
     }
@@ -1575,8 +1598,7 @@ check_seg (annocheck_data *    data,
     {
       if (offset != 0)
 	{
-	  einfo (VERBOSE, "%s: warn: More than one GNU Property note in note segment",
-		 data->filename);
+	  warn (data, "More than one GNU Property note in note segment");
 	  tests[TEST_PROPERTY_NOTE].num_fail ++;
 	}
       else
@@ -1621,10 +1643,9 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
       unsigned int form = dwarf_whatform (& attr);
 
       if (form == DW_FORM_GNU_strp_alt)
-	einfo (VERBOSE2, "ICE: DW_FORM_GNU_strp_alt not yet handled");
+	warn (data, "DW_FORM_GNU_strp_alt not yet handled");
       else
-	einfo (VERBOSE2, "%s: WARN: DWARF DW_AT_producer attribute uses non-string form %x",
-	       data->filename, form);
+	warn (data, "DWARF DW_AT_producer attribute uses non-string form");
       /* Keep scanning - there may be another DW_AT_producer attribute.  */
       return true;
     }
@@ -1650,15 +1671,13 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 
   if (madeby == TOOL_UNKNOWN)
     {
-      einfo (VERBOSE, "%s: warn: Unable to determine the binary's producer from its DW_AT_producer string",
-	     data->filename);
+      warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
       /* Keep scanning.  */
       return true;
     }
 
   if (madeby != TOOL_GCC && producer.tool == TOOL_UNKNOWN)
-    einfo (VERBOSE, "%s: note: Discovered non-gcc code producer, skipping gcc specific checks",
-	   data->filename);
+    info (data, "Discovered non-gcc code producer, skipping gcc specific checks");
 
   set_producer (data, madeby, version, "DW_AT_producer");
 
@@ -1749,8 +1768,8 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 	    }
 	}
       else
-	einfo (VERBOSE, "%s: warn: Command line options not recorded by -grecord-gcc-switches",
-	       data->filename);
+	warn (data, "Command line options not recorded by -grecord-gcc-switches");
+
       break;
     }
 
@@ -2437,9 +2456,9 @@ show_STACK_PROT (annocheck_data * data, test * results)
       if (results->num_pass > 0 || results->num_maybe > 0)
 	{
 	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without suffcient stack protection");
+	    fail (data, "Parts of the binary were compiled without a suffcient -fstack-protector setting");
 	  else
-	    fail (data, "Parts of the binary were compiled without suffcient stack protection.  Run with -v to see where");
+	    fail (data, "Parts of the binary were compiled without a suffcient -fstack-protector setting.  Run with -v to see where");
 	}
       else
 	fail (data, "The binary was compiled without -fstack-protector-strong");
@@ -2449,12 +2468,12 @@ show_STACK_PROT (annocheck_data * data, test * results)
       if (results->num_pass > 0)
 	{
 	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record the stack protection setting.  Run with -v to see where");
+	    maybe (data, "Some parts of the binary do not record the -fstack-protector setting.  Run with -v to see where");
 	  else
-	    maybe (data, "Some parts of the binary do not record the stack protection setting");
+	    maybe (data, "Some parts of the binary do not record the -fstack-protector setting");
 	}
       else
-	maybe (data, "The stack protections setting was not recorded");
+	maybe (data, "The -fstack-protector setting was not recorded");
     }
   else if (results->num_pass > 0)
     {
@@ -2466,7 +2485,7 @@ show_STACK_PROT (annocheck_data * data, test * results)
     }
   else
     {
-      maybe (data, "The stack protection setting was not recorded");
+      maybe (data, "The -fstack-protector setting was not recorded");
     }
 }
 
@@ -2709,6 +2728,37 @@ finish (annocheck_data * data)
      of this binary.  */
   (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
 
+  if (! build_notes_seen)
+    {
+      struct checker hardened_notechecker =
+	{
+	  "Hardened",
+	  NULL,  /* start_file */
+	  interesting_note_sec,
+	  check_note_section,
+	  NULL, /* interesting_seg */
+	  NULL, /* check_seg */
+	  NULL, /* end_file */
+	  NULL, /* process_arg */
+	  NULL, /* usage */
+	  NULL, /* version */
+	  NULL, /* start_scan */
+	  NULL, /* end_scan */
+	  NULL, /* internal */
+	};
+
+
+      if (data->dwarf_fd != data->fd)
+	{
+	  einfo (VERBOSE, "%s: info: Running subchecker on %s", data->filename, data->dwarf_filename);
+	  /* There is a separate debuginfo file.  Scan it to see if there are any notes that we can use.  */
+	  annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, data->filename, data->dwarf_fd);
+	}
+
+      if (! build_notes_seen)
+	fail (data, "Build notes were not found for this executable");
+    }
+
   if (! ignore_gaps)
     {
       if (e_type == ET_REL)
@@ -2742,7 +2792,7 @@ finish (annocheck_data * data)
 static void
 version (void)
 {
-  einfo (INFO, "Version 1.2");
+  einfo (INFO, "Version 1.3");
 }
 
 static void
