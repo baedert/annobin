@@ -18,6 +18,10 @@
    encoded in the binary.  Instead we record the TLS dialect...  */
 static signed int saved_tls_dialect = -1;
 
+#ifdef aarch64_branch_protection_string
+static enum branch_protection_string saved_branch_protection_string;
+#endif
+
 signed int
 annobin_target_start_symbol_bias (void)
 {
@@ -40,20 +44,45 @@ annobin_record_global_target_notes (const char * sec)
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
 			       "numeric: ABI: TLS dialect", NULL, NULL, OPEN, sec);
   annobin_inform (1, "Recording global TLS dialect of %d", saved_tls_dialect);
+
+#ifdef aarch64_branch_protection_string
+  saved_branch_protection_string = aarch64_branch_protection_string;
+  annobin_inform (1, "Recording global AArch64 branch protection of '%s'", saved_branch_protection_string);
+
+  char buffer [128];
+  unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
+			  GNU_BUILD_ATTRIBUTE_TYPE_STRING, saved_branch_protection_string);
+  annobin_output_static_note (buffer, len + 1, true, "string: -mbranch-protection status",
+			      NULL, NULL, OPEN, sec);
+#endif
 }
 
 void
 annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
 {
-  if (!force && saved_tls_dialect == aarch64_tls_dialect)
-    return;
+  if (force || saved_tls_dialect != aarch64_tls_dialect)
+    {
+      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
+				   "numeric: ABI: TLS dialect", aname, aname_end,
+				   FUNC, sec_name);
+      annobin_inform (1, "recording TLS dialect of %d for %s",
+		      aarch64_tls_dialect, current_function_name ());
 
-  annobin_inform (1, "recording TLS dialect of %d for %s",
-		  aarch64_tls_dialect, current_function_name ());
+    }
 
-  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
-			       "numeric: ABI: TLS dialect", aname, aname_end,
-			       FUNC, sec_name);
+#ifdef aarch64_branch_protection_string
+  if (force || saved_branch_protection_string != aarch64_branch_protection_string)
+    {
+      annobin_inform (1, "Recording AArch64 branch protection of '%s' for function '%s'",
+		      aarch64_branch_protection_string, aname);
+
+      char buffer [128];
+      unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
+			       GNU_BUILD_ATTRIBUTE_TYPE_STRING, saved_branch_protection_string);
+      annobin_output_static_note (buffer, len + 1, true, "string: -mbranch-protection status",
+				  aname, aname_end, FUNC, sec_name);
+    }
+#endif
 }
 
 typedef struct

@@ -87,6 +87,7 @@ typedef struct test
 enum test_index
 {
   TEST_BIND_NOW,
+  TEST_BRANCH_PROTECTION,
   TEST_CF_PROTECTION,
   TEST_DYNAMIC,
   TEST_ENTRY,
@@ -112,6 +113,7 @@ enum test_index
 };
 
 static void show_BIND_NOW           (annocheck_data *, test *);
+static void show_BRANCH_PROTECTION  (annocheck_data *, test *);
 static void show_CF_PROTECTION      (annocheck_data *, test *);
 static void show_DYNAMIC            (annocheck_data *, test *);
 static void show_ENTRY              (annocheck_data *, test *);
@@ -141,7 +143,8 @@ static void show_WRITEABLE_GOT      (annocheck_data *, test *);
 static test tests [TEST_MAX] =
 {
   TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
-  TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8 only)"),
+  TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
+  TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8+ only)"),
   TEST (dynamic,            DYNAMIC,            "There is at most one dynamic segment/section"),
   TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
@@ -960,6 +963,43 @@ walk_build_notes (annocheck_data *     data,
 	}
       break;
 
+    case 'b':
+      if (const_strneq (attr, "branch_protection:"))
+	{
+	  if (e_machine != EM_AARCH64)
+	    break;
+
+	  if (skip_check (TEST_BRANCH_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
+	    break;
+
+	  attr += strlen ("branch_protection:");
+	  if (streq (attr, "bti")
+	      || (streq (attr, "standard"))
+	      || const_strneq (attr, "pac-ret"))
+	    {
+	      report_s (VERBOSE2, "%s: PASS: (%s): branch-protection enabled (%s)",
+			data, sec, note_data, prefer_func_name, attr);
+	      tests[TEST_BRANCH_PROTECTION].num_pass ++;
+	    }
+	  else if (streq (attr, "none"))
+	    {
+	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled with -mbranch-protection=none",
+			data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_BRANCH_PROTECTION].num_fail ++;
+	      break;
+	    }
+	  else
+	    {
+	      report_s (VERBOSE, "%s: MAYB: (%s): unexpected value for branch-protection note (%s)",
+			data, sec, note_data, prefer_func_name, attr);
+	      tests[TEST_BRANCH_PROTECTION].num_maybe ++;
+	      break;
+	    }
+	}
+      else
+	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
+      break;
+
     case 'c':
       if (streq (attr, "cf_protection"))
 	{
@@ -1195,6 +1235,7 @@ walk_build_notes (annocheck_data *     data,
 
     case 'o':
       if (streq (attr, "omit_frame_pointer"))
+	/* FIXME: Do Something! */
 	break;
       /* Fall through.  */
 
@@ -1671,7 +1712,12 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 
   if (madeby == TOOL_UNKNOWN)
     {
-      warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
+      /* FIXME: This can happen for object files because the DWARF data
+	 has not been relocated.  Find out how to handle this using libdwarf.  */
+      if (e_type == ET_REL)
+	warn (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
+      else
+	warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
       /* Keep scanning.  */
       return true;
     }
@@ -2155,6 +2201,50 @@ check_for_gaps (annocheck_data * data)
 }
 
 static void
+show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
+{
+  if (e_machine != EM_AARCH64)
+    skip (data, "Branch protection.  (Not an AArch64 binary)");
+
+  else if (! built_by_gcc ())
+    skip (data, "Branch protection.  (Not built by gcc)");
+
+  else if (producer.version < 9)
+    skip (data, "Branch protection.  (Needs gcc 9+)");
+
+  else if (results->num_fail > 0)
+    {
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	{
+	  if (BE_VERBOSE)
+	    fail (data, "Parts of the binary were compiled without branch protection");
+	  else
+	    fail (data, "Parts of the binary were compiled without branch protection.  Run with -v to see where");
+	}
+      else
+	fail (data, "The binary was compiled without -mbranch-protection");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (BE_VERBOSE)
+	maybe (data, "Unknown string used with -mbranch-protection=");
+      else
+	maybe (data, "Unknown string used with -mbranch-protection=.  Run with -v to see where");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with -mbranch-protection");
+    }
+  else
+    {
+      /* FIXME: Only inform the user for now.  Once -mbranch-protection has
+	 been added to the rpm macros then change this result to a maybe().  */
+      /* maybe (data, "The -mbranch-protection setting was not recorded");  */
+      info (data, "The -mbranch-protection setting was not recorded");
+    }
+}
+
+static void
 show_ENTRY (annocheck_data * data, test * results)
 {
   if (e_machine != EM_386 && e_machine != EM_X86_64)
@@ -2523,7 +2613,7 @@ show_STACK_CLASH (annocheck_data * data, test * results)
 	    maybe (data, "Some parts of the binary do not record -fstack-clash-protection");
 	}
       else
-	maybe (data, "The stack clash protections setting was not recorded");
+	maybe (data, "The stack clash protection setting was not recorded");
     }
   else if (results->num_pass > 0)
     {
@@ -2730,28 +2820,31 @@ finish (annocheck_data * data)
 
   if (! build_notes_seen)
     {
-      struct checker hardened_notechecker =
-	{
-	  "Hardened",
-	  NULL,  /* start_file */
-	  interesting_note_sec,
-	  check_note_section,
-	  NULL, /* interesting_seg */
-	  NULL, /* check_seg */
-	  NULL, /* end_file */
-	  NULL, /* process_arg */
-	  NULL, /* usage */
-	  NULL, /* version */
-	  NULL, /* start_scan */
-	  NULL, /* end_scan */
-	  NULL, /* internal */
-	};
-
+      /* NB/ This code must happen after the call to annocheck_walk_dwarf()
+	 as that function is responsible for following links to debuginfo
+	 files.  */
 
       if (data->dwarf_fd != data->fd)
 	{
-	  einfo (VERBOSE, "%s: info: Running subchecker on %s", data->filename, data->dwarf_filename);
+	  struct checker hardened_notechecker =
+	    {
+	     "Hardened",
+	     NULL,  /* start_file */
+	     interesting_note_sec,
+	     check_note_section,
+	     NULL, /* interesting_seg */
+	     NULL, /* check_seg */
+	     NULL, /* end_file */
+	     NULL, /* process_arg */
+	     NULL, /* usage */
+	     NULL, /* version */
+	     NULL, /* start_scan */
+	     NULL, /* end_scan */
+	     NULL, /* internal */
+	    };
+
 	  /* There is a separate debuginfo file.  Scan it to see if there are any notes that we can use.  */
+	  einfo (VERBOSE, "%s: info: Running subchecker on %s", data->filename, data->dwarf_filename);
 	  annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, data->filename, data->dwarf_fd);
 	}
 

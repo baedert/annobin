@@ -48,8 +48,8 @@ using abigail::suppr::suppressions_type;
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 882;
-static const char *   version_string = N_("Version 882");
+static unsigned int   annobin_version = 883;
+static const char *   version_string = N_("Version 883");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -133,6 +133,7 @@ static int            global_glibcxx_assertions = -1;
 static char *         build_version = NULL;
 static char *         run_version = NULL;
 static unsigned       verbose_level = 0;
+#define BE_VERBOSE   (verbose_level > 0)
 static const char *   annobin_extra_prefix = "";
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
@@ -529,12 +530,13 @@ annobin_output_bool_note (const char    bool_type,
 			  const char *  sec_name)
 {
   char buffer [6];
+  unsigned int len;
 
-  sprintf (buffer, "GA%c%c", bool_value ? BOOL_T : BOOL_F, bool_type);
+  len = sprintf (buffer, "GA%c%c", bool_value ? BOOL_T : BOOL_F, bool_type);
 
-  /* Include the NUL byte at the end of the name "string".
+  /* Include the NUL byte at the end of the name string.
      This is required by the ELF spec.  */
-  annobin_output_static_note (buffer, strlen (buffer) + 1, false, name_description,
+  annobin_output_static_note (buffer, len + 1, false, name_description,
 			      start, end, note_type, sec_name);
 }
 
@@ -1954,7 +1956,10 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 
       else
 	{
-	  annobin_inform (0, "unrecognised option: %s", argv[argc].key);
+	  /* Use fprintf here rather than annobin_inform as the latter
+	     references main_input_filename, which is a gcc variable and
+	     may not be accessible.  */
+	  fprintf (stderr, "annobin: unrecognised option: %s\n", argv[argc].key);
 	  return false;
 	}
     }
@@ -2017,26 +2022,36 @@ drop = yes\n");
 #endif // USE_LIBABIGAIL
 
 int
-plugin_init (struct plugin_name_args *   plugin_info,
-             struct plugin_gcc_version * version)
+plugin_init (struct plugin_name_args *    plugin_info,
+             struct plugin_gcc_version *  version)
 {
   plugin_name = plugin_info->base_name;
 
+  /* Parse args before checking version details so that we know if we need to be verbose.  */
+  if (! parse_args (plugin_info->argc, plugin_info->argv))
+    {
+      annobin_inform (1, _("failed to parse arguments to the plugin"));
+      return 1;
+    }
+
+  if (! enabled)
+    return 0;
+
   if (!plugin_default_version_check (version, & gcc_version))
     {
+      /* Note - we use fprintf here rather than annobin_inform as the
+	 latter references main_input_filename, which is a gcc variable
+	 and may not be accessible.  */
       bool fail = false;
 
       /* plugin_default_version_check is very strict and requires that the
 	 major, minor and revision numbers all match.  Since annobin only
 	 lightly touches gcc we assume that major number compatibility will
-	 be sufficient...  */
+	 be sufficient.  [FIXME: It turns out that this is not entirely true...]  */
       if (strncmp (version->basever, gcc_version.basever, strchr (version->basever, '.') - version->basever))
 	{
-	  /* Use fprintf here rather than annobin_inform as the latter
-	     references main_input_filename, which is a gcc variable and
-	     may not be accessible.  */
-	  fprintf (stderr, _("Error: annobin plugin built for compiler version (%s) but run with compiler version (%s)\n"),
-			  gcc_version.basever, version->basever);
+	  fprintf (stderr, _("annobin: Error: plugin built for compiler version (%s) but run with compiler version (%s)\n"),
+		   gcc_version.basever, version->basever);
 	  fail = true;
 	}
 
@@ -2044,19 +2059,19 @@ plugin_init (struct plugin_name_args *   plugin_info,
 	 likely that it has been built on a different day.  This is not
 	 a showstopper however, since compatibility will be retained as
 	 long as the correct headers were used.  */
-      if (! streq (version->datestamp, gcc_version.datestamp))
-	annobin_inform (1, _("Plugin datestamp (%s) is different from compiler datestamp (%s)"),
-			version->datestamp, gcc_version.datestamp);
+      if (BE_VERBOSE && ! streq (version->datestamp, gcc_version.datestamp))
+	fprintf (stderr, _("annobin: Plugin datestamp (%s) is different from compiler datestamp (%s) - ignored\n"),
+		 version->datestamp, gcc_version.datestamp);
 
       /* Unlikely, but also not serious.  */
-      if (! streq (version->devphase, gcc_version.devphase))
-	annobin_inform (1, _("Plugin built for compiler development phase (%s) not (%s)"),
-		     version->devphase, gcc_version.devphase);
+      if (BE_VERBOSE && ! streq (version->devphase, gcc_version.devphase))
+	fprintf (stderr, _("annobin: Plugin built for compiler development phase (%s) not (%s) - ignored\n"),
+		 version->devphase, gcc_version.devphase);
 
       /* Theoretically this could be a problem, in practice it probably isn't.  */
-      if (! streq (version->revision, gcc_version.revision))
-	annobin_inform (1, _("Warning: plugin built for compiler revision (%s) not (%s)"),
-		     version->revision, gcc_version.revision);
+      if (BE_VERBOSE && ! streq (version->revision, gcc_version.revision))
+	fprintf (stderr, _("annobin: Plugin built for compiler revision (%s) not (%s) - ignored\n"),
+		 version->revision, gcc_version.revision);
 
       if (! streq (version->configuration_arguments, gcc_version.configuration_arguments))
 	{
@@ -2095,38 +2110,27 @@ plugin_init (struct plugin_name_args *   plugin_info,
 	      && gcc_target_end
 	      && strncmp (plugin_target, gcc_target, plugin_target_end - plugin_target))
 	    {
-	      annobin_inform (0, _("Error: plugin run on a %.*s compiler but built on a %.*s compiler"),
-			      (int) (plugin_target_end - plugin_target), plugin_target,
-			      (int) (gcc_target_end - gcc_target), gcc_target);
+	      fprintf (stderr, _("annobin: Error: plugin run on a %.*s compiler but built for a %.*s compiler\n"),
+		       (int) (plugin_target_end - plugin_target), plugin_target,
+		       (int) (gcc_target_end - gcc_target), gcc_target);
 	      fail = true;
 	    }
-	  else
+	  else if (BE_VERBOSE)
 	    {
-	      annobin_inform (1, _("Plugin run on a compiler configured as (%s) not (%s)"),
-			   version->configuration_arguments, gcc_version.configuration_arguments);
+	      fprintf (stderr, _("annobin: Plugin run on a compiler configured as (%s) not (%s) - ignored\n"),
+		       version->configuration_arguments, gcc_version.configuration_arguments);
 	    }
 	}
 
       if (fail)
 	return 1;
+
 #ifdef USE_LIBABIGAIL
-      else
-	{
-	  generate_corpus ();
-	  compare_corpus_against_original ();
-	}
+      generate_corpus ();
+      compare_corpus_against_original ();
 #endif
     }
   
-  if (! parse_args (plugin_info->argc, plugin_info->argv))
-    {
-      annobin_inform (1, _("failed to parse arguments to the plugin"));
-      return 1;
-    }
-
-  if (! enabled)
-    return 0;
-
   if (! annobin_enable_dynamic_notes && ! annobin_enable_static_notes)
     {
       annobin_inform (1, _("nothing to be done"));
