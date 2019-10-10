@@ -1157,7 +1157,7 @@ walk_build_notes (annocheck_data *     data,
 	    {
 	      if (value == -1)
 		{
-		  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for warning note (%x)",
+		  report_i (VERBOSE, "%s: MAYB: (%s): Unexpected value for warning note (%x)",
 			    data, sec, note_data, prefer_func_name, value);
 		  tests[TEST_WARNINGS].num_maybe ++;
 		}
@@ -1165,22 +1165,36 @@ walk_build_notes (annocheck_data *     data,
 		{
 		  if (value & (1 << 14))
 		    {
-		      /* Compiled with -Wall.  This is good.  */
-		      report_i (VERBOSE2, "%s: PASS: (%s): compiled with -Wall",
-				data, sec, note_data, prefer_func_name, value);
-		      tests[TEST_WARNINGS].num_pass ++;
+		      /* Compiled with -Wall.  */
+		      if (value & (1 << 15))
+			{
+			  report_i (VERBOSE2, "%s: PASS: (%s): Compiled with -Wall and -Wformat-security",
+				    data, sec, note_data, prefer_func_name, value);
+			  tests[TEST_WARNINGS].num_pass ++;
+			}
+		      else
+			{
+			  /* Compiled without -Wformat-security.
+			     Not a failure because parts of glibc are compiled with way.  */
+			  report_i (VERBOSE, "%s: PASS: (%s): Compiled with -Wall (but not -Wformat-security)",
+				    data, sec, note_data, prefer_func_name, value);
+			  tests[TEST_WARNINGS].num_pass ++;
+			}
 		    }
 		  else if (value & (1 << 15))
 		    {
 		      /* Compiled with -Wformat-security but not -Wall.
-			 This can happen with LTO compilation - allow for now.  */
-		      report_i (VERBOSE2, "%s: PASS: (%s): compiled with -Wformat-security",
+			 FIXME: We allow this for now, but really would should check for
+			 any warnings enabled by -Wall that are important.  (Missing -Wall
+			 itself is not bad - this happens with LTO compilation - but we
+			 still want important warnings enabled).  */
+		      report_i (VERBOSE2, "%s: PASS: (%s): Compiled with -Wformat-security (but not -Wall)",
 				data, sec, note_data, prefer_func_name, value);
 		      tests[TEST_WARNINGS].num_pass ++;
 		    }
 		  else
 		    {
-		      report_i (VERBOSE, "%s: FAIL: (%s): Not compiled with -Wall",
+		      report_i (VERBOSE, "%s: FAIL: (%s): Compiled without either -Wall or -Wformat-security",
 				data, sec, note_data, prefer_func_name, value);
 		      tests[TEST_WARNINGS].num_fail ++;
 		    }
@@ -2343,9 +2357,9 @@ show_WARNINGS (annocheck_data * data, test * results)
   if (results->num_fail > 0)
     {
       if (BE_VERBOSE)
-	fail (data, "Compiled without using the -Wall option");
+	fail (data, "Compiled without using either the -Wall or -Wformat-security options");
       else
-	fail (data, "Compiled without using the -Wall option.  Run with -c to see where");
+	fail (data, "Compiled without using either the -Wall or -Wformat-security options. Run with -v to see where");
     }
   else if (results->num_maybe > 0)
     {
@@ -2359,7 +2373,7 @@ show_WARNINGS (annocheck_data * data, test * results)
 	maybe (data, "No data about compilation warnings found");
     }
   else
-    pass (data, "Sufficient compilation warnings enabled");
+    pass (data, "Compiled with either -Wall and/or -Wformat-security");
 }
 
 static void
