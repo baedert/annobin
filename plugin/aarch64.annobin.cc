@@ -19,7 +19,7 @@
 static signed int saved_tls_dialect = -1;
 
 #ifdef aarch64_branch_protection_string
-static enum branch_protection_string saved_branch_protection_string;
+static const char * saved_branch_protection_string;
 #endif
 
 signed int
@@ -47,11 +47,15 @@ annobin_record_global_target_notes (const char * sec)
 
 #ifdef aarch64_branch_protection_string
   saved_branch_protection_string = aarch64_branch_protection_string;
-  annobin_inform (1, "Recording global AArch64 branch protection of '%s'", saved_branch_protection_string);
 
   char buffer [128];
+  const char * sbps = saved_branch_protection_string;
+  if (sbps == NULL)
+    sbps = "default";
+
+  annobin_inform (1, "Recording global AArch64 branch protection of '%s'", sbps);
   unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
-			  GNU_BUILD_ATTRIBUTE_TYPE_STRING, saved_branch_protection_string);
+			   GNU_BUILD_ATTRIBUTE_TYPE_STRING, sbps);
   annobin_output_static_note (buffer, len + 1, true, "string: -mbranch-protection status",
 			      NULL, NULL, OPEN, sec);
 #endif
@@ -73,12 +77,16 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 #ifdef aarch64_branch_protection_string
   if (force || saved_branch_protection_string != aarch64_branch_protection_string)
     {
-      annobin_inform (1, "Recording AArch64 branch protection of '%s' for function '%s'",
-		      aarch64_branch_protection_string, aname);
-
       char buffer [128];
+      const char * abps = aarch64_branch_protection_string;
+      if (abps == NULL)
+	abps = "default";
+
+      annobin_inform (1, "Recording AArch64 branch protection of '%s' for function '%s'",
+		      abps, aname);
+
       unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
-			       GNU_BUILD_ATTRIBUTE_TYPE_STRING, saved_branch_protection_string);
+			       GNU_BUILD_ATTRIBUTE_TYPE_STRING, abps);
       annobin_output_static_note (buffer, len + 1, true, "string: -mbranch-protection status",
 				  aname, aname_end, FUNC, sec_name);
     }

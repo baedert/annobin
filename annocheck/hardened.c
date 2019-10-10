@@ -107,6 +107,7 @@ enum test_index
   TEST_STACK_REALIGN,
   TEST_TEXTREL,
   TEST_THREADS,
+  TEST_WARNINGS,
   TEST_WRITEABLE_GOT,
 
   TEST_MAX
@@ -133,6 +134,7 @@ static void show_STACK_PROT         (annocheck_data *, test *);
 static void show_STACK_REALIGN      (annocheck_data *, test *);
 static void show_TEXTREL            (annocheck_data *, test *);
 static void show_THREADS            (annocheck_data *, test *);
+static void show_WARNINGS           (annocheck_data *, test *);
 static void show_WRITEABLE_GOT      (annocheck_data *, test *);
 
 #define TEST(name,upper,description) \
@@ -163,6 +165,7 @@ static test tests [TEST_MAX] =
   TEST (stack-realign,      STACK_REALIGN,      "Compiled with -mstackrealign (i686 only)"),
   TEST (textrel,            TEXTREL,            "There are no text relocations in the binary"),
   TEST (threads,            THREADS,            "Compiled with -fexceptions"),
+  TEST (warnings,           WARNINGS,           "Compiled with -Wall"),
   TEST (writeable-got,      WRITEABLE_GOT,      "The .got section is not writeable"),
 };
 
@@ -789,7 +792,7 @@ walk_build_notes (annocheck_data *     data,
 	  static unsigned int run_major, run_minor, run_rel;
 	  if (sscanf (attr + 1, "running gcc %u.%u.%u", & run_major, & run_minor, & run_rel) == 3)
 	    {
-	      einfo (VERBOSE, "info: Annobin plugin ran on gcc version %u.%u.%u",
+	      einfo (VERBOSE2, "info: Annobin plugin ran on gcc version %u.%u.%u",
 		     run_major, run_minor, run_rel);
 	      set_producer (data, TOOL_GCC, run_major, "GNU Build Attribute Tool");
 	      break;
@@ -798,7 +801,7 @@ walk_build_notes (annocheck_data *     data,
 	  unsigned int anno_major, anno_minor, anno_rel;
 	  if (sscanf (attr + 1, "annobin gcc %u.%u.%u", & anno_major, & anno_minor, & anno_rel) == 3)
 	    {
-	      einfo (VERBOSE, "%s: info: Annobin plugin built by gcc version %u.%u.%u",
+	      einfo (VERBOSE2, "%s: info: Annobin plugin built by gcc version %u.%u.%u",
 		     data->filename, anno_major, anno_minor, anno_rel);
 
 	      /* Verify that the versions are compatible.  */
@@ -973,9 +976,19 @@ walk_build_notes (annocheck_data *     data,
 	    break;
 
 	  attr += strlen ("branch_protection:");
-	  if (streq (attr, "bti")
-	      || (streq (attr, "standard"))
-	      || const_strneq (attr, "pac-ret"))
+	  if (* attr == 0
+	      || streq (attr, "(null)")
+	      || streq (attr, "default"))
+	    {
+	      /* FIXME: Turn into a FAIL once -mbranch-protection is required by the security spec.  */
+	      report_s (VERBOSE, "%s: info: (%s): Compiled without -mbranch-protection",
+			data, sec, note_data, prefer_func_name, NULL);
+	      /* tests[TEST_BRANCH_PROTECTION].num_fail ++; */
+	      break;
+	    }
+	  else if (streq (attr, "bti")
+		   || (streq (attr, "standard"))
+		   || const_strneq (attr, "pac-ret"))
 	    {
 	      report_s (VERBOSE2, "%s: PASS: (%s): branch-protection enabled (%s)",
 			data, sec, note_data, prefer_func_name, attr);
@@ -1100,42 +1113,76 @@ walk_build_notes (annocheck_data *     data,
     case 'G':
       if (streq (attr, "GOW"))
 	{
-	  if (skip_check (TEST_OPTIMIZATION, get_component_name (data, sec, note_data, prefer_func_name)))
-	    break;
-
-	  if (value == -1)
+	  if (! skip_check (TEST_OPTIMIZATION, get_component_name (data, sec, note_data, prefer_func_name)))
 	    {
-	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for optimize note (%x)",
-		      data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_OPTIMIZATION].num_maybe ++;
-	    }
-	  else
-	    {
-	      if (value & (1 << 13))
+	      if (value == -1)
 		{
-		  /* Compiled with -Og rather than -O2.
-		     Treat this as a flag to indicate that the package developer is
-		     intentionally not compiling with -O2, so suppress warnings about it.  */
-		  report_i (VERBOSE, "%s: skip: (%s): compiled with -Og, so ignoring test for -O2+",
+		  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for optimize note (%x)",
 			    data, sec, note_data, prefer_func_name, value);
-		  /* Add a pass result so that we do not complain about lack of optimization information.  */
-		  tests[TEST_OPTIMIZATION].num_pass ++;
+		  tests[TEST_OPTIMIZATION].num_maybe ++;
 		}
 	      else
 		{
-		  value = (value >> 9) & 3;
-
-		  if (value == 0 || value == 1)
+		  if (value & (1 << 13))
 		    {
-		      report_i (VERBOSE, "%s: FAIL: (%s): Insufficient optimization level: -O%d",
+		      /* Compiled with -Og rather than -O2.
+			 Treat this as a flag to indicate that the package developer is
+			 intentionally not compiling with -O2, so suppress warnings about it.  */
+		      report_i (VERBOSE, "%s: skip: (%s): compiled with -Og, so ignoring test for -O2+",
 				data, sec, note_data, prefer_func_name, value);
-		      tests[TEST_OPTIMIZATION].num_fail ++;
-		    }
-		  else /* value == 2 || value == 3 */
-		    {
-		      report_i (VERBOSE2, "%s: PASS: (%s): Sufficient optimization level: -O%d",
-				data, sec, note_data, prefer_func_name, value);
+		      /* Add a pass result so that we do not complain about lack of optimization information.  */
 		      tests[TEST_OPTIMIZATION].num_pass ++;
+		    }
+		  else
+		    {
+		      uint opt = (value >> 9) & 3;
+
+		      if (opt == 0 || opt == 1)
+			{
+			  report_i (VERBOSE, "%s: FAIL: (%s): Insufficient optimization level: -O%d",
+				    data, sec, note_data, prefer_func_name, opt);
+			  tests[TEST_OPTIMIZATION].num_fail ++;
+			}
+		      else /* opt == 2 || opt == 3 */
+			{
+			  report_i (VERBOSE2, "%s: PASS: (%s): Sufficient optimization level: -O%d",
+				    data, sec, note_data, prefer_func_name, opt);
+			  tests[TEST_OPTIMIZATION].num_pass ++;
+			}
+		    }
+		}
+	    }
+
+	  if (! skip_check (TEST_WARNINGS, get_component_name (data, sec, note_data, prefer_func_name)))
+	    {
+	      if (value == -1)
+		{
+		  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for warning note (%x)",
+			    data, sec, note_data, prefer_func_name, value);
+		  tests[TEST_WARNINGS].num_maybe ++;
+		}
+	      else
+		{
+		  if (value & (1 << 14))
+		    {
+		      /* Compiled with -Wall.  This is good.  */
+		      report_i (VERBOSE2, "%s: PASS: (%s): compiled with -Wall",
+				data, sec, note_data, prefer_func_name, value);
+		      tests[TEST_WARNINGS].num_pass ++;
+		    }
+		  else if (value & (1 << 15))
+		    {
+		      /* Compiled with -Wformat-security but not -Wall.
+			 This can happen with LTO compilation - allow for now.  */
+		      report_i (VERBOSE2, "%s: PASS: (%s): compiled with -Wformat-security",
+				data, sec, note_data, prefer_func_name, value);
+		      tests[TEST_WARNINGS].num_pass ++;
+		    }
+		  else
+		    {
+		      report_i (VERBOSE, "%s: FAIL: (%s): Not compiled with -Wall",
+				data, sec, note_data, prefer_func_name, value);
+		      tests[TEST_WARNINGS].num_fail ++;
 		    }
 		}
 	    }
@@ -2288,6 +2335,31 @@ show_SHORT_ENUM (annocheck_data * data, test * results)
     skip (data, "Test of enum size.  (Not built by gcc)");
   else
     maybe (data, "No data about the use of -fshort-enum available");
+}
+
+static void
+show_WARNINGS (annocheck_data * data, test * results)
+{
+  if (results->num_fail > 0)
+    {
+      if (BE_VERBOSE)
+	fail (data, "Insufficient compilation warnings used");
+      else
+	fail (data, "Insufficient compilation warnings used.  Run with -c to see where");
+    }
+  else if (results->num_maybe > 0)
+    {
+      maybe (data, "Corrupted warning data encountered");
+    }
+  else if (results->num_pass == 0)
+    {
+      if (! built_by_gcc ())
+	skip (data, "Checking for warning options (not built by gcc");
+      else
+	maybe (data, "No data about compilation warnings found");
+    }
+  else
+    pass (data, "Sufficient compilation warnings enabled");
 }
 
 static void

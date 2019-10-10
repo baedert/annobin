@@ -370,6 +370,10 @@ stored as a bit field with the bits having the following meanings:
 'bit 14'
      Set if the enable most warnings option ('-Wall') has been enabled.
 
+'bit 15'
+     Set if the format security warning option ('-Wformat-security') has
+     been enabled.
+
    The other bits are not currently used and should be set to zero so
 they can be used in future extensions to the specification.
 
@@ -1707,19 +1711,19 @@ Node: The Version Encoding12055
 Node: The STACK Encoding12446
 Node: The PIC Encoding13044
 Node: The GOW Encoding13672
-Node: The CF Encoding15120
-Node: The ENUM Encoding16192
-Node: Annocheck16549
-Node: Built-By19075
-Node: Hardened20605
-Node: Notes25460
-Node: Section-Size26104
-Node: Timing28258
-Node: Legacy Scripts28905
-Node: Who Built Me29672
-Node: ABI Checking32432
-Node: Hardening Checks34546
-Node: Checking Archives38632
-Node: GNU FDL41054
+Node: The CF Encoding15222
+Node: The ENUM Encoding16294
+Node: Annocheck16651
+Node: Built-By19177
+Node: Hardened20707
+Node: Notes25562
+Node: Section-Size26206
+Node: Timing28360
+Node: Legacy Scripts29007
+Node: Who Built Me29774
+Node: ABI Checking32534
+Node: Hardening Checks34648
+Node: Checking Archives38734
+Node: GNU FDL41156
 
 End Tag Table

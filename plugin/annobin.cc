@@ -48,8 +48,8 @@ using abigail::suppr::suppressions_type;
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 883;
-static const char *   version_string = N_("Version 883");
+static unsigned int   annobin_version = 884;
+static const char *   version_string = N_("Version 884");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -626,8 +626,8 @@ compute_pic_option (void)
 }
 
 /* Compute a numeric value representing the settings/levels of
-   the -O and -g options, and whether -Wall has been used.  This
-   is to help verify the recommended hardening options for binaries.
+   the -O and -g options, and some -W options.  This is to help
+   verify the recommended hardening options for binaries.
    The format of the number is as follows:
 
    bits 0 -  2 : debug type (from enum debug_info_type)
@@ -638,7 +638,8 @@ compute_pic_option (void)
    bit  11     : -Os
    bit  12     : -Ofast
    bit  13     : -Og
-   bit  14     : -Wall.  */
+   bit  14     : -Wall
+   bit  15     : -Wformat-security  */
 
 static unsigned int
 compute_GOWall_options (void)
@@ -703,6 +704,12 @@ compute_GOWall_options (void)
 	  break;
 	}
     }
+
+  /* -Wformat-security is enabled via -Wall, but we record it here because
+     it is important, and because LTO compilation does not pass on the -Wall
+     flag.  FIXME: Add other important warnings.  */
+  if (warn_format_security)
+    val|= (1 << 15);
 
   return val;
 }
@@ -1585,6 +1592,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 #endif
 #ifdef flag_cf_protection
   global_cf_option = flag_cf_protection;
+  if (annobin_active_checks && ((flag_cf_protection & CF_FULL) == 0))
+    error ("-fcf-protection=full needed");
 #endif
   global_stack_prot_option = flag_stack_protect;
   global_pic_option = compute_pic_option ();

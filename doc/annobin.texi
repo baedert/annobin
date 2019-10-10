@@ -435,6 +435,10 @@ enabled.
 @item bit 14
 Set if the enable most warnings option (@option{-Wall}) has been
 enabled.
+
+@item bit 15
+Set if the format security warning option (@option{-Wformat-security})
+has been enabled.
 @end table
 
 The other bits are not currently used and should be set to zero so
