@@ -20,7 +20,7 @@ ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
 PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
-OPTS="-Wall -c -O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
+OPTS="-Wformat -Werror=format-security -c -O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 EXTRA_OPTS="-fcf-protection -mstackrealign"
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
@@ -67,4 +67,4 @@ $GCC -pie \
 
 # FIXME - we should check that the notes were parsed correctly...
 # FIXME - we should check for gaps.
-$ANNOCHECK --ignore-gaps --skip-entry function-sections-test.exe
+$ANNOCHECK -v --ignore-gaps --skip-entry function-sections-test.exe

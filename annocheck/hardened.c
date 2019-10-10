@@ -2343,9 +2343,9 @@ show_WARNINGS (annocheck_data * data, test * results)
   if (results->num_fail > 0)
     {
       if (BE_VERBOSE)
-	fail (data, "Insufficient compilation warnings used");
+	fail (data, "Compiled without using the -Wall option");
       else
-	fail (data, "Insufficient compilation warnings used.  Run with -c to see where");
+	fail (data, "Compiled without using the -Wall option.  Run with -c to see where");
     }
   else if (results->num_maybe > 0)
     {
