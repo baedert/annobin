@@ -1175,8 +1175,9 @@ walk_build_notes (annocheck_data *     data,
 		      else
 			{
 			  /* Compiled without -Wformat-security.
-			     Not a failure because parts of glibc are compiled with way.  */
-			  report_i (VERBOSE, "%s: PASS: (%s): Compiled with -Wall (but not -Wformat-security)",
+			     Not a failure because parts of glibc are compiled with way
+			     and because recording of -Wformat-security only started with annobin v8.84.  */
+			  report_i (VERBOSE2, "%s: PASS: (%s): Compiled with -Wall",
 				    data, sec, note_data, prefer_func_name, value);
 			  tests[TEST_WARNINGS].num_pass ++;
 			}

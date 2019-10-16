@@ -48,8 +48,8 @@ using abigail::suppr::suppressions_type;
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 884;
-static const char *   version_string = N_("Version 884");
+static unsigned int   annobin_version = 885;
+static const char *   version_string = N_("Version 885");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -1776,21 +1776,21 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      two sections.  */
   annobin_emit_start_sym_and_version_note (HOT_SUFFIX, 'h');
   queue_attachment (HOT_SECTION, concat (HOT_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  emit_global_notes (HOT_SUFFIX);
+  //  emit_global_notes (HOT_SUFFIX);
 
   annobin_emit_start_sym_and_version_note (COLD_SUFFIX, 'c');
   queue_attachment (COLD_SECTION, concat (COLD_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  emit_global_notes (COLD_SUFFIX);
+  //  emit_global_notes (COLD_SUFFIX);
 
   /* *sigh* As of gcc 9, a .text.startup section can also be created.  */
   annobin_emit_start_sym_and_version_note (STARTUP_SUFFIX, 's');
   queue_attachment (COLD_SECTION, concat (STARTUP_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  emit_global_notes (STARTUP_SUFFIX);
+  //  emit_global_notes (STARTUP_SUFFIX);
 
   /* Presumably a .text.exit section can also be created, although I have not seen that yet.  */
   annobin_emit_start_sym_and_version_note (EXIT_SUFFIX, 'e');
   queue_attachment (COLD_SECTION, concat (EXIT_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  emit_global_notes (EXIT_SUFFIX);
+  //  emit_global_notes (EXIT_SUFFIX);
 }
 
 static void
