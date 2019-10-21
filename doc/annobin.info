@@ -641,9 +641,14 @@ code to support the test.
      Disabled by '--skip-stack-clash'.
 
 'Control Flow protection'
-     If available the '-fcf-protection=full' must have been used.
+     If available the '-fcf-protection=full' option must have been used.
      Disabled by '--skip-cf-protection'.  If this option is disabled
      then the check for GNU Property notes will also be disabled.
+
+'Branch protection'
+     For AARCH64 binaries.  the '-mbranch-protection' option, if
+     available, must have been used.  Disabled by
+     '--skip-branch-protection'.
 
 'Stack realignment'
      For I686 binaries, the '-mstackrealign' option must have been
@@ -1716,14 +1721,14 @@ Node: The ENUM Encoding16294
 Node: Annocheck16651
 Node: Built-By19177
 Node: Hardened20707
-Node: Notes25562
-Node: Section-Size26206
-Node: Timing28360
-Node: Legacy Scripts29007
-Node: Who Built Me29774
-Node: ABI Checking32534
-Node: Hardening Checks34648
-Node: Checking Archives38734
-Node: GNU FDL41156
+Node: Notes25738
+Node: Section-Size26382
+Node: Timing28536
+Node: Legacy Scripts29183
+Node: Who Built Me29950
+Node: ABI Checking32710
+Node: Hardening Checks34824
+Node: Checking Archives38910
+Node: GNU FDL41332
 
 End Tag Table

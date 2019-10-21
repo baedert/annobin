@@ -18,23 +18,6 @@
 #include <stdio.h>
 #include <intl.h>
 
-#define USE_LIBABIGAIL 1
-
-#ifdef USE_LIBABIGAIL
-#include <abg-config.h>
-#include <abg-ir.h>
-#include <abg-comp-filter.h>
-#include <abg-suppression.h>
-#include <abg-tools-utils.h>
-#include <abg-reader.h>
-#include <abg-dwarf-reader.h>
-using std::vector;
-using abigail::ir::environment;
-using abigail::ir::environment_sptr;
-using abigail::corpus_sptr;
-using abigail::suppr::suppressions_type;
-#endif // USE_LIBABIGAIL
-
 /* Needed to access some of GCC's internal structures.  */
 #include "cgraph.h"
 #include "target.h"
@@ -48,8 +31,8 @@ using abigail::suppr::suppressions_type;
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 885;
-static const char *   version_string = N_("Version 885");
+static unsigned int   annobin_version = 886;
+static const char *   version_string = N_("Version 886");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -137,9 +120,6 @@ static unsigned       verbose_level = 0;
 static const char *   annobin_extra_prefix = "";
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
-#ifdef USE_LIBABIGAIL
-static bool           annobin_use_libabigail = true;
-#endif
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\
@@ -152,11 +132,8 @@ static const char *   help_string =  N_("Supported options:\n\
    [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
    [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
    [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
-   [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n"
-#ifdef USE_LIBABIGAIL
-"   [no-]use-libabigail    Do [do not] use libabigail to detect compiler ABI issues.  (Default: do)\n"
-#endif
-"   rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n \
+   [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n\
+   rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n \
    stack-threshold=N      Only create function specific stack size notes when the size is > N.");
 
 static struct plugin_info annobin_info =
@@ -190,11 +167,11 @@ annobin_inform (unsigned level, const char * format, ...)
   putc ('\n', stderr);
 }
 
-static void
+void
 ice (const char * text)
 {
-  annobin_inform (0, "ICE: %s", text);
-  annobin_inform (0, "ICE: please contact annobin maintainer with details of the problem");
+  annobin_inform (INFORM_ALWAYS, "ICE: %s", text);
+  annobin_inform (INFORM_ALWAYS, "ICE: Please contact the annobin maintainer with details of this problem");
 }
 
 /* Create a symbol name to represent the sources we are annotating.
@@ -313,7 +290,7 @@ annobin_output_note (const char * name,
   if (annobin_function_verbose && type == FUNC)
     {
       if (desc_is_string)
-	annobin_inform (0, "Create function specific note for: %s: %s", desc1, name_description);
+	annobin_inform (INFORM_ALWAYS, "Create function specific note for: %s: %s", desc1, name_description);
     }
 
   if (strchr (sec_name, ','))
@@ -675,13 +652,13 @@ compute_GOWall_options (void)
 	 this can happen, but handle it anyway.  Since DWARF prior to v2 is
 	 deprecated, we use 2 as the version level.  */
       val |= (2 << 6);
-      annobin_inform (1, "dwarf version level %d recorded as 2", dwarf_version);
+      annobin_inform (INFORM_VERBOSE, "dwarf version level %d recorded as 2", dwarf_version);
     }
   else if (dwarf_version > 7)
     {
       /* FIXME: We only have 3 bits to record the debug level...  */
       val |= (7 << 6);
-      annobin_inform (1, "dwarf version level %d recorded as 7", dwarf_version);
+      annobin_inform (INFORM_VERBOSE, "dwarf version level %d recorded as 7", dwarf_version);
     }
   else
     val |= (dwarf_version << 6);
@@ -746,13 +723,13 @@ record_GOW_settings (unsigned int gow,
 
   if (local)
     {
-      annobin_inform (1, "Record -g/-O/-Wall status for %s", cname);
+      annobin_inform (INFORM_VERBOSE, "Record -g/-O/-Wall status for %s", cname);
       annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
 			   DESC_PARAMETERS (aname, aname_end), true, FUNC, sec_name);
     }
   else
     {
-      annobin_inform (1, "Record status of -g/-O/-Wall");
+      annobin_inform (INFORM_VERBOSE, "Record status of -g/-O/-Wall");
       annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
 			   NULL, NULL, 0, false, OPEN, sec_name);
     }
@@ -782,7 +759,7 @@ record_cf_protection_note (const char * start, const char * end, int type, const
   buffer[++len] = flag_cf_protection + 1;
   buffer[++len] = 0;
 
-  annobin_inform (1, "Record cf-protection status of %d", flag_cf_protection);
+  annobin_inform (INFORM_VERBOSE, "Record cf-protection status of %d", flag_cf_protection);
   annobin_output_static_note (buffer, len + 1, false, "numeric: -fcf-protection status",
 			      start, end, type, sec_name);
 }
@@ -799,7 +776,7 @@ record_frame_pointer_note (const char * start, const char * end, int type, const
   else
     len = sprintf (buffer, "GA%comit_frame_pointer", BOOL_F);
 
-  annobin_inform (1, "Record omit-frame-pointer status of %d", flag_omit_frame_pointer);
+  annobin_inform (INFORM_VERBOSE, "Record omit-frame-pointer status of %d", flag_omit_frame_pointer);
   annobin_output_static_note (buffer, len + 1, true, "bool: -fomit-frame-pointer status",
 			      start, end, type, sec_name);
 }
@@ -842,7 +819,7 @@ record_fortify_level (int level, int type, const char * sec)
   buffer[++len] = 0;
   annobin_output_note (buffer, len + 1, false, "FORTIFY SOURCE level",
 		       NULL, NULL, 0, false, type, sec);
-  annobin_inform (1, "Record a FORTIFY SOURCE level of %d", level);
+  annobin_inform (INFORM_VERBOSE, "Record a FORTIFY SOURCE level of %d", level);
 }
 
 static void
@@ -853,7 +830,7 @@ record_glibcxx_assertions (bool on, int type, const char * sec)
 
   annobin_output_note (buffer, len + 1, false, on ? "_GLIBCXX_ASSERTIONS defined" : "_GLIBCXX_ASSERTIONS not defined",
 		       NULL, NULL, 0, false, type, sec);
-  annobin_inform (1, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
+  annobin_inform (INFORM_VERBOSE, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
 }
 
 /* This structure provides various names associated with the current
@@ -913,7 +890,7 @@ annobin_emit_function_notes (bool force)
       && (force
 	  || global_stack_prot_option != flag_stack_protect))
     {
-      annobin_inform (1, "Recording stack protection status of %d for %s",
+      annobin_inform (INFORM_VERBOSE, "Recording stack protection status of %d for %s",
 		      flag_stack_protect, func_name);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, flag_stack_protect,
@@ -928,7 +905,7 @@ annobin_emit_function_notes (bool force)
   if (force
       || global_stack_clash_option != flag_stack_clash_protection)
     {
-      annobin_inform (1, "Recording stack clash protection status of %d for %s",
+      annobin_inform (INFORM_VERBOSE, "Recording stack clash protection status of %d for %s",
 		      flag_stack_clash_protection, func_name);
 
       record_stack_clash_note (start_sym, end_sym, FUNC, sec_name);
@@ -940,7 +917,7 @@ annobin_emit_function_notes (bool force)
   if (force
       || global_cf_option != flag_cf_protection)
     {
-      annobin_inform (1, "Recording control flow protection status of %d for %s",
+      annobin_inform (INFORM_VERBOSE, "Recording control flow protection status of %d for %s",
 		      flag_cf_protection, func_name);
 
       record_cf_protection_note (start_sym, end_sym, FUNC, sec_name);
@@ -950,7 +927,7 @@ annobin_emit_function_notes (bool force)
 
   if (force || global_omit_frame_pointer != flag_omit_frame_pointer)
     {
-      annobin_inform (1, "Recording omit_frame_pointer status of %d for %s",
+      annobin_inform (INFORM_VERBOSE, "Recording omit_frame_pointer status of %d for %s",
 		      flag_omit_frame_pointer, func_name);
 
       record_frame_pointer_note (start_sym, end_sym, FUNC, sec_name);
@@ -960,7 +937,7 @@ annobin_emit_function_notes (bool force)
   if (force
       || global_pic_option != compute_pic_option ())
     {
-      annobin_inform (1, "Recording PIC status of %s", func_name);
+      annobin_inform (INFORM_VERBOSE, "Recording PIC status of %s", func_name);
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, compute_pic_option (),
 				   "numeric: pic type", start_sym, end_sym,
 				   FUNC, sec_name);
@@ -978,7 +955,7 @@ annobin_emit_function_notes (bool force)
       && (force
 	  || global_short_enums != flag_short_enums))
     {
-      annobin_inform (1, "Recording enum size for %s", func_name);
+      annobin_inform (INFORM_VERBOSE, "Recording enum size for %s", func_name);
       annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, flag_short_enums,
 				flag_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
 				start_sym, end_sym, FUNC, sec_name);
@@ -989,7 +966,7 @@ annobin_emit_function_notes (bool force)
     {
       if ((unsigned long) current_function_static_stack_size > stack_threshold)
 	{
-	  annobin_inform (1, "Recording stack usage of %lu for %s",
+	  annobin_inform (INFORM_VERBOSE, "Recording stack usage of %lu for %s",
 			  (unsigned long) current_function_static_stack_size,
 			  func_name);
 
@@ -1163,7 +1140,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	}
     }
 
-  annobin_inform (1, "Function '%s' is assumed to be in section '%s'",
+  annobin_inform (INFORM_VERBOSE, "Function '%s' is assumed to be in section '%s'",
 		  current_func.asm_name,
 		  current_func.section_name ? current_func.section_name : CODE_SECTION);
 
@@ -1413,7 +1390,7 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	queue_attachment (current_func.section_name, current_func.group_name);
     }
 
-  annobin_inform (1, "Function '%s' is assumed to end in section '%s'",
+  annobin_inform (INFORM_VERBOSE, "Function '%s' is assumed to end in section '%s'",
 		  current_func.asm_name,
 		  current_func.section_name ? current_func.section_name : CODE_SECTION);
 
@@ -1503,10 +1480,10 @@ emit_global_notes (const char * suffix)
 {
   const char * sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix, NULL);
 
-  annobin_inform (1, "Emit global notes for section .text%s...", suffix);
+  annobin_inform (INFORM_VERBOSE, "Emit global notes for section .text%s...", suffix);
 
   /* Record the version of the compiler.  */
-  annobin_inform (1, "Annobin compiler versions: %s, %s", build_version, run_version);
+  annobin_inform (INFORM_VERBOSE, "Annobin compiler versions: %s, %s", build_version, run_version);
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, run_version,
 			      "string: build-tool", NULL, NULL, OPEN, sec);
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, build_version,
@@ -1521,7 +1498,7 @@ emit_global_notes (const char * suffix)
 			       global_stack_prot_option >= 0 ? global_stack_prot_option : 0,
 			       "numeric: -fstack-protector status",
 			       NULL, NULL, OPEN, sec);
-  annobin_inform (1, "Record stack protector setting of %d", global_stack_prot_option >= 0 ? global_stack_prot_option : 0);
+  annobin_inform (INFORM_VERBOSE, "Record stack protector setting of %d", global_stack_prot_option >= 0 ? global_stack_prot_option : 0);
 
 #ifdef flag_stack_clash_protection
   /* Record -fstack-clash-protection option.  */
@@ -1555,8 +1532,6 @@ emit_global_notes (const char * suffix)
 static void
 annobin_create_global_notes (void * gcc_data, void * user_data)
 {
-  int i;
-
   if (! annobin_enable_static_notes)
     return;
 
@@ -1567,7 +1542,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	 the file handle we cannot emit any notes.  On the other hand,
 	 the recompilation process will repeat later on with a real
 	 output file and so the notes can be generated then.  */
-      annobin_inform (1, "Output file not available - unable to generate notes");
+      annobin_inform (INFORM_VERBOSE, "Output file not available - unable to generate notes");
       return;
     }
 
@@ -1586,7 +1561,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     case 64:
       annobin_is_64bit = true; break;
     default:
-      annobin_inform (0, "Unknown target pointer size: %d", POINTER_SIZE);
+      annobin_inform (INFORM_VERBOSE, "Pointer size: %d", POINTER_SIZE);
+      ice ("Unknown target pointer size");
+      return;
     }
 
   if (annobin_enable_stack_size_notes)
@@ -1627,6 +1604,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 #define FORTIFY_OPTION "_FORTIFY_SOURCE"
 #define GLIBCXX_OPTION "_GLIBCXX_ASSERTIONS"
 
+  int i;
+
   for (i = save_decoded_options_count; i--;)
     {
       if (save_decoded_options[i].opt_index == OPT_U)
@@ -1660,7 +1639,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
 	      if (level < 0 || level > 3)
 		{
-		  annobin_inform (0, "Unexpected value in -D" FORTIFY_OPTION "%s",
+		  annobin_inform (INFORM_ALWAYS, "Unexpected value in -D" FORTIFY_OPTION "%s",
 				  save_decoded_options[i].arg);
 		  level = 0;
 		}
@@ -1707,7 +1686,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 		{
 		  if (level < 0 || level > 3)
 		    {
-		      annobin_inform (0, "Unexpected value in -D" FORTIFY_OPTION);
+		      annobin_inform (INFORM_ALWAYS, "Unexpected value in -D" FORTIFY_OPTION);
 		      level = 0;
 		    }
 
@@ -1758,13 +1737,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
       if (global_fortify_level != 2)
 	{
 	  if (global_fortify_level == -1)
-	    annobin_inform (0, _("Warning: -D_FORTIFY_SOURCE not defined"));
+	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE not defined"));
 	  else
-	    annobin_inform (0, _("Warning: -D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
+	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
 	}
       if (global_glibcxx_assertions != 1)
 	{
-	  annobin_inform (0, _("Warning: -D_GLIBCXX_ASSERTIONS not defined"));
+	  annobin_inform (INFORM_ALWAYS, _("Warning: -D_GLIBCXX_ASSERTIONS not defined"));
 	}
     }
 
@@ -1887,7 +1866,7 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
 
   if (annobin_enable_stack_size_notes && annobin_total_static_stack_usage)
     {
-      annobin_inform (1, "Recording total static usage of %ld", annobin_total_static_stack_usage);
+      annobin_inform (INFORM_VERBOSE, "Recording total static usage of %ld", annobin_total_static_stack_usage);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE, annobin_total_static_stack_usage,
 				   "numeric: stack-size", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
@@ -1921,10 +1900,10 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	enabled = true;
 
       else if (streq (key, "help"))
-	annobin_inform (0, "%s", help_string);
+	annobin_inform (INFORM_ALWAYS, "%s", help_string);
 
       else if (streq (key, "version"))
-	annobin_inform (0, "%s", version_string);
+	annobin_inform (INFORM_ALWAYS, "%s", version_string);
 
       else if (streq (key, "verbose"))
 	verbose_level ++;
@@ -1962,13 +1941,6 @@ parse_args (unsigned argc, struct plugin_argument * argv)
       else if (streq (key, "no-active-checks"))
 	annobin_active_checks = false;
 
-#ifdef USE_LIBABIGAIL
-      else if (streq (key, "use-libabigail"))
-	annobin_use_libabigail = true;
-      else if (streq (key, "no-use-libabigail"))
-	annobin_use_libabigail = false;
-#endif
-
       else if (streq (key, "stack-threshold"))
 	{
 	  stack_threshold = strtoul (argv[argc].value, NULL, 0);
@@ -1989,66 +1961,6 @@ parse_args (unsigned argc, struct plugin_argument * argv)
   return true;
 }
 
-#ifdef USE_LIBABIGAIL
-static void
-generate_corpus (void)
-{
-  annobin_inform (0, "Creating a libabigail corpus");
-
-  environment_sptr env (new environment);
-  vector<char**> prepared_di_root_paths1;
-
-  // Note - we use /proc/self/exe to get a link to the compiler (cc1, cc1plus) that invoked us.
-  abigail::dwarf_reader::read_context_sptr ctxt =
-    abigail::dwarf_reader::create_read_context
-    (
-#if 0
-     "/proc/self/exe",
-#else
-     "/usr/libexec/gcc/x86_64-redhat-linux/8/cc1",
-#endif
-     prepared_di_root_paths1,
-     env.get());
-
-  if (ctxt)
-    annobin_inform (0, "created read context");
-  else
-    {
-      annobin_inform (0, "Failed to create a read context for libabigail");
-      return;
-    }
-
-  // Create a suppress file so that we only profile the types used by annobin.
-  suppressions_type supprs;
-  std::istringstream input ("\
-[suppress_type]\n\
-name_regexp = (?!global_options)\n\
-drop = yes\n");
-  read_suppressions (input, supprs);
-  add_read_context_suppressions (*ctxt, supprs);
-  annobin_inform (0, "added suppressions", supprs);
-    
-  annobin_inform (0, "creating corpus...");
-  corpus_sptr c1;
-  abigail::dwarf_reader::status c1_status = abigail::dwarf_reader::STATUS_OK;
-  c1 = abigail::dwarf_reader::read_corpus_from_elf (*ctxt, c1_status);
-
-  if (c1)
-    annobin_inform (0, "corpus created");
-  else
-    {
-      annobin_inform (0, "failed to create libabaigail corpus (%s)", status_to_diagnostic_string (c1_status));
-      return;
-    }
-}
-
-static void
-compare_corpus_against_original (void)
-{
-}
-
-#endif // USE_LIBABIGAIL
-
 int
 plugin_init (struct plugin_name_args *    plugin_info,
              struct plugin_gcc_version *  version)
@@ -2058,7 +1970,7 @@ plugin_init (struct plugin_name_args *    plugin_info,
   /* Parse args before checking version details so that we know if we need to be verbose.  */
   if (! parse_args (plugin_info->argc, plugin_info->argv))
     {
-      annobin_inform (1, _("failed to parse arguments to the plugin"));
+      annobin_inform (INFORM_VERBOSE, _("failed to parse arguments to the plugin"));
       return 1;
     }
 
@@ -2152,24 +2064,11 @@ plugin_init (struct plugin_name_args *    plugin_info,
 
       if (fail)
 	return 1;
-
-#ifdef USE_LIBABIGAIL
-      if (annobin_use_libabigail)
-	{
-	  generate_corpus ();
-	  compare_corpus_against_original ();
-	}
-#endif
-    }
-  else if (annobin_use_libabigail)
-    {
-      generate_corpus ();
-      compare_corpus_against_original ();
     }
   
   if (! annobin_enable_dynamic_notes && ! annobin_enable_static_notes)
     {
-      annobin_inform (1, _("nothing to be done"));
+      annobin_inform (INFORM_VERBOSE, _("nothing to be done"));
       return 0;
     }
 

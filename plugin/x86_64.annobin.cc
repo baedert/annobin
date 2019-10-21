@@ -73,7 +73,7 @@ record_cet_note (const char * start, const char * end, int type, const char * se
   buffer[++len] = (ix86_isa_flags & OPTION_MASK_ISA_SHSTK) ? 2 : 1;
   buffer[++len] = 0;
 
-  annobin_inform (1, "Record CET values of %d:%d:%lx:%lx",
+  annobin_inform (INFORM_VERBOSE, "x86_64: Record CET values of %d:%d:%lx:%lx",
 		  flag_cet, flag_cet_switch,
 		  ix86_isa_flags2 & OPTION_MASK_ISA_IBT,
 		  ix86_isa_flags & OPTION_MASK_ISA_SHSTK);
@@ -86,6 +86,8 @@ record_cet_note (const char * start, const char * end, int type, const char * se
 void
 annobin_record_global_target_notes (const char * sec)
 {
+  CHECK_ADDR_OF (ix86_isa_flags);
+
   /* Note - most, but not all, bits in the ix86_isa_flags variable
      are significant for purposes of ABI compatibility.  We do not
      bother to filter out any bits however, as we prefer to leave
@@ -94,24 +96,24 @@ annobin_record_global_target_notes (const char * sec)
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
 			       "numeric: ABI", NULL, NULL, OPEN, sec);
-  annobin_inform (1, "Record global isa of %lx", global_x86_isa);
+  annobin_inform (INFORM_VERBOSE, "x86_64: Record global isa of %lx", global_x86_isa);
 
-  {
-    global_stack_realign = ix86_force_align_arg_pointer;
+  
+  CHECK_ADDR_OF (ix86_force_align_arg_pointer);
+  global_stack_realign = ix86_force_align_arg_pointer;
+  char buffer [128];
+  unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
+  annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
+			      NULL, NULL, OPEN, sec);
+  annobin_inform (INFORM_VERBOSE, "x86_64: Record global stack realign setting of %s", global_stack_realign ? "false" : "true");
 
-    char buffer [128];
-    unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
-    annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
-				NULL, NULL, OPEN, sec);
-    annobin_inform (1, "Record global stack realign setting of %s", global_stack_realign ? "false" : "true");
-  }
-			       
+  
 #ifdef flag_cet
+  CHECK_ADDR_OF (flag_cet);
   global_cet = flag_cet;
   global_set_switch = flag_cet_switch;
   global_ibt = ix86_isa_flags2 & OPTION_MASK_ISA_IBT;
   global_shstk = ix86_isa_flags & OPTION_MASK_ISA_SHSTK;
-
   record_cet_note (NULL, NULL, OPEN, sec);
 #endif
 }
@@ -124,7 +126,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
   if (force
       || (unsigned long) ix86_isa_flags != global_x86_isa)
     {
-      annobin_inform (1, "Record ISA value of %lx for %s",
+      annobin_inform (INFORM_VERBOSE, "x86_64: Record ISA value of %lx for %s",
 		      (long) ix86_isa_flags, func_name);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, ix86_isa_flags,
@@ -144,7 +146,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
       char buffer [128];
       unsigned len = sprintf (buffer, "GA%cstack_realign", ix86_force_align_arg_pointer ? BOOL_T : BOOL_F);
 
-      annobin_inform (1, "Record function specific stack realign setting of %s for %s",
+      annobin_inform (INFORM_VERBOSE, "x86_64: Record function specific stack realign setting of %s for %s",
 		      ix86_force_align_arg_pointer ? "false" : "true", func_name);
       annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
 				  aname, aname_end, FUNC, sec_name);
@@ -158,7 +160,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
       || (global_ibt != (ix86_isa_flags2 & OPTION_MASK_ISA_IBT))
       || (global_shstk != (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)))
     {
-      annobin_inform (1, "recording CET value of %d:%d:%lx:%lx for %s",
+      annobin_inform (INFORM_VERBOSE, "x86_64: Recording CET value of %d:%d:%lx:%lx for %s",
 		      flag_cet, flag_cet_switch,
 		      (ix86_isa_flags2 & OPTION_MASK_ISA_IBT),
 		      (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)
@@ -236,7 +238,7 @@ annobin_target_specific_loader_notes (void)
   char   buffer [1024]; /* FIXME: Is this enough ?  */
   char * ptr;
 
-  annobin_inform (1, "Creating notes for the dynamic loader");
+  annobin_inform (INFORM_VERBOSE, "x86_64: Creating notes for the dynamic loader");
 
   fprintf (asm_out_file, "\t.section %s, \"a\", %%note\n", NOTE_GNU_PROPERTY_SECTION_NAME);
   if (annobin_is_64bit)

@@ -16,10 +16,6 @@ annobin_la_DEPENDENCIES = @target_plugin@
 annobin_la_LDFLAGS = -module
 AM_CXXFLAGS =
 
-AM_CXXFLAGS += -I /usr/include/libabigail
-annobin_la_LDFLAGS += -labigail
-
-
 annobin_la_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) \
 	$(annobin_la_LDFLAGS) $(LTLDFLAGS) -o $@

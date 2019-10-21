@@ -33,19 +33,27 @@ annobin_save_target_specific_information (void)
 {
 }
 
+
 void
 annobin_record_global_target_notes (const char * sec)
 {
+  // annobin_is_64bit is computed from a flag bit inside aarch64_abi.
+  CHECK_ADDR_OF (aarch64_abi);
   if (!annobin_is_64bit)
-    annobin_inform (0, "ICE: Should be 64-bit target");
+    {
+      ice ("AArch64: The annobin plugin thinks that it is compiling for a 32-bit target");
+      return;
+    }
 
+  CHECK_ADDR_OF (aarch64_tls_dialect);
   saved_tls_dialect = aarch64_tls_dialect;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
 			       "numeric: ABI: TLS dialect", NULL, NULL, OPEN, sec);
-  annobin_inform (1, "Recording global TLS dialect of %d", saved_tls_dialect);
+  annobin_inform (INFORM_VERBOSE, "AArch64: Recording global TLS dialect of %d", saved_tls_dialect);
 
 #ifdef aarch64_branch_protection_string
+  CHECK_ADDR_OF (aarch64_branch_protection_string);
   saved_branch_protection_string = aarch64_branch_protection_string;
 
   char buffer [128];
@@ -53,7 +61,7 @@ annobin_record_global_target_notes (const char * sec)
   if (sbps == NULL)
     sbps = "default";
 
-  annobin_inform (1, "Recording global AArch64 branch protection of '%s'", sbps);
+  annobin_inform (INFORM_VERBOSE, "AArch64: Recording global AArch64 branch protection of '%s'", sbps);
   unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
 			   GNU_BUILD_ATTRIBUTE_TYPE_STRING, sbps);
   annobin_output_static_note (buffer, len + 1, true, "string: -mbranch-protection status",
@@ -69,7 +77,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, aarch64_tls_dialect,
 				   "numeric: ABI: TLS dialect", aname, aname_end,
 				   FUNC, sec_name);
-      annobin_inform (1, "recording TLS dialect of %d for %s",
+      annobin_inform (INFORM_VERBOSE, "AArch64: Recording TLS dialect of %d for %s",
 		      aarch64_tls_dialect, current_function_name ());
 
     }
@@ -82,7 +90,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
       if (abps == NULL)
 	abps = "default";
 
-      annobin_inform (1, "Recording AArch64 branch protection of '%s' for function '%s'",
+      annobin_inform (INFORM_VERBOSE, "AArch64: Recording AArch64 branch protection of '%s' for function '%s'",
 		      abps, aname);
 
       unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
@@ -109,7 +117,7 @@ annobin_target_specific_loader_notes (void)
   if (! annobin_enable_stack_size_notes)
     return;
 
-  annobin_inform (1, "Creating notes for the dynamic loader");
+  annobin_inform (INFORM_VERBOSE, "AArch64: Creating notes for the dynamic loader");
 
   ptr = buffer;
 

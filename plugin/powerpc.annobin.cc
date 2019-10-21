@@ -38,13 +38,14 @@ void
 annobin_record_global_target_notes (const char * sec)
 {
   if (!annobin_is_64bit)
-    annobin_inform (0, "ICE: Should be 64-bit target");
+    ice ("PowerPC: The annobin plugin thinks that it is compiling for a 32-bit target");
 
+  CHECK_ADDR_OF (rs6000_tls_size);
   saved_tls_size = rs6000_tls_size;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
 			       "numeric: ABI: TLS size", NULL, NULL, OPEN, sec);
-  annobin_inform (1, "Recording global TLS size of %d", saved_tls_size);
+  annobin_inform (INFORM_VERBOSE, "PowerPC: Recording global TLS size of %d", saved_tls_size);
 }
 
 void
@@ -53,7 +54,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
   if (!force && saved_tls_size == rs6000_tls_size)
     return;
 
-  annobin_inform (1, "Record TLS size of %d for %s",
+  annobin_inform (INFORM_VERBOSE, "PowerPC: Record TLS size of %d for %s",
 		  rs6000_tls_size, aname);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, rs6000_tls_size,
@@ -76,7 +77,7 @@ annobin_target_specific_loader_notes (void)
   if (! annobin_enable_stack_size_notes)
     return;
 
-  annobin_inform (1, "Creating notes for the dynamic loader");
+  annobin_inform (INFORM_VERBOSE, "PowerPC: Creating notes for the dynamic loader");
 
   ptr = buffer;
 

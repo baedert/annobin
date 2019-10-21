@@ -745,9 +745,14 @@ used.
 Disabled by @option{--skip-stack-clash}.
 
 @item Control Flow protection
-If available the @option{-fcf-protection=full} must have been used.
+If available the @option{-fcf-protection=full} option must have been used.
 Disabled by @option{--skip-cf-protection}.  If this option is disabled
 then the check for GNU Property notes will also be disabled.
+
+@item Branch protection
+For @var{AArch64} binaries. the @option{-mbranch-protection} option,
+if available, must have been used.
+Disabled by @option{--skip-branch-protection}.
 
 @item Stack realignment
 For @var{i686} binaries, the @option{-mstackrealign} option must have

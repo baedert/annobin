@@ -36,7 +36,6 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 #include <function.h>
 #include <defaults.h>
 #include <tree.h>
-
 #include <elf.h>
 
 /* The version of the annotation specification supported by this plugin.  */
@@ -82,6 +81,50 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 #define GNU_PROPERTY_NO_COPY_ON_PROTECTED	2
 #endif /* Copy of elf/common.h  */
 
+/* ------------------------------------------------------------------- */
+
+/* These two macros may seem to be redundant, but they are intented to
+   catch the case where the plugin was compiled for one version of gcc,
+   but then run attached to a slightly different (minor) version.  In
+   effect this is performing the equivalent of a libabigail check, but
+   just for one specific variable.  */
+
+#define CHECK_ADDR_OF(VAR)						\
+  do									\
+    {									\
+      static void * VAR ## _annobin_build_time_addr = & VAR;		\
+      volatile void * VAR ## _addr = & VAR;				\
+									\
+      if (VAR ## _addr != VAR ## _annobin_build_time_addr)		\
+	{								\
+	  annobin_inform (INFORM_VERBOSE, "Address of '" #VAR "' changed from %p to %p", \
+			  VAR ## _annobin_build_time_addr,		\
+			  VAR ## _addr);				\
+	  ice ("The annobin plugin was built for a different version of the compiler"); \
+	  return;							\
+	}								\
+    }									\
+  while (0)
+
+#define CHECK_OFFSET_OF(STRUCT,FIELD)					\
+  do									\
+    {									\
+      static   int FIELD ## _annobin_build_time_offset = offsetof (STRUCT, FIELD); \
+      volatile int FIELD ## _offset = offsetof (STRUCT, FIELD);		\
+									\
+      if (FIELD ## _offset != FIELD ## _annobin_build_time_offset)	\
+	{								\
+	  annobin_inform (INFORM_VERBOSE, "Offset of '" #FIELD "' changed from %d to %d"); \
+			  FIELD ## _annobin_build_time_offset,		\
+			  FIELD ## _offset);				\
+	  ice ("The annobin plugin was built for a different version of the compiler"); \
+	  return;							\
+	}								\
+    }									\
+  while (0)
+
+/* ------------------------------------------------------------------- */
+
 /* Called during plugin_init().  */
 extern void annobin_save_target_specific_information (void);
 
@@ -118,6 +161,12 @@ extern signed int annobin_target_start_symbol_bias (void);
    If it is zero then the output is always generated, otherwise the output is only
    generated if the level is less than or equal to the current verbosity setting.  */
 extern void annobin_inform (unsigned, const char *, ...) ATTRIBUTE_PRINTF(2, 3);
+#define INFORM_ALWAYS        0
+#define INFORM_VERBOSE       1
+#define INFORM_VERY_VERBOSE  2
+
+/* Generate an ICE error message.  */
+extern void ice (const char *);
 
 /* Called to generate a single note.  NAME is the text to go into the name
    field of the note.  NAMESZ is the length of the name, including the
