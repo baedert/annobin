@@ -8,22 +8,21 @@ plugin_LTLIBRARIES = annobin.la
 AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
 
-
 annobin_la_SOURCES = annobin.cc
 EXTRA_annobin_la_SOURCES = aarch64.annobin.cc dummy.annobin.cc powerpc.annobin.cc x86_64.annobin.cc
 annobin_la_LIBADD = @target_plugin@
 annobin_la_DEPENDENCIES = @target_plugin@
 
-# Make sure common sources are compiled differently.
-#
-annobin_CXXFLAGS = $(AM_CXXFLAGS) -I /usr/include/libabigail
-
 annobin_la_LDFLAGS = -module
+AM_CXXFLAGS =
+
+AM_CXXFLAGS += -I /usr/include/libabigail
+annobin_la_LDFLAGS += -labigail
+
+
 annobin_la_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) \
 	$(annobin_la_LDFLAGS) $(LTLDFLAGS) -o $@
-
-#       $(annobin_la_LDFLAGS) $(LTLDFLAGS) -o $@ -labigail
 
 # Remove the .la file from the final install.
 #

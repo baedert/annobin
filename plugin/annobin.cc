@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <intl.h>
 
-// #define USE_LIBABIGAIL 1
+#define USE_LIBABIGAIL 1
 
 #ifdef USE_LIBABIGAIL
 #include <abg-config.h>
@@ -137,6 +137,9 @@ static unsigned       verbose_level = 0;
 static const char *   annobin_extra_prefix = "";
 static char *         annobin_current_filename = NULL;
 static char *         annobin_current_endname  = NULL;
+#ifdef USE_LIBABIGAIL
+static bool           annobin_use_libabigail = true;
+#endif
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
    enable                 Enable this plugin\n\
@@ -149,8 +152,11 @@ static const char *   help_string =  N_("Supported options:\n\
    [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
    [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
    [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
-   [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n\
-   rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n\
+   [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n"
+#ifdef USE_LIBABIGAIL
+"   [no-]use-libabigail    Do [do not] use libabigail to detect compiler ABI issues.  (Default: do)\n"
+#endif
+"   rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n \
    stack-threshold=N      Only create function specific stack size notes when the size is > N.");
 
 static struct plugin_info annobin_info =
@@ -1956,6 +1962,13 @@ parse_args (unsigned argc, struct plugin_argument * argv)
       else if (streq (key, "no-active-checks"))
 	annobin_active_checks = false;
 
+#ifdef USE_LIBABIGAIL
+      else if (streq (key, "use-libabigail"))
+	annobin_use_libabigail = true;
+      else if (streq (key, "no-use-libabigail"))
+	annobin_use_libabigail = false;
+#endif
+
       else if (streq (key, "stack-threshold"))
 	{
 	  stack_threshold = strtoul (argv[argc].value, NULL, 0);
@@ -1988,7 +2001,12 @@ generate_corpus (void)
   // Note - we use /proc/self/exe to get a link to the compiler (cc1, cc1plus) that invoked us.
   abigail::dwarf_reader::read_context_sptr ctxt =
     abigail::dwarf_reader::create_read_context
-    ("/proc/self/exe",
+    (
+#if 0
+     "/proc/self/exe",
+#else
+     "/usr/libexec/gcc/x86_64-redhat-linux/8/cc1",
+#endif
      prepared_di_root_paths1,
      env.get());
 
@@ -2019,15 +2037,16 @@ drop = yes\n");
     annobin_inform (0, "corpus created");
   else
     {
-      if (c1_status == dwarf_reader::STATUS_DEBUG_INFO_NOT_FOUND)
-	annobin_inform (0, "failed to create libabaigail corpus (debug info missing)");
-      else if (c1_status == dwarf_reader::STATUS_NO_SYMBOLS_FOUND)
-	annobin_inform (0, "failed to create libabaigail corpus (symbols missing)");
-      else
-	annobin_inform (0, "failed to create libabaigail corpus (reason unknown)");
+      annobin_inform (0, "failed to create libabaigail corpus (%s)", status_to_diagnostic_string (c1_status));
       return;
     }
 }
+
+static void
+compare_corpus_against_original (void)
+{
+}
+
 #endif // USE_LIBABIGAIL
 
 int
@@ -2135,9 +2154,17 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	return 1;
 
 #ifdef USE_LIBABIGAIL
+      if (annobin_use_libabigail)
+	{
+	  generate_corpus ();
+	  compare_corpus_against_original ();
+	}
+#endif
+    }
+  else if (annobin_use_libabigail)
+    {
       generate_corpus ();
       compare_corpus_against_original ();
-#endif
     }
   
   if (! annobin_enable_dynamic_notes && ! annobin_enable_static_notes)
