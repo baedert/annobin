@@ -31,8 +31,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 886;
-static const char *   version_string = N_("Version 886");
+static unsigned int   annobin_version = 887;
+static const char *   version_string = N_("Version 887");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -632,6 +632,7 @@ compute_GOWall_options (void)
   /* FIXME: Keep in sync with changes to gcc/flag-types.h:enum debug_info_type.  */
   if (write_symbols > VMS_AND_DWARF2_DEBUG)
     {
+      annobin_inform (INFORM_VERBOSE, "write_symbols = %d", write_symbols);
       ice ("unknown debug info type");
       val = 0;
     }
@@ -642,7 +643,10 @@ compute_GOWall_options (void)
     val |= (1 << 3);
 
   if (debug_info_level > DINFO_LEVEL_VERBOSE)
-    ice ("unknown debug info level");
+    {
+      annobin_inform (INFORM_VERBOSE, "debug_info_level = %d", debug_info_level);
+      ice ("unknown debug info level");
+    }
   else
     val |= (debug_info_level << 4);
 
@@ -2070,6 +2074,45 @@ plugin_init (struct plugin_name_args *    plugin_info,
     {
       annobin_inform (INFORM_VERBOSE, _("nothing to be done"));
       return 0;
+    }
+
+  // Almost everything of interest to annobin is held in the global_options
+  // structure.  Make sure that this structure has not changed in size between
+  // the time that this code was compiled and the time that the plugin is run.
+  Dl_info info = { 0 };
+  if (sizeof (plugin_info) == 4)
+    {
+      // We are running on a 32-bit host.
+      Elf32_Sym * extra = NULL;
+  
+      if (dladdr1 (& global_options, & info, (void **) & extra, RTLD_DL_SYMENT) == 0)
+	annobin_inform (INFORM_VERBOSE, "Failed to run dladdr1 on global_options");
+      else if (extra == NULL)
+	annobin_inform (INFORM_VERBOSE, "Failed to obtain extra information about global_options");
+      else if (sizeof (global_options) != extra->st_size)
+	{
+	  ice ("The size of the global_options structure has changed - please rebuild annobin");
+	  annobin_inform (INFORM_ALWAYS, "Build time size: %#x run time size: %#x (32-bit host)",
+			  sizeof (global_options), extra->st_size);
+	  return 1;
+	}
+    }
+  else
+    {
+      // We are running on a 64-bit host.
+      Elf64_Sym * extra = NULL;
+  
+      if (dladdr1 (& global_options, & info, (void **) & extra, RTLD_DL_SYMENT) == 0)
+	annobin_inform (INFORM_VERBOSE, "Failed to run dladdr1 on global_options");
+      else if (extra == NULL)
+	annobin_inform (INFORM_VERBOSE, "Failed to obtain extra information about global_options");
+      else if (sizeof (global_options) != extra->st_size)
+	{
+	  ice ("The size of the global_options structure has changed - please rebuild annobin");
+	  annobin_inform (INFORM_ALWAYS, "Build time size: %#x run time size: %#x (64-bit host)",
+			  sizeof (global_options), extra->st_size);
+	  return 1;
+	}
     }
 
   /* Record global compiler options.

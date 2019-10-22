@@ -38,14 +38,12 @@ void
 annobin_record_global_target_notes (const char * sec)
 {
   // annobin_is_64bit is computed from a flag bit inside aarch64_abi.
-  CHECK_ADDR_OF (aarch64_abi);
   if (!annobin_is_64bit)
     {
       ice ("AArch64: The annobin plugin thinks that it is compiling for a 32-bit target");
       return;
     }
 
-  CHECK_ADDR_OF (aarch64_tls_dialect);
   saved_tls_dialect = aarch64_tls_dialect;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
@@ -53,7 +51,6 @@ annobin_record_global_target_notes (const char * sec)
   annobin_inform (INFORM_VERBOSE, "AArch64: Recording global TLS dialect of %d", saved_tls_dialect);
 
 #ifdef aarch64_branch_protection_string
-  CHECK_ADDR_OF (aarch64_branch_protection_string);
   saved_branch_protection_string = aarch64_branch_protection_string;
 
   char buffer [128];

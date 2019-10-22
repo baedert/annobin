@@ -86,8 +86,6 @@ record_cet_note (const char * start, const char * end, int type, const char * se
 void
 annobin_record_global_target_notes (const char * sec)
 {
-  CHECK_ADDR_OF (ix86_isa_flags);
-
   /* Note - most, but not all, bits in the ix86_isa_flags variable
      are significant for purposes of ABI compatibility.  We do not
      bother to filter out any bits however, as we prefer to leave
@@ -99,7 +97,6 @@ annobin_record_global_target_notes (const char * sec)
   annobin_inform (INFORM_VERBOSE, "x86_64: Record global isa of %lx", global_x86_isa);
 
   
-  CHECK_ADDR_OF (ix86_force_align_arg_pointer);
   global_stack_realign = ix86_force_align_arg_pointer;
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
@@ -109,7 +106,6 @@ annobin_record_global_target_notes (const char * sec)
 
   
 #ifdef flag_cet
-  CHECK_ADDR_OF (flag_cet);
   global_cet = flag_cet;
   global_set_switch = flag_cet_switch;
   global_ibt = ix86_isa_flags2 & OPTION_MASK_ISA_IBT;

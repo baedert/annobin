@@ -81,49 +81,6 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 #define GNU_PROPERTY_NO_COPY_ON_PROTECTED	2
 #endif /* Copy of elf/common.h  */
 
-/* ------------------------------------------------------------------- */
-
-/* These two macros may seem to be redundant, but they are intented to
-   catch the case where the plugin was compiled for one version of gcc,
-   but then run attached to a slightly different (minor) version.  In
-   effect this is performing the equivalent of a libabigail check, but
-   just for one specific variable.  */
-
-#define CHECK_ADDR_OF(VAR)						\
-  do									\
-    {									\
-      static void * VAR ## _annobin_build_time_addr = & VAR;		\
-      volatile void * VAR ## _addr = & VAR;				\
-									\
-      if (VAR ## _addr != VAR ## _annobin_build_time_addr)		\
-	{								\
-	  annobin_inform (INFORM_VERBOSE, "Address of '" #VAR "' changed from %p to %p", \
-			  VAR ## _annobin_build_time_addr,		\
-			  VAR ## _addr);				\
-	  ice ("The annobin plugin was built for a different version of the compiler"); \
-	  return;							\
-	}								\
-    }									\
-  while (0)
-
-#define CHECK_OFFSET_OF(STRUCT,FIELD)					\
-  do									\
-    {									\
-      static   int FIELD ## _annobin_build_time_offset = offsetof (STRUCT, FIELD); \
-      volatile int FIELD ## _offset = offsetof (STRUCT, FIELD);		\
-									\
-      if (FIELD ## _offset != FIELD ## _annobin_build_time_offset)	\
-	{								\
-	  annobin_inform (INFORM_VERBOSE, "Offset of '" #FIELD "' changed from %d to %d"); \
-			  FIELD ## _annobin_build_time_offset,		\
-			  FIELD ## _offset);				\
-	  ice ("The annobin plugin was built for a different version of the compiler"); \
-	  return;							\
-	}								\
-    }									\
-  while (0)
-
-/* ------------------------------------------------------------------- */
 
 /* Called during plugin_init().  */
 extern void annobin_save_target_specific_information (void);

@@ -40,7 +40,6 @@ annobin_record_global_target_notes (const char * sec)
   if (!annobin_is_64bit)
     ice ("PowerPC: The annobin plugin thinks that it is compiling for a 32-bit target");
 
-  CHECK_ADDR_OF (rs6000_tls_size);
   saved_tls_size = rs6000_tls_size;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
