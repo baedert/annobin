@@ -329,6 +329,7 @@ included in the table below.
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
 * The CF Encoding::       Encoding Control Flow Protection
 * The ENUM Encoding::     Encoding the Size of Enumerations
+* The INSTRUMENT Encoding:: Encoding Instrumentation Options
 @end menu
 
 @c -----------------------------------------------------------------
@@ -487,6 +488,44 @@ The @option{-fshort-enums} option has been enabled.
 The @option{-fshort-enums} option has not been enabled.
 @end table
 
+@c -----------------------------------------------------------------
+@node The INSTRUMENT Encoding
+@section Encoding Instrumentation Options
+Records the enablement of various code instrumentation options.
+Note - this note is only produced if one or more of these options
+are enabled.
+
+The note encodes four values, separate by the forward slash (@var{/})
+character.  These values are:
+
+@table @code
+@item sanitization
+Enabled via a plethora of @option{-fsanitize=@dots{}} options these
+tell gcc to add extra code to help with various different types of
+error checking features.
+
+@item function instrumentation
+Enabled via gcc's @option{-finstrument-functions} option, this adds
+special function calls at the entry and exit point of every normal
+function.
+
+@item profiling
+Enabled via gcc's @option{-p} or @option{-pg} options, this adds
+instrumentation to the compiled code that generates output suitable
+for analysis via the @command{prof} or @command{gprof} programs.
+
+@item arc profiling
+Enabled via gcc's @option{-fprofile-arc} option, or one of the meta-
+profiling options, this option adds code to record how many times every
+branch and function call is executed.
+
+@end table
+
+Each value represents a setting of an internal gcc flag variable.  The
+exact meaning of the values is specific to gcc, but any non-zero
+number means that the feature has been enabled in some way.
+
+@c -----------------------------------------------------------------
 @c -----------------------------------------------------------------
 @node Annocheck
 @chapter Analysing an application's compilation.

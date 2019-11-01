@@ -31,8 +31,8 @@
    Also, keep in sync with the major_version and minor_version definitions
    in annocheck/annocheck.c.
    FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 887;
-static const char *   version_string = N_("Version 887");
+static unsigned int   annobin_version = 888;
+static const char *   version_string = N_("Version 888");
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
@@ -1526,6 +1526,36 @@ emit_global_notes (const char * suffix)
 			    NULL, NULL, OPEN, sec);
 
   record_frame_pointer_note (NULL, NULL, OPEN, sec);
+
+  /* Building code with profiling, instrumentation or sanitization enabled
+     can slow it down.  (cf PR 1753918).  Whilst this may be desireable
+     during development it is probably a bad idea when creating production
+     binaries.  So emit a note that can be detected and reported by annocheck.
+
+     NB/ Since this is not a security feature we do not emit a note if none
+     of these options are enabled.  This helps to minimize the size of the
+     annobin data.
+
+     FIXME: At the moment we do not check to see if any of these flags change
+     on a per-function basis.  */
+  if (flag_sanitize
+      || flag_instrument_function_entry_exit
+      || profile_flag
+      || profile_arc_flag)
+    {
+      char buffer[128];
+      unsigned int len = sprintf (buffer, "GA%cINSTRUMENT:%u/%u/%u/%u",
+				  GNU_BUILD_ATTRIBUTE_TYPE_STRING,
+				  flag_sanitize, flag_instrument_function_entry_exit,
+				  profile_flag, profile_arc_flag);
+      annobin_inform (INFORM_VERBOSE,
+		      "Instrumentation options enabled: sanitize: %u, function entry/exit: %u, profiling: %u, profile arcs: %u",
+		      flag_sanitize, flag_instrument_function_entry_exit,
+		      profile_flag, profile_arc_flag);
+
+      annobin_output_note (buffer, len + 1, true, "string: details of profiling enablement",
+			   NULL, NULL, 0, false, OPEN, sec);
+    }
 
   /* Record target specific notes.  */
   annobin_record_global_target_notes (sec);

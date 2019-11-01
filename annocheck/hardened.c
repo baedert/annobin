@@ -42,6 +42,7 @@ static bool        is_little_endian;
 static bool        debuginfo_file;
 static bool        compiled_code_seen;
 static bool        build_notes_seen;
+static bool        warned_about_instrumentation;
 static int         num_fails;
 static int         num_maybes;
 
@@ -60,6 +61,7 @@ static struct producer
 {
   enum tool     tool;
   unsigned int  version;
+  bool          warned;
 } producer;
 
 static hardened_note_data *  ranges = NULL;
@@ -215,8 +217,10 @@ start (annocheck_data * data)
   text_section_alignment = 0;
   compiled_code_seen = false;
   build_notes_seen = false;
+  warned_about_instrumentation = false;
   producer.tool = TOOL_UNKNOWN;
   producer.version = 0;
+  producer.warned = false;
 
   if (num_allocated_ranges)
     {
@@ -539,8 +543,13 @@ set_producer (annocheck_data *     data,
     {
       if (producer.version != version)
 	{
-	  einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
-		 data->filename, version, producer.version);
+	  if (! producer.warned)
+	    {
+	      einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
+		     data->filename, version, producer.version);
+	      producer.warned = true;
+	    }
+
 	  if (producer.version < version)
 	    producer.version = version;
 	}
@@ -548,12 +557,21 @@ set_producer (annocheck_data *     data,
   else if ((producer.tool == TOOL_GAS && tool == TOOL_GCC)
 	   || (producer.tool == TOOL_GCC && tool == TOOL_GAS))
     {
-      info (data, "Mixed assembler and GCC detected - treating as pure GCC");
+      if (! producer.warned)
+	{
+	  info (data, "Mixed assembler and GCC detected - treating as pure GCC");
+	  producer.warned = true;
+	}
+
       producer.tool = TOOL_GCC;
     }
   else if (producer.tool != TOOL_MIXED)
     {
-      warn (data, "This binary was built by more than one tool");
+      if (! producer.warned)
+	{
+	  warn (data, "This binary was built by more than one tool");
+	  producer.warned = true;
+	}
 
       producer.tool = TOOL_MIXED;
       producer.version = 0;
@@ -1232,6 +1250,49 @@ walk_build_notes (annocheck_data *     data,
 	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
       break;
 
+    case 'I':
+      if (const_strneq (attr, "INSTRUMENT:"))
+	{
+	  if (! warned_about_instrumentation)
+	    {
+	      report_s (INFO, "%s: WARN: (%s): Instrumentation enabled - this is probably a mistake for production binaries",
+			data, sec, note_data, prefer_func_name, NULL);
+	      warned_about_instrumentation = false;
+	      if (BE_VERBOSE)
+		{
+		  unsigned int sanitize, instrument, profile, arcs;
+
+		  attr += strlen ("INSTRUMENT:");
+		  if (sscanf (attr, "%u/%u/%u/%u", & sanitize, & instrument, & profile, & arcs) != 4)
+		    {
+		      report_s (VERBOSE, "%s: ICE:  (%s): Unable to extract details from instrumentation note",
+				data, sec, note_data, prefer_func_name, NULL);
+		    }
+		  else
+		    {
+		      einfo (VERBOSE, "%s: info: (%s):  Details: -fsanitize=...: %s",
+			     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
+			     sanitize ? "enabled" : "disabled");
+		      einfo (VERBOSE, "%s: info: (%s):  Details: -finstrument-functions: %s",
+			     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
+			     instrument ? "enabled" : "disabled");
+		      einfo (VERBOSE, "%s: info: (%s):  Details: -p and/or -pg: %s",
+			     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
+			     profile ? "enabled" : "disabled");
+		      einfo (VERBOSE, "%s: info: (%s):  Details: -fprofile-arcs: %s",
+			     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
+			     arcs ? "enabled" : "disabled");
+		    }
+		}
+	      else
+		report_s (INFO, "%s: info: (%s):  Run with -v for more information",
+			  data, sec, note_data, prefer_func_name, NULL);
+	    }
+	}
+      else
+	einfo (VERBOSE2, "Unsupported annobin note '%s' - ignored", attr);
+      break;
+      
     case 's':
       if (streq (attr, "stack_clash"))
 	{
@@ -2399,7 +2460,7 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
       if (! built_by_gcc ())
 	skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a non-GCC tool, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
       else
-	fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled.");
+	fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled");
     }
   else
     pass (data, "GNU Property note not needed");

@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# Copyright (c) 2019 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+
+# Test that a warning is issued for instrumented code
+
+rm -f hello.o property-note.o hello3.o property-note-test.exe property-note-test.out
+
+GAS=as
+GCC=gcc
+ANNOCHECK=../annocheck/annocheck
+PLUGIN=../plugin/.libs/annobin.so
+
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
+OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fPIE -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection -p"
+
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $srcdir/hello_hard.c 
+if [ $? != 0 ];
+then
+    echo "Failed to compile :-("
+    exit 1
+fi
+
+$GCC -pie hello_hard.o -o instrumentation-test.exe -Wl,--defsym,big_stack=0 -Wl,-z,now
+
+$ANNOCHECK instrumentation-test.exe > instrumentation-test.out
+
+cat instrumentation-test.out
+
+grep --silent "Instrumentation enabled" instrumentation-test.out

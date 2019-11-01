@@ -477,7 +477,8 @@ TESTS = compile-test \
       function-sections-test \
       assembler-gap-test \
       dynamic-notes-test \
-      section-size-test 
+      instrumentation-test \
+      section-size-test
 
 XFAIL_TESTS = hardening-fail-test \
       missing-notes-test \
@@ -730,6 +731,13 @@ assembler-gap-test.log: assembler-gap-test
 dynamic-notes-test.log: dynamic-notes-test
 	@p='dynamic-notes-test'; \
 	b='dynamic-notes-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+instrumentation-test.log: instrumentation-test
+	@p='instrumentation-test'; \
+	b='instrumentation-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

@@ -15,7 +15,8 @@ TESTS=compile-test \
       function-sections-test \
       assembler-gap-test \
       dynamic-notes-test \
-      section-size-test 
+      instrumentation-test \
+      section-size-test
 
 XFAIL_TESTS=hardening-fail-test \
       missing-notes-test \

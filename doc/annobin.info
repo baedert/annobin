@@ -264,6 +264,7 @@ the table below.
 * The GOW Encoding::      Encoding Optimization and Debugging Levels
 * The CF Encoding::       Encoding Control Flow Protection
 * The ENUM Encoding::     Encoding the Size of Enumerations
+* The INSTRUMENT Encoding:: Encoding Instrumentation Options
 
 
 File: annobin.info,  Node: The Version Encoding,  Next: The STACK Encoding,  Up: Examining
@@ -407,7 +408,7 @@ be confused with a NUL-byte to indicate the end of a string), the value
 stored is biased by 1.
 
 
-File: annobin.info,  Node: The ENUM Encoding,  Prev: The CF Encoding,  Up: Examining
+File: annobin.info,  Node: The ENUM Encoding,  Next: The INSTRUMENT Encoding,  Prev: The CF Encoding,  Up: Examining
 
 3.6 Encoding the Size of Enumerations
 =====================================
@@ -419,6 +420,42 @@ Record the value of the '-fshort-enums' option.  Possible values are:
 
 'false'
      The '-fshort-enums' option has not been enabled.
+
+
+File: annobin.info,  Node: The INSTRUMENT Encoding,  Prev: The ENUM Encoding,  Up: Examining
+
+3.7 Encoding Instrumentation Options
+====================================
+
+Records the enablement of various code instrumentation options.  Note -
+this note is only produced if one or more of these options are enabled.
+
+   The note encodes four values, separate by the forward slash (/)
+character.  These values are:
+
+'sanitization'
+     Enabled via a plethora of '-fsanitize=...' options these tell gcc
+     to add extra code to help with various different types of error
+     checking features.
+
+'function instrumentation'
+     Enabled via gcc's '-finstrument-functions' option, this adds
+     special function calls at the entry and exit point of every normal
+     function.
+
+'profiling'
+     Enabled via gcc's '-p' or '-pg' options, this adds instrumentation
+     to the compiled code that generates output suitable for analysis
+     via the 'prof' or 'gprof' programs.
+
+'arc profiling'
+     Enabled via gcc's '-fprofile-arc' option, or one of the meta-
+     profiling options, this option adds code to record how many times
+     every branch and function call is executed.
+
+   Each value represents a setting of an internal gcc flag variable.
+The exact meaning of the values is specific to gcc, but any non-zero
+number means that the feature has been enabled in some way.
 
 
 File: annobin.info,  Node: Annocheck,  Next: Legacy Scripts,  Prev: Examining,  Up: Top
@@ -1712,23 +1749,24 @@ Node: Top705
 Node: Introduction1681
 Node: Invocation3764
 Node: Examining9384
-Node: The Version Encoding12055
-Node: The STACK Encoding12446
-Node: The PIC Encoding13044
-Node: The GOW Encoding13672
-Node: The CF Encoding15222
-Node: The ENUM Encoding16294
-Node: Annocheck16651
-Node: Built-By19177
-Node: Hardened20707
-Node: Notes25738
-Node: Section-Size26382
-Node: Timing28536
-Node: Legacy Scripts29183
-Node: Who Built Me29950
-Node: ABI Checking32710
-Node: Hardening Checks34824
-Node: Checking Archives38910
-Node: GNU FDL41332
+Node: The Version Encoding12116
+Node: The STACK Encoding12507
+Node: The PIC Encoding13105
+Node: The GOW Encoding13733
+Node: The CF Encoding15283
+Node: The ENUM Encoding16355
+Node: The INSTRUMENT Encoding16744
+Node: Annocheck18118
+Node: Built-By20644
+Node: Hardened22174
+Node: Notes27205
+Node: Section-Size27849
+Node: Timing30003
+Node: Legacy Scripts30650
+Node: Who Built Me31417
+Node: ABI Checking34177
+Node: Hardening Checks36291
+Node: Checking Archives40377
+Node: GNU FDL42799
 
 End Tag Table
