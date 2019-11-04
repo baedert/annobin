@@ -1538,19 +1538,31 @@ emit_global_notes (const char * suffix)
 
      FIXME: At the moment we do not check to see if any of these flags change
      on a per-function basis.  */
-  if (flag_sanitize
-      || flag_instrument_function_entry_exit
+  if (flag_instrument_function_entry_exit
+#ifdef flag_sanitize
+      || flag_sanitize
+#endif
       || profile_flag
       || profile_arc_flag)
     {
       char buffer[128];
       unsigned int len = sprintf (buffer, "GA%cINSTRUMENT:%u/%u/%u/%u",
 				  GNU_BUILD_ATTRIBUTE_TYPE_STRING,
-				  flag_sanitize, flag_instrument_function_entry_exit,
+#ifdef flag_sanitize
+				  flag_sanitize,
+#else
+				  0,
+#endif
+				  flag_instrument_function_entry_exit,
 				  profile_flag, profile_arc_flag);
       annobin_inform (INFORM_VERBOSE,
 		      "Instrumentation options enabled: sanitize: %u, function entry/exit: %u, profiling: %u, profile arcs: %u",
-		      flag_sanitize, flag_instrument_function_entry_exit,
+#ifdef flag_sanitize
+		      flag_sanitize,
+#else
+		      0,
+#endif
+		      flag_instrument_function_entry_exit,
 		      profile_flag, profile_arc_flag);
 
       annobin_output_note (buffer, len + 1, true, "string: details of profiling enablement",
