@@ -34,39 +34,39 @@ namespace
   static bool be_verbose = false;
 
   static void
+  ainfo (const char * format, va_list args)
+  {
+    fflush (stdout);
+
+    fprintf (stderr, "Annobin plugin for clang: ");
+
+    vfprintf (stderr, format, args);
+
+    putc ('\n', stderr);
+  }
+  
+  static void
   inform (const char * format, ...)
   {
     va_list args;
 
-    fflush (stdout);
-
-    fprintf (stderr, "Annobin plugin: ");
-
     va_start (args, format);
-    vfprintf (stderr, format, args);
+    ainfo (format, args);
     va_end (args);
-
-    putc ('\n', stderr);
   }
 
   // FIXME: Find a C++ way of encoding this function.
   static void
   verbose (const char * format, ...)
   {
-    va_list args;
-
     if (! be_verbose)
       return;
 
-    fflush (stdout);
-
-    fprintf (stderr, "Annobin plugin: ");
+    va_list args;
 
     va_start (args, format);
-    vfprintf (stderr, format, args);
+    ainfo (format, args);
     va_end (args);
-
-    putc ('\n', stderr);
   }
 
   class AnnobinConsumer : public ASTConsumer
@@ -209,7 +209,7 @@ namespace
 	  else if (args[i] == "enable")
 	    enabled = true;
 	  else if (args[i] == "version")
-	    inform ("plugin version %s", version_string);
+	    inform ("version %s", version_string);
 	  else if (args[i] == "verbose")
 	    be_verbose = true;
 	  else

@@ -23,6 +23,8 @@ annobin.so: annobin.cpp
 
 run-annobin: annobin.so
 	clang++ -fplugin=./annobin.so \
+   -D_FORTIFY_SOURCE=2 -O2 \
+   -Xclang -plugin-arg-annobin -Xclang verbose \
    -Xclang -plugin-arg-annobin -Xclang version \
    --compile annobin.cpp \
    -mtbm
