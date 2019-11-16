@@ -32,23 +32,9 @@ static bool disabled = false;
 /* Can be changed by a command line option.  */
 static bool ignore_gaps = false;
 
-/* These are initialised on a per-input-file basis by start().  */
-static Elf64_Half  e_type;
-static Elf64_Half  e_machine;
-static Elf64_Addr  e_entry;
-static ulong       text_section_name_index;
-static ulong       text_section_alignment;
-static bool        is_little_endian;
-static bool        debuginfo_file;
-static bool        compiled_code_seen;
-static bool        build_notes_seen;
-static bool        warned_about_instrumentation;
-static int         num_fails;
-static int         num_maybes;
-
 enum tool
 {
-  TOOL_UNKNOWN,
+  TOOL_UNKNOWN = 0,
   TOOL_MIXED,
   TOOL_GCC,
   TOOL_GAS,
@@ -57,12 +43,34 @@ enum tool
   TOOL_RUST
 };
   
-static struct producer
+/* The contents of this structure are used on a per-input-file basis.
+   The fields are initialised by start().  */
+static struct per_file
 {
+  Elf64_Half  e_type;
+  Elf64_Half  e_machine;
+  Elf64_Addr  e_entry;
+  ulong       text_section_name_index;
+  ulong       text_section_alignment;
+  bool        is_little_endian;
+  bool        debuginfo_file;
+  bool        compiled_code_seen;
+  bool        build_notes_seen;
+  bool        warned_about_instrumentation;
+  bool        warned_version_mismatch;
+  int         num_fails;
+  int         num_maybes;
+  unsigned    anno_major;
+  unsigned    anno_minor;
+  unsigned    anno_rel;
+  unsigned    run_major;
+  unsigned    run_minor;
+  unsigned    run_rel;
+
   enum tool     tool;
   unsigned int  version;
   bool          warned;
-} producer;
+} per_file;
 
 static hardened_note_data *  ranges = NULL;
 static unsigned              num_allocated_ranges = 0;
@@ -175,13 +183,13 @@ static test tests [TEST_MAX] =
 static inline bool
 built_by_compiler (void)
 {
-  return producer.tool == TOOL_GCC || producer.tool == TOOL_CLANG;
+  return per_file.tool == TOOL_GCC || per_file.tool == TOOL_CLANG;
 }
 
 static inline bool
 built_by_gcc (void)
 {
-  return producer.tool == TOOL_GCC;
+  return per_file.tool == TOOL_GCC;
 }
 
 static void
@@ -212,15 +220,8 @@ start (annocheck_data * data)
     }
 
   /* Initialise other per-file variables.  */
-  debuginfo_file = false;
-  text_section_name_index = -1;
-  text_section_alignment = 0;
-  compiled_code_seen = false;
-  build_notes_seen = false;
-  warned_about_instrumentation = false;
-  producer.tool = TOOL_UNKNOWN;
-  producer.version = 0;
-  producer.warned = false;
+  memset (& per_file, 0, sizeof per_file);
+  per_file.text_section_name_index = -1;
 
   if (num_allocated_ranges)
     {
@@ -229,31 +230,28 @@ start (annocheck_data * data)
       next_free_range = num_allocated_ranges = 0;
     }
 
-  num_fails = 0;
-  num_maybes = 0;
-
   if (data->is_32bit)
     {
       Elf32_Ehdr * hdr = elf32_getehdr (data->elf);
 
-      e_type = hdr->e_type;
-      e_machine = hdr->e_machine;
-      e_entry = hdr->e_entry;
-      is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
+      per_file.e_type = hdr->e_type;
+      per_file.e_machine = hdr->e_machine;
+      per_file.e_entry = hdr->e_entry;
+      per_file.is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
     }
   else
     {
       Elf64_Ehdr * hdr = elf64_getehdr (data->elf);
 
-      e_type = hdr->e_type;
-      e_machine = hdr->e_machine;
-      e_entry = hdr->e_entry;
-      is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
+      per_file.e_type = hdr->e_type;
+      per_file.e_machine = hdr->e_machine;
+      per_file.e_entry = hdr->e_entry;
+      per_file.is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
     }
 
   /* We do not expect to find ET_EXEC binaries.  These days all binaries
      should be ET_DYN, even executable programs.  */
-  if (e_type == ET_EXEC && tests[TEST_PIE].enabled)
+  if (per_file.e_type == ET_EXEC && tests[TEST_PIE].enabled)
     tests[TEST_PIE].num_fail ++;
 
   return true;
@@ -268,20 +266,20 @@ interesting_sec (annocheck_data *     data,
 
   /* .dwz files have a .gdb_index section.  */
   if (streq (sec->secname, ".gdb_index"))
-    debuginfo_file = true;
+    per_file.debuginfo_file = true;
 
   if (streq (sec->secname, ".text"))
     {
       /* Separate debuginfo files have a .text section with a non-zero
 	 size but no contents!  */
       if (sec->shdr.sh_type == SHT_NOBITS && sec->shdr.sh_size > 0)
-	debuginfo_file = true;
+	per_file.debuginfo_file = true;
 
-      text_section_name_index = sec->shdr.sh_name;
-      text_section_alignment = sec->shdr.sh_addralign;
+      per_file.text_section_name_index = sec->shdr.sh_name;
+      per_file.text_section_alignment = sec->shdr.sh_addralign;
       return false; /* We do not actually need to scan the contents of the .text section.  */
     }
-  else if (debuginfo_file)
+  else if (per_file.debuginfo_file)
     return false;
 
   /* If the file has a stack section then check its permissions.  */
@@ -533,48 +531,48 @@ set_producer (annocheck_data *     data,
 {
   einfo (VERBOSE2, "info: Record producer %s version %u source %s", get_producer_name (tool), version, source);
 
-  if (producer.tool == TOOL_UNKNOWN)
+  if (per_file.tool == TOOL_UNKNOWN)
     {
-      producer.tool = tool;
-      producer.version = version;
+      per_file.tool = tool;
+      per_file.version = version;
       einfo (VERBOSE, "%s: info: Set binary producer to %s version %u", data->filename, get_producer_name (tool), version);
     }
-  else if (producer.tool == tool)
+  else if (per_file.tool == tool)
     {
-      if (producer.version != version)
+      if (per_file.version != version)
 	{
-	  if (! producer.warned)
+	  if (! per_file.warned)
 	    {
 	      einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
-		     data->filename, version, producer.version);
-	      producer.warned = true;
+		     data->filename, version, per_file.version);
+	      per_file.warned = true;
 	    }
 
-	  if (producer.version < version)
-	    producer.version = version;
+	  if (per_file.version < version)
+	    per_file.version = version;
 	}
     }
-  else if ((producer.tool == TOOL_GAS && tool == TOOL_GCC)
-	   || (producer.tool == TOOL_GCC && tool == TOOL_GAS))
+  else if ((per_file.tool == TOOL_GAS && tool == TOOL_GCC)
+	   || (per_file.tool == TOOL_GCC && tool == TOOL_GAS))
     {
-      if (! producer.warned)
+      if (! per_file.warned)
 	{
 	  info (data, "Mixed assembler and GCC detected - treating as pure GCC");
-	  producer.warned = true;
+	  per_file.warned = true;
 	}
 
-      producer.tool = TOOL_GCC;
+      per_file.tool = TOOL_GCC;
     }
-  else if (producer.tool != TOOL_MIXED)
+  else if (per_file.tool != TOOL_MIXED)
     {
-      if (! producer.warned)
+      if (! per_file.warned)
 	{
 	  warn (data, "This binary was built by more than one tool");
-	  producer.warned = true;
+	  per_file.warned = true;
 	}
 
-      producer.tool = TOOL_MIXED;
-      producer.version = 0;
+      per_file.tool = TOOL_MIXED;
+      per_file.version = 0;
     }
 }
 
@@ -619,7 +617,7 @@ walk_build_notes (annocheck_data *     data,
 	  int i;
 	  int shift;
 
-	  if (is_little_endian)
+	  if (per_file.is_little_endian)
 	    {
 	      for (shift = i = 0; i < 8; i++)
 		{
@@ -648,7 +646,7 @@ walk_build_notes (annocheck_data *     data,
 	}
       else if (note->n_descsz == 8)
 	{
-	  if (is_little_endian)
+	  if (per_file.is_little_endian)
 	    {
 	      start = descdata[0] | (descdata[1] << 8) | (descdata[2] << 16) | (descdata[3] << 24);
 	      end   = descdata[4] | (descdata[5] << 8) | (descdata[6] << 16) | (descdata[7] << 24);
@@ -668,7 +666,7 @@ walk_build_notes (annocheck_data *     data,
 
       if (start > end)
 	{
-	  if (e_machine == EM_PPC64 && (start - end) <= 2)
+	  if (per_file.e_machine == EM_PPC64 && (start - end) <= 2)
 	    /* On the PPC64, start symbols are biased by 2, but end symbols are not...  */
 	    start = end;
 	  else
@@ -682,7 +680,7 @@ walk_build_notes (annocheck_data *     data,
       note_data->start = start;
       note_data->end   = end;
 
-      if (e_type != ET_REL && ! ignore_gaps)
+      if (per_file.e_type != ET_REL && ! ignore_gaps)
 	{
 	  /* Notes can occur in any order and may be spread across multiple note
 	     sections.  So we record the range covered here and then check for
@@ -692,7 +690,7 @@ walk_build_notes (annocheck_data *     data,
     }
 
   /* We skip notes for empty ranges unless we are dealing with unrelocated object files.  */
-  if (e_type != ET_REL && note_data->start == note_data->end)
+  if (per_file.e_type != ET_REL && note_data->start == note_data->end)
     return true;
 
   const char *  namedata = sec->data->d_buf + name_offset;
@@ -765,7 +763,7 @@ walk_build_notes (annocheck_data *     data,
 	einfo (WARN, "%s: This checker only supports version %d of the Watermark protocol.  The data in the notes uses version %d",
 	       data->filename, SPEC_VERSION, * attr - '0');
 
-      /* Check the note producer.  */
+      /* Check the note per_file.  */
       ++ attr;
       switch (* attr)
 	{
@@ -784,11 +782,11 @@ walk_build_notes (annocheck_data *     data,
 	     to assembler or linker generated code).  This means that we
 	     can expect to see notes for -D_FROTIFY_SOURCE and -D_GLIBCXX_ASSERTIONS,
 	     and if they are missing, we can complain.  We do not use
-	     the value of producer.tool because if the assembler source was
+	     the value of per_file.tool because if the assembler source was
 	     built using gcc then it will have debug information associated
 	     with it, with a DW_AT_PRODUCER string that includes the *gcc*
 	     version number.  */
-	  compiled_code_seen = true;
+	  per_file.compiled_code_seen = true;
 	  break;
 	default:
 	  warn (data, "Unrecognised annobin note producer");
@@ -807,39 +805,90 @@ walk_build_notes (annocheck_data *     data,
 	     one for the compiler that built the annobin plugin and one for the
 	     compiler that ran the annobin plugin.  Look for these here.  Their
 	     format is "annobin gcc X.Y.Z DATE" and "running gcc X.Y.Z DATE".  */
-	  static unsigned int run_major, run_minor, run_rel;
-	  if (sscanf (attr + 1, "running gcc %u.%u.%u", & run_major, & run_minor, & run_rel) == 3)
+	  unsigned major, minor, rel;
+	  if (sscanf (attr + 1, "running gcc %u.%u.%u", & major, & minor, & rel) == 3)
 	    {
-	      einfo (VERBOSE2, "info: Annobin plugin ran on gcc version %u.%u.%u",
-		     run_major, run_minor, run_rel);
-	      set_producer (data, TOOL_GCC, run_major, "GNU Build Attribute Tool");
-	      break;
-	    }
-
-	  unsigned int anno_major, anno_minor, anno_rel;
-	  if (sscanf (attr + 1, "annobin gcc %u.%u.%u", & anno_major, & anno_minor, & anno_rel) == 3)
-	    {
-	      einfo (VERBOSE2, "%s: info: Annobin plugin built by gcc version %u.%u.%u",
-		     data->filename, anno_major, anno_minor, anno_rel);
-
-	      /* Verify that the versions are compatible.  */
-	      if (run_major != 0)
+	      einfo (VERBOSE2, "%s: info: Annobin plugin ran on gcc version %u.%u.%u",
+		     data->filename, major, minor, rel);
+	      if (per_file.run_major == 0)
 		{
-		  if (anno_major != run_major)
-		    einfo (INFO, "%s: ICE:  Annobin plugin was built by gcc version %u but run on gcc version %u",
-			   data->filename, anno_major, run_major);
-		  else if (anno_minor != run_minor || anno_rel != run_rel)
+		  per_file.run_major = major;
+		  set_producer (data, TOOL_GCC, major, "GNU Build Attribute Tool");
+		}
+	      else if (per_file.run_major != major)
+		{
+		  einfo (INFO, "%s: WARN: this file was built by more than one version of gcc (%u and %u)",
+			 data->filename, per_file.run_major, major);
+		  if (per_file.run_major < major)
+		    per_file.run_major = major;
+		}
+
+	      if (per_file.anno_major != 0 && per_file.anno_major != per_file.run_major)
+		{
+		  if (! per_file.warned_version_mismatch)
 		    {
-		      einfo (VERBOSE, "%s: warn: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
-			     data->filename, anno_major, anno_minor, anno_rel,
-			     run_major, run_minor, run_rel);
-		      einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this version discrepancy.",
-			     data->filename);
+		      einfo (INFO, "%s: ICE:  Annobin plugin was built by gcc version %u but run on gcc version %u",
+			     data->filename, per_file.anno_major, per_file.run_major);
+		      per_file.warned_version_mismatch = true;
 		    }
+		}
+
+	      per_file.run_minor = minor;
+	      per_file.run_rel = rel;
+	      if ((per_file.anno_minor != 0 && per_file.anno_minor != minor)
+		  || (per_file.anno_rel != 0 && per_file.anno_rel != rel))
+		{
+		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
+			 data->filename, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
+			 per_file.run_major, per_file.run_minor, per_file.run_rel);
+		  einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
+			 data->filename);
 		}
 	      break;
 	    }
-	  
+
+	  if (sscanf (attr + 1, "annobin gcc %u.%u.%u", & major, & minor, & rel) == 3)
+	    {
+	      einfo (VERBOSE, "%s: info: Annobin plugin built by gcc version %u.%u.%u",
+		     data->filename, major, minor, rel);
+
+	      if (per_file.anno_major == 0)
+		{
+		  per_file.anno_major = major;
+		}
+	      else if (per_file.anno_major != major)
+		{
+		  einfo (INFO, "%s: WARN: notes produced by annobins compiled for more than one version of gcc (%u vs %u)",
+			 data->filename, per_file.anno_major, major);
+		  if (per_file.anno_major < major)
+		    per_file.anno_major = major;
+		}
+
+	      if (per_file.run_major != 0 && per_file.run_major != per_file.anno_major)
+		{
+		  if (! per_file.warned_version_mismatch)
+		    {
+		      einfo (INFO, "%s: ICE:  Annobin plugin was built by gcc version %u but run on gcc version %u",
+			     data->filename, per_file.anno_major, per_file.run_major);
+		      per_file.warned_version_mismatch = true;
+		    }
+		}
+
+	      per_file.anno_minor = minor;
+	      per_file.anno_rel = rel;
+	      if ((per_file.run_minor != 0 && per_file.run_minor != minor)
+		  || (per_file.run_rel != 0   && per_file.run_rel != rel))
+		{
+		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
+			 data->filename, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
+			 per_file.run_major, per_file.run_minor, per_file.run_rel);
+		  einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
+			 data->filename);
+		}
+
+	      break;
+	    }
+
 	  /* Otherwise look for the normal BUILD_ATTRIBUTE_TOOL string.  */
 	  const char * gcc = strstr (attr + 1, "gcc");
 
@@ -861,7 +910,7 @@ walk_build_notes (annocheck_data *     data,
 
     case GNU_BUILD_ATTRIBUTE_PIC:
       if (value < 3
-	  && (value < 1 || e_type == ET_EXEC)
+	  && (value < 1 || per_file.e_type == ET_EXEC)
 	  && skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
 	break;
 
@@ -884,7 +933,7 @@ walk_build_notes (annocheck_data *     data,
 	case 1:
 	case 2:
 	  /* Compiled wth -fpic not -fpie.  */
-	  if (e_type == ET_EXEC)
+	  if (per_file.e_type == ET_EXEC)
 	    {
 #if 0 /* Suppressed because ET_EXEC will already generate a failure...  */
 	      /* Building an executable with -fPIC rather than -fPIE is a bad thing
@@ -993,7 +1042,7 @@ walk_build_notes (annocheck_data *     data,
     case 'b':
       if (const_strneq (attr, "branch_protection:"))
 	{
-	  if (e_machine != EM_AARCH64)
+	  if (per_file.e_machine != EM_AARCH64)
 	    break;
 
 	  attr += strlen ("branch_protection:");
@@ -1046,7 +1095,7 @@ walk_build_notes (annocheck_data *     data,
     case 'c':
       if (streq (attr, "cf_protection"))
 	{
-	  if (e_machine != EM_386 && e_machine != EM_X86_64)
+	  if (per_file.e_machine != EM_386 && per_file.e_machine != EM_X86_64)
 	    break;
 
 	  if (value != 4 && value != 8
@@ -1259,11 +1308,11 @@ walk_build_notes (annocheck_data *     data,
     case 'I':
       if (const_strneq (attr, "INSTRUMENT:"))
 	{
-	  if (! warned_about_instrumentation)
+	  if (! per_file.warned_about_instrumentation)
 	    {
 	      report_s (INFO, "%s: WARN: (%s): Instrumentation enabled - this is probably a mistake for production binaries",
 			data, sec, note_data, prefer_func_name, NULL);
-	      warned_about_instrumentation = false;
+	      per_file.warned_about_instrumentation = false;
 
 	      if (BE_VERBOSE)
 		{
@@ -1303,7 +1352,7 @@ walk_build_notes (annocheck_data *     data,
     case 's':
       if (streq (attr, "stack_clash"))
 	{
-	  if (e_machine == EM_ARM)
+	  if (per_file.e_machine == EM_ARM)
 	    break;
 
 	  if (value != 1
@@ -1333,7 +1382,7 @@ walk_build_notes (annocheck_data *     data,
 	}
       else if (streq (attr, "stack_realign"))
 	{
-	  if (e_machine != EM_386)
+	  if (per_file.e_machine != EM_386)
 	    break;
 
 	  if (value != 2
@@ -1403,7 +1452,7 @@ walk_property_notes (annocheck_data *     data,
     }
   else
     {
-      if (e_type == ET_EXEC || e_type == ET_DYN)
+      if (per_file.e_type == ET_EXEC || per_file.e_type == ET_DYN)
 	{
 	  /* More than one note in an executable is an error.  */
 	  if (tests[TEST_PROPERTY_NOTE].num_pass)
@@ -1439,11 +1488,11 @@ check_note_section (annocheck_data *    data,
       hard_data.start = 0;
       hard_data.end = 0;
 
-      build_notes_seen = true;
+      per_file.build_notes_seen = true;
       return annocheck_walk_notes (data, sec, walk_build_notes, (void *) & hard_data);
     }
 
-  if (e_machine == EM_X86_64 && streq (sec->secname, ".note.gnu.property"))
+  if (per_file.e_machine == EM_X86_64 && streq (sec->secname, ".note.gnu.property"))
     {
       return annocheck_walk_notes (data, sec, walk_property_notes, NULL);
     }
@@ -1676,17 +1725,17 @@ interesting_seg (annocheck_data *    data,
       if (skip_check (TEST_PROPERTY_NOTE, NULL))
 	break;
       /* We want to examine the note segments on x86_64 binaries.  */
-      return (e_machine == EM_X86_64);
+      return (per_file.e_machine == EM_X86_64);
 
     case PT_LOAD:
       /* If we are checking the entry point instruction then we need to load
 	 the segment.  We check segments rather than sections because executables
 	 do not have to have sections.  */
-      if ((e_type == ET_EXEC || e_type == ET_DYN)
-	  && (e_machine == EM_386 || e_machine == EM_X86_64)
+      if ((per_file.e_type == ET_EXEC || per_file.e_type == ET_DYN)
+	  && (per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64)
 	  && seg->phdr->p_memsz > 0
-	  && seg->phdr->p_vaddr <= e_entry
-	  && seg->phdr->p_vaddr + seg->phdr->p_memsz > e_entry
+	  && seg->phdr->p_vaddr <= per_file.e_entry
+	  && seg->phdr->p_vaddr + seg->phdr->p_memsz > per_file.e_entry
 	  && ! skip_check (TEST_ENTRY, NULL))
 	return true;
       break;
@@ -1704,7 +1753,7 @@ check_seg (annocheck_data *    data,
 {
   if (seg->phdr->p_type == PT_LOAD)
     {
-      Elf64_Addr entry_point = e_entry - seg->phdr->p_vaddr;
+      Elf64_Addr entry_point = per_file.e_entry - seg->phdr->p_vaddr;
 
       /* We are checking the entry point instruction.  We should
 	 only have reached this point if the requirements for the
@@ -1713,7 +1762,7 @@ check_seg (annocheck_data *    data,
       assert (entry_point + 3 < seg->data->d_size);
       memcpy (entry_bytes, seg->data->d_buf + entry_point, sizeof entry_bytes);
       
-      if (e_machine == EM_386)
+      if (per_file.e_machine == EM_386)
 	{
 	  /* Look for ENDBR32: 0xf3 0x0f 0x1e 0xfb. */
 	  if (   entry_bytes[0] == 0xf3
@@ -1724,7 +1773,7 @@ check_seg (annocheck_data *    data,
 	  else
 	    tests[TEST_ENTRY].num_fail ++;
 	}
-      else /* e_machine == EM_X86_64 */
+      else /* per_file.e_machine == EM_X86_64 */
 	{
 	  /* Look for ENDBR64: 0xf3 0x0f 0x1e 0xfa.  */
 	  if (   entry_bytes[0] == 0xf3
@@ -1739,7 +1788,7 @@ check_seg (annocheck_data *    data,
       return true;
     }
 
-  if (e_machine != EM_X86_64)
+  if (per_file.e_machine != EM_X86_64)
     return true;
 
   /* FIXME: Only run these checks if the note section is missing ??  */
@@ -1846,7 +1895,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
     {
       /* FIXME: This can happen for object files because the DWARF data
 	 has not been relocated.  Find out how to handle this using libdwarf.  */
-      if (e_type == ET_REL)
+      if (per_file.e_type == ET_REL)
 	warn (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
       else
 	warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
@@ -1854,7 +1903,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
       return true;
     }
 
-  if (madeby != TOOL_GCC && producer.tool == TOOL_UNKNOWN)
+  if (madeby != TOOL_GCC && per_file.tool == TOOL_UNKNOWN)
     info (data, "Discovered non-gcc code producer, skipping gcc specific checks");
 
   set_producer (data, madeby, version, "DW_AT_producer");
@@ -1930,7 +1979,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 		}
 	    }
 
-	  if ((e_machine == EM_386 || e_machine == EM_X86_64)
+	  if ((per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64)
 	      && ! skip_check (TEST_CF_PROTECTION, NULL))
 	    {
 	      if (strstr (string, "-fcf-protection"))
@@ -1960,14 +2009,14 @@ static void
 fail (annocheck_data * data, const char * message)
 {
   einfo (INFO, "%s: FAIL: %s", data->filename, message);
-  ++ num_fails;
+  ++ per_file.num_fails;
 }
 
 static void
 maybe (annocheck_data * data, const char * message)
 {
   einfo (INFO, "%s: MAYB: %s", data->filename, message);
-  ++ num_maybes;
+  ++ per_file.num_maybes;
 }
 
 static void
@@ -2010,7 +2059,7 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
      check that they are filled with NOP instructions.  But that is
      overkill at the moment.  Plus at the moment the default x86_64
      linker map does not appear to fill gaps with NOPs... */
-  if ((gap->end - gap->start) < text_section_alignment)
+  if ((gap->end - gap->start) < per_file.text_section_alignment)
     {
       einfo (VERBOSE2, "gap ignored - smaller than text section alignment");
       return true;
@@ -2089,9 +2138,9 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
 
      We may not have the symbol table available however so check to see if the gap ends at the
      end of the .text section.  */
-  if (e_machine == EM_PPC64
+  if (per_file.e_machine == EM_PPC64
       && align (gap->end, 8) == align (scn_end, 8)
-      && scn_name == text_section_name_index)
+      && scn_name == per_file.text_section_name_index)
     {
       const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap->start + 8, gap->end - 8, false);
 
@@ -2163,13 +2212,13 @@ skip_gap_sym (const char * sym)
   if (skip_check (TEST_MAX, sym))
     return true;
 
-  if (e_machine == EM_386)
+  if (per_file.e_machine == EM_386)
     {
       if (const_strneq (sym, "__x86.get_pc_thunk")
 	  || const_strneq (sym, "_x86_indirect_thunk_"))
 	return true;
     }
-  else if (e_machine == EM_PPC64)
+  else if (per_file.e_machine == EM_PPC64)
     {
       if (const_strneq (sym, "_savegpr")
 	  || const_strneq (sym, "_restgpr")
@@ -2335,13 +2384,13 @@ check_for_gaps (annocheck_data * data)
 static void
 show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
 {
-  if (e_machine != EM_AARCH64)
+  if (per_file.e_machine != EM_AARCH64)
     skip (data, "Branch protection.  (Not an AArch64 binary)");
 
   else if (! built_by_gcc ())
     skip (data, "Branch protection.  (Not built by gcc)");
 
-  else if (producer.version < 9)
+  else if (per_file.version < 9)
     skip (data, "Branch protection.  (Needs gcc 9+)");
 
   else if (results->num_fail > 0)
@@ -2379,23 +2428,24 @@ show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
 static void
 show_ENTRY (annocheck_data * data, test * results)
 {
-  if (e_machine != EM_386 && e_machine != EM_X86_64)
+  if (per_file.e_machine != EM_386 && per_file.e_machine != EM_X86_64)
     skip (data, "Entry point instruction is ENDBR.  (Not an x86 binary)");
-  else if (e_type != ET_DYN && e_type != ET_EXEC)
+  else if (per_file.e_type != ET_DYN && per_file.e_type != ET_EXEC)
     skip (data, "Entry point instruction is ENDBR.  (Not a dynamic executable)");
   else if (results->num_maybe == 0) /* Ie there was no PT_INTERP segment.  */
     skip (data, "Entry point instruction is ENDBR.  (Not an executable)");
-  else if (e_entry == 0)
+  else if (per_file.e_entry == 0)
     maybe (data, "Entry point address is zero");
   else if (results->num_fail > 0)
     {
-      if (e_machine == EM_386)
+      if (per_file.e_machine == EM_386)
 	fail (data, "Entry point instruction is not ENDBR32");
       else
 	fail (data, "Entry point instruction is not ENDBR64");
+
       if (BE_VERBOSE)
 	einfo (VERBOSE, "%s:      (Entry Address: %#lx.  Bytes at this address: %x %x %x %x)",
-	       data->filename, (long) e_entry,
+	       data->filename, (long) per_file.e_entry,
 	       entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
     }
   else
@@ -2450,7 +2500,7 @@ show_WARNINGS (annocheck_data * data, test * results)
 static void
 show_PROPERTY_NOTE (annocheck_data * data, test * results)
 {
-  if (e_machine != EM_X86_64)
+  if (per_file.e_machine != EM_X86_64)
     skip (data, "GNU Property note check.  (Only useful on x86_64 binaries)");
 
   else if (results->num_fail > 0)
@@ -2478,16 +2528,16 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
 static void
 show_BIND_NOW (annocheck_data * data, test * results)
 {
-  if (e_type != ET_EXEC && e_type != ET_DYN)
+  if (per_file.e_type != ET_EXEC && per_file.e_type != ET_DYN)
     skip (data, "Test for -Wl,-z,now.  (Only needed for executables)");
   else if (tests[TEST_DYNAMIC].num_pass == 0)
     skip (data, "Test for -Wl,-z,now.  (No dynamic segment present)");
   else if (results->num_maybe == 0)
     skip (data, "Test for -Wl,-z-now.  (Dynamic segment present, but no dynamic relocations found)");
-  else if (producer.tool == TOOL_GO)
+  else if (per_file.tool == TOOL_GO)
     /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
     skip (data, "Test for -Wl,-z,now.  (Binary was built by GO)");
-  else if (producer.tool == TOOL_MIXED)
+  else if (per_file.tool == TOOL_MIXED)
     /* FIXME: Should be changed once GO supports PIE & BIND_NOW.  */
     skip (data, "Test for -Wl,-z,now.  (Binary was built by different compilers)");
   else if (results->num_pass == 0 || results->num_fail > 0)
@@ -2511,13 +2561,13 @@ static void
 show_GNU_RELRO (annocheck_data * data, test * results)
 {
   /* Relocateable object files are not yet linked.  */
-  if (e_type == ET_REL)
+  if (per_file.e_type == ET_REL)
     skip (data, "Test for -Wl,-z,relro.  (Not needed in object files)");
   else if (tests[TEST_DYNAMIC].num_pass == 0)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic segment present)");
   else if (tests [TEST_BIND_NOW].num_maybe == 0)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic relocations)");
-  else if (producer.tool == TOOL_GO)
+  else if (per_file.tool == TOOL_GO)
     /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
     skip (data, "Test for -Wl,z,relro. (Built by GO)");
   else if (results->num_pass == 0 || results->num_fail > 0)
@@ -2530,7 +2580,7 @@ static void
 show_GNU_STACK (annocheck_data * data, test * results)
 {
   /* Relocateable object files do not have a stack segment.  */
-  if (e_type == ET_REL)
+  if (per_file.e_type == ET_REL)
     skip (data, "Test of stack segment.  (Object files do not have segments)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "The GNU stack segment has the wrong permissions");
@@ -2545,7 +2595,7 @@ show_GNU_STACK (annocheck_data * data, test * results)
 static void
 show_RWX_SEG (annocheck_data * data, test * results)
 {
-  if (e_type == ET_REL)
+  if (per_file.e_type == ET_REL)
     skip (data, "Check for RWX segments.  (Object files do not have segments)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "A segment with RWX permissions was found");
@@ -2556,7 +2606,7 @@ show_RWX_SEG (annocheck_data * data, test * results)
 static void
 show_TEXTREL (annocheck_data * data, test * results)
 {
-  if (e_type == ET_REL)
+  if (per_file.e_type == ET_REL)
     skip (data, "Object files are allowed text relocations");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Text relocations found");
@@ -2567,7 +2617,7 @@ show_TEXTREL (annocheck_data * data, test * results)
 static void
 show_RUN_PATH (annocheck_data * data, test * results)
 {
-  if (e_type == ET_REL)
+  if (per_file.e_type == ET_REL)
     skip (data, "Test of runpath.  (Object files do not have one)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     {
@@ -2592,7 +2642,7 @@ show_THREADS (annocheck_data * data, test * results)
 static void
 show_WRITEABLE_GOT (annocheck_data * data, test * results)
 {
-  if (e_type == ET_REL)
+  if (per_file.e_type == ET_REL)
     skip (data, "Test for writeable GOT.  (Object files do not have a GOT)");
   else if (results->num_fail > 0 || results->num_maybe > 0)
     fail (data, "Relocations for the GOT/PLT sections are writeable");
@@ -2739,13 +2789,13 @@ show_STACK_PROT (annocheck_data * data, test * results)
 static void
 show_STACK_CLASH (annocheck_data * data, test * results)
 {
-  if (e_machine == EM_ARM)
+  if (per_file.e_machine == EM_ARM)
     skip (data, "Test for stack clash support.  (Not enabled on the ARM)");
 
   else if (! built_by_gcc ())
     skip (data, "Test for stack clash support.  (Not built by gcc)");
 
-  else if (producer.version < 7)
+  else if (per_file.version < 7)
     skip (data, "Test for stack clash support.  (Needs gcc 7+)");
 
   else if (results->num_fail > 0)
@@ -2824,7 +2874,7 @@ show_FORTIFY (annocheck_data * data, test * results)
   else if (results->num_pass > 0)
     pass (data, "Compiled with -D_FORTIFY_SOURCE=2");
 
-  else if (compiled_code_seen)
+  else if (per_file.compiled_code_seen)
     maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
 
   else
@@ -2834,13 +2884,13 @@ show_FORTIFY (annocheck_data * data, test * results)
 static void
 show_CF_PROTECTION (annocheck_data * data, test * results)
 {
-  if (e_machine != EM_386 && e_machine != EM_X86_64)
+  if (per_file.e_machine != EM_386 && per_file.e_machine != EM_X86_64)
     skip (data, "Test for control flow protection.  (Only supported on x86 binaries)");
 
   else if (! built_by_compiler ())
     skip (data, "Test for control flow protection.  (Not built by gcc/clang)");
 
-  else if (built_by_gcc () && producer.version < 8)
+  else if (built_by_gcc () && per_file.version < 8)
     skip (data, "Test for control flow protection.  (Needs gcc v8+)");
 
   else if (results->num_fail > 0)
@@ -2917,7 +2967,7 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
   else if (results->num_pass > 0)
     pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
 
-  else if (compiled_code_seen)
+  else if (per_file.compiled_code_seen)
     maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
 
   else
@@ -2927,7 +2977,7 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
 static void
 show_STACK_REALIGN (annocheck_data * data, test * results)
 {
-  if (e_machine != EM_386)
+  if (per_file.e_machine != EM_386)
     skip (data, "Test for stack realignment support.  (Only needed on i686 binaries)");
 
   else if (! built_by_gcc ())
@@ -2968,14 +3018,14 @@ show_STACK_REALIGN (annocheck_data * data, test * results)
 static bool
 finish (annocheck_data * data)
 {
-  if (disabled || debuginfo_file)
+  if (disabled || per_file.debuginfo_file)
     return true;
 
   /* Check to see if something other than gcc produced parts
      of this binary.  */
   (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
 
-  if (! build_notes_seen)
+  if (! per_file.build_notes_seen)
     {
       /* NB/ This code must happen after the call to annocheck_walk_dwarf()
 	 as that function is responsible for following links to debuginfo
@@ -3005,13 +3055,13 @@ finish (annocheck_data * data)
 	  annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, data->filename, data->dwarf_fd);
 	}
 
-      if (! build_notes_seen)
+      if (! per_file.build_notes_seen)
 	fail (data, "Build notes were not found for this executable");
     }
 
   if (! ignore_gaps)
     {
-      if (e_type == ET_REL)
+      if (per_file.e_type == ET_REL)
 	skip (data, "Not checking for gaps (object file)");
       else if (! built_by_gcc ())
 	skip (data, "Not checking for gaps (non-gcc compiled binary)");
@@ -3031,12 +3081,13 @@ finish (annocheck_data * data)
 	einfo (VERBOSE, "%s: skip: %s", data->filename, tests[i].description);
     }
 
-  if (num_fails > 0)
+  if (per_file.num_fails > 0)
     return false;
-  else if (num_maybes > 0)
+
+  if (per_file.num_maybes > 0)
     return false; /* FIXME: Add an option to ignore MAYBE results ? */
-  else
-    return einfo (INFO, "%s: PASS", data->filename);
+
+  return einfo (INFO, "%s: PASS", data->filename);
 }
 
 static void
