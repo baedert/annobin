@@ -8,15 +8,9 @@ LLVM_OPTIONS = \
 
 PLUGIN_OPTIONS = \
   -shared \
-   -fPIC
+  -fPIC
 
 all: run-annobin
-
-PrintFunctionNames.so: PrintFunctionNames.cpp
-	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) $< -o $@
-
-run-it: PrintFunctionNames.so
-	clang++ -fplugin=./PrintFunctionNames.so -Xclang -plugin -Xclang print-fns PrintFunctionNames.cpp 
 
 annobin.so: annobin.cpp
 	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) $< -o $@
@@ -28,6 +22,7 @@ run-annobin: annobin.so
    -Xclang -plugin-arg-annobin -Xclang version \
    --compile annobin.cpp \
    -mtbm
+	readelf --wide --notes annobin.o
 
 clean:
 	rm -f annobin.so PrintFunctionNames.so annobin.o

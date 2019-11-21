@@ -39,10 +39,7 @@ annobin_record_global_target_notes (const char * sec)
 {
   // annobin_is_64bit is computed from a flag bit inside aarch64_abi.
   if (!annobin_is_64bit)
-    {
-      ice ("AArch64: The annobin plugin thinks that it is compiling for a 32-bit target");
-      return;
-    }
+    annobin_inform (INFORM_ALWAYS, "AArch64: The annobin plugin is out of date with respect to gcc");
 
   saved_tls_dialect = aarch64_tls_dialect;
 
