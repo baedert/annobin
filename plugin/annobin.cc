@@ -1815,12 +1815,12 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   /* *sigh* As of gcc 9, a .text.startup section can also be created.  */
   annobin_emit_start_sym_and_version_note (STARTUP_SUFFIX, 's');
-  queue_attachment (COLD_SECTION, concat (STARTUP_SECTION, ANNOBIN_GROUP_NAME, NULL));
+  queue_attachment (STARTUP_SECTION, concat (STARTUP_SECTION, ANNOBIN_GROUP_NAME, NULL));
   //  emit_global_notes (STARTUP_SUFFIX);
 
   /* Presumably a .text.exit section can also be created, although I have not seen that yet.  */
   annobin_emit_start_sym_and_version_note (EXIT_SUFFIX, 'e');
-  queue_attachment (COLD_SECTION, concat (EXIT_SECTION, ANNOBIN_GROUP_NAME, NULL));
+  queue_attachment (EXIT_SECTION, concat (EXIT_SECTION, ANNOBIN_GROUP_NAME, NULL));
   //  emit_global_notes (EXIT_SUFFIX);
 }
 

@@ -45,6 +45,13 @@ AC_SUBST(target_plugin)
 # We need GCC plugin support.
 GCC_PLUGIN
 
+# Check for rpmlib availability
+AC_CHECK_HEADER([rpm/rpmlib.h], ,[AC_MSG_ERROR(["Required header 'rpm/rpmlib.h' not found."])])
+AC_CHECK_LIB([rpm], [rpmReadPackageFile], [RPMLIBS="-lrpm"], [AC_MSG_ERROR(["Required library 'rpm' not found.])])
+AC_CHECK_LIB([rpmio], [rpmConfigDir], [RPMLIBS="$RPMLIBS -lrpmio"], [AC_MSG_ERROR(["Required library 'rpmio' not found.])])
+AC_SUBST(RPMLIBS)
+
+
 AC_MSG_CHECKING([whether to enable maintainer-specific portions of Makefiles])
 AC_ARG_ENABLE(maintainer-mode,
 [AS_HELP_STRING([--enable-maintainer-mode],
@@ -94,12 +101,12 @@ else
 
   while test x$common != x/; do
     suffix=`echo "$e_pkglibexecdir" | sed "s?^$common/*??"`
-    if test x$suffix != x$e_pkglibexecdir; then
+    if test "x$suffix" != "x$e_pkglibexecdir"; then
       # Replace all the remaining directories in bindir with ".."
       # and append the suffix.
       rel_plugindir=`echo "$e_bindir" | sed "s?^$common/*??"`
       rel_plugindir=`echo "$rel_plugindir" | sed ['s?[^/][^/]*?..?g']`
-      if test x$rel_plugindir != x -a x$suffix != x; then
+      if test "x$rel_plugindir" != x -a "x$suffix" != x; then
         rel_plugindir="$rel_plugindir/$suffix"
       else
         rel_plugindir="$rel_plugindir$suffix"
