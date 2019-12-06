@@ -671,6 +671,14 @@ walk_build_notes (annocheck_data *     data,
 	    start = end;
 	  else
 	    {
+	      /* We ignore the case where the end address is 0, because this
+		 happens when the linker discards a code section but does not
+		 discard the notes.  (Eg because annobin is being run with -no-attach
+		 enabled).  In such situations the notes should be ignored,
+		 because they refer to code that has been discarded.  */
+	      if (end == 0)
+		return true;
+
 	      einfo (FAIL, "%s: Corrupt annobin note, start address %#lx > end address %#lx",
 		     data->filename, start, end);
 	      return true;
@@ -2822,14 +2830,15 @@ show_STACK_CLASH (annocheck_data * data, test * results)
       else
 	maybe (data, "The stack clash protection setting was not recorded");
     }
+
   else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with -fstack-clash-protection");
-    }
+    pass (data, "Compiled with -fstack-clash-protection");
+
+  else if (per_file.compiled_code_seen)
+    maybe (data, "The -fstack-clash-protection setting was not recorded");
+
   else
-    {
-      maybe (data, "The -fstack-clash-protection setting was not recorded");
-    }
+    skip (data, "Test for stack clash support.  (No GCC compiled object files)");
 }
 
 static void
