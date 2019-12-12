@@ -15,6 +15,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annocheck.h"
 #include <bfd.h>
 #include <dis-asm.h>
@@ -348,6 +349,6 @@ struct checker jcc_checker =
 static __attribute__((constructor)) void
 register_checker (void) 
 {
-  if (! annocheck_add_checker (& jcc_checker, major_version))
+  if (! annocheck_add_checker (& jcc_checker, ANNOBIN_VERSION / 100))
     disabled = true;
 }

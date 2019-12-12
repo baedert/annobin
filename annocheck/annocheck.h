@@ -39,32 +39,6 @@
 
 #define PACKAGE                         "annocheck"
 
-/* Values used by annobin notes.  */
-#define GNU_BUILD_ATTRS_SECTION_NAME		".gnu.build.attributes"
-#define NT_GNU_BUILD_ATTRIBUTE_OPEN		0x100
-#define NT_GNU_BUILD_ATTRIBUTE_FUNC		0x101
-#define GNU_BUILD_ATTRIBUTE_TYPE_NUMERIC	'*'
-#define GNU_BUILD_ATTRIBUTE_TYPE_STRING		'$'
-#define GNU_BUILD_ATTRIBUTE_TYPE_BOOL_TRUE	'+'
-#define GNU_BUILD_ATTRIBUTE_TYPE_BOOL_FALSE	'!'
-
-#define GNU_BUILD_ATTRIBUTE_VERSION		1
-#define GNU_BUILD_ATTRIBUTE_STACK_PROT		2
-#define GNU_BUILD_ATTRIBUTE_RELRO		3
-#define GNU_BUILD_ATTRIBUTE_STACK_SIZE		4
-#define GNU_BUILD_ATTRIBUTE_TOOL		5
-#define GNU_BUILD_ATTRIBUTE_ABI			6
-#define GNU_BUILD_ATTRIBUTE_PIC			7
-#define GNU_BUILD_ATTRIBUTE_SHORT_ENUM		8
-
-#ifndef NT_GNU_PROPERTY_TYPE_0
-#define NT_GNU_PROPERTY_TYPE_0  5
-#endif
-
-#define streq(a,b)	  (strcmp ((a), (b)) == 0)
-#define strneq(a,b,n)	  (strncmp ((a), (b), (n)) == 0)
-#define const_strneq(a,b) (strncmp ((a), (b), sizeof (b) - 1) == 0)
-
 typedef unsigned char  uchar;
 typedef unsigned int   uint;
 typedef unsigned long  ulong;
@@ -100,7 +74,7 @@ typedef struct annocheck_segment
 
 /* This is the structure used to communicate between the annocheck framework
    and the checker tools.  If this structure is changed (or the sub structures
-   above) then increment the major_version value in annocheck.c  */
+   above) then increment the major_version value in global-annocheck.h  */
 
 typedef struct checker
 {
@@ -196,25 +170,25 @@ typedef struct checker
 /* Type for the ELF note walker.  */
 typedef bool (*  note_walker) (annocheck_data *     DATA,
 			       annocheck_section *  SEC,
-			       GElf_Nhdr *            NOTE,
-			       size_t                 NAME_OFFSET,
-			       size_t                 DESC_OFFSET,
-			       void *                 PTR);
+			       GElf_Nhdr *          NOTE,
+			       size_t               NAME_OFFSET,
+			       size_t               DESC_OFFSET,
+			       void *               PTR);
 
-/* Walks over the notes in SECTION, applying FUNC to each.
+/* Walks over the notes in SECTION, applying FNC to each.
    Stops if FUNC returns FALSE.
-   Passes PTR to FUNC along with a pointer to the note and the offsets to the name and desc data fields.
+   Passes PTR to FNC along with a pointer to the note and the offsets to the name and desc data fields.
    Returns FALSE if it could not walk the notes.  */
-extern bool      annocheck_walk_notes (annocheck_data * DATA, annocheck_section * SEC, note_walker FUNC, void * PTR);
+extern bool      annocheck_walk_notes (annocheck_data * DATA, annocheck_section * SEC, note_walker FNC, void * PTR);
 
 /* Type for the DWARF DIE walker.  */
 typedef bool (*  dwarf_walker) (annocheck_data * DATA, Dwarf * DWARF, Dwarf_Die * DIE, void * PTR);
 
-/* Walks over the DWARF DIEs in DATA, applying FUNC to each.
-   Stops if FUNC returns FALSE.
+/* Walks over the DWARF DIEs in DATA, applying FNC to each.
+   Stops if FNC returns FALSE.
    Passes PTR to FUNC along with a pointer to the DIE.
    Returns FALSE if it could not walk the debug information.  */
-extern bool      annocheck_walk_dwarf (annocheck_data * DATA, dwarf_walker FUNC, void * PTR);
+extern bool      annocheck_walk_dwarf (annocheck_data * DATA, dwarf_walker FNC, void * PTR);
 
 /* Called to register a checker.
    Returns FALSE if the checker could not be registered.
@@ -255,9 +229,5 @@ extern ulong        verbosity;
 #define BE_VERY_VERBOSE  (verbosity > 1)
 #define BE_VERBOSE       (verbosity > 0)
 #define BE_QUIET         (verbosity == -1UL)
-
-/* The version numbers of the checksec framework.  */
-extern const uint major_version;
-extern const uint minor_version;
 
 #endif /* __ANNOCHECK_H__ */

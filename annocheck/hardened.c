@@ -15,10 +15,8 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annocheck.h"
-
-/* The version of the annotation specification supported by this checker.  */
-#define SPEC_VERSION  3
 
 typedef struct hardened_note_data
 {
@@ -796,6 +794,9 @@ walk_build_notes (annocheck_data *     data,
 	     version number.  */
 	  per_file.compiled_code_seen = true;
 	  break;
+	case 'L': /* The clang plugin.  */
+	  per_file.compiled_code_seen = true;
+	  break;
 	default:
 	  warn (data, "Unrecognised annobin note producer");
 	  break;
@@ -808,12 +809,12 @@ walk_build_notes (annocheck_data *     data,
       else
 	{
 	  /* Parse the tool attribute looking for the version of gcc used to build the component.  */
+	  unsigned major, minor, rel;
 
 	  /* As of version 8.80 there are two BUILT_ATTRIBUTE_TOOL version strings,
 	     one for the compiler that built the annobin plugin and one for the
 	     compiler that ran the annobin plugin.  Look for these here.  Their
 	     format is "annobin gcc X.Y.Z DATE" and "running gcc X.Y.Z DATE".  */
-	  unsigned major, minor, rel;
 	  if (sscanf (attr + 1, "running gcc %u.%u.%u", & major, & minor, & rel) == 3)
 	    {
 	      einfo (VERBOSE2, "%s: info: Annobin plugin ran on gcc version %u.%u.%u",
@@ -3188,6 +3189,6 @@ struct checker hardened_checker =
 static __attribute__((constructor)) void
 register_checker (void) 
 {
-  if (! annocheck_add_checker (& hardened_checker, major_version))
+  if (! annocheck_add_checker (& hardened_checker, ANNOBIN_VERSION / 100))
     disabled = true;
 }

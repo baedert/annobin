@@ -15,6 +15,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annocheck.h"
 #include <time.h>
 
@@ -566,6 +567,6 @@ struct checker notes_checker =
 static __attribute__((constructor)) void
 notes_register_checker (void) 
 {
-  if (! annocheck_add_checker (& notes_checker, major_version))
+  if (! annocheck_add_checker (& notes_checker, ANNOBIN_VERSION / 100))
     disabled = true;
 }

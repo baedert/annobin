@@ -12,6 +12,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annocheck.h"
 #include <rpm/rpmlib.h>
 #include <dirent.h>
@@ -27,12 +28,6 @@
 
 /* -1: silent, 0: normal, 1: verbose, 2: very verbose.  */
 ulong         verbosity = 0;
-
-/* Version number.  NB: Keep in sync with the annobin_version and
-   version_string definitions in annobin.cc.
-   FIXME: This value should be defined in only one place...  */
-const uint              major_version = 8;
-const uint              minor_version = 92;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
@@ -204,7 +199,7 @@ add_file (const char * filename)
 static void
 print_version (void)
 {
-  einfo (INFO, "Version %d.%d", major_version, minor_version);
+  einfo (INFO, "Version %d.%d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
 
   checker * tool;
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
@@ -1711,7 +1706,7 @@ main (int argc, const char ** argv)
     return EXIT_FAILURE;
 
   if (level == 0)
-    einfo (INFO, "Version %d.%d", major_version, minor_version);
+    einfo (INFO, "Version %d.%d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
   
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
     if (tool->start_scan != NULL)
@@ -1777,7 +1772,7 @@ main (int argc, const char ** argv)
 bool
 annocheck_add_checker (struct checker * new_checker, uint major)
 {
-  if (major < major_version)
+  if (major < (ANNOBIN_VERSION / 100))
     return false;
 
   checker_internal * internal = XCNEW (checker_internal);

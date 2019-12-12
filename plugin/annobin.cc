@@ -12,6 +12,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annobin.h"
 
 #include <stdarg.h>
@@ -27,12 +28,10 @@
 #include "diagnostic-core.h"
 #endif
 
-/* Version number.  NB: Keep the numeric and string versions in sync
-   Also, keep in sync with the major_version and minor_version definitions
-   in annocheck/annocheck.c.
-   FIXME: This value should be defined in only one place...  */
-static unsigned int   annobin_version = 892;
-static const char *   version_string = N_("Version 892");
+/* Version number.  */
+static unsigned int   annobin_version = ANNOBIN_VERSION;
+#define VER_STRING(VER) N_("Version #VER")
+static const char *   version_string = VER_STRING (ANNOBIN_VERSION);
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"

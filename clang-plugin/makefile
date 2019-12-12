@@ -20,9 +20,10 @@ run-annobin: annobin.so
    -D_FORTIFY_SOURCE=2 -O2 \
    -Xclang -plugin-arg-annobin -Xclang verbose \
    -Xclang -plugin-arg-annobin -Xclang version \
-   --compile annobin.cpp \
+   hello.c \
+   -save-temps \
    -mtbm
-	readelf --wide --notes annobin.o
+	readelf --wide --notes a.out
 
 clean:
 	rm -f annobin.so PrintFunctionNames.so annobin.o

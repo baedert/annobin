@@ -15,6 +15,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annocheck.h"
 
 static bool disabled = true;
@@ -408,6 +409,6 @@ struct checker size_checker =
 static __attribute__((constructor)) void
 size_register_checker (void) 
 {
-  if (! annocheck_add_checker (& size_checker, major_version))
+  if (! annocheck_add_checker (& size_checker, ANNOBIN_VERSION / 100))
     disabled = true;
 }
