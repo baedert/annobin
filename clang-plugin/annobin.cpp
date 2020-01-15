@@ -333,20 +333,56 @@ private:
       const CodeGenOptions & CodeOpts = CI.getCodeGenOpts ();
 
       verbose ("Checking options..");
-
-      verbose ("Record cf-protection: %s", CodeOpts.CFProtectionReturn ? "on" : "off");
+#if 1
+      verbose ("Record cf-protection: (branch: %s) (return: %s)",
+	       CodeOpts.CFProtectionBranch ? "on" : "off",
+	       CodeOpts.CFProtectionReturn ? "on" : "off"
+	       );
       unsigned len = sprintf (buffer, "GA%ccf_protection", NUMERIC);
-      /* We bias the flag_cf_protection enum value by 1 so that we do not get confused by a zero value.  */
-      buffer[++len] = CodeOpts.CFProtectionReturn ? 2 : 1;
+      char val = 0;
+      val += CodeOpts.CFProtectionBranch ? 1 : 0;
+      val += CodeOpts.CFProtectionReturn ? 2 : 0;
+      /* We bias the value by 1 so that we do not get confused by a zero value.  */
+      val += 1;
+      buffer[++len] = val;
       buffer[++len] = 0;
 
-      OutputNote (Context, buffer, len, false, "-fcf-protection status",
+      OutputNote (Context, buffer, len + 1, false, "-fcf-protection status",
 		  OPEN,
 		  annobin_current_file_start, annobin_current_file_end,
-		  GNU_BUILD_ATTRS_SECTION_NAME);		  
-			
-			
+		  GNU_BUILD_ATTRS_SECTION_NAME);
+#endif
+      
+      // The -cfguard option is Windows only - so we ignore it.
 
+#if 1
+      verbose ("Record -O: %d", CodeOpts.OptimizationLevel);
+      len = sprintf (buffer, "GA%cGOW", NUMERIC);
+      val = CodeOpts.OptimizationLevel;
+      if (val > 3)
+	val = 3;
+      buffer[++len] = 0x3;
+      buffer[++len] = val << 1;
+      buffer[++len] = 0;
+
+      OutputNote (Context, buffer, len + 1, false, "Optimization Level",
+		  OPEN,
+		  annobin_current_file_start, annobin_current_file_end,
+		  GNU_BUILD_ATTRS_SECTION_NAME);
+#endif
+
+#if CLANG_VERSION_MAJOR > 7
+      verbose ("Record speculative load hardening: %s", CodeOpts.SpeculativeLoadHardening ? "on" : "off");
+
+      len = sprintf (buffer, "GA%cSpecLoadHarden", NUMERIC);
+      buffer[++len] = CodeOpts.SpeculativeLoadHardening ? 2 : 1;
+      buffer[++len] = 0;
+
+      OutputNote (Context, buffer, len + 1, false, "Speculative Load Hardening",
+		  OPEN,
+		  annobin_current_file_start, annobin_current_file_end,
+		  GNU_BUILD_ATTRS_SECTION_NAME);
+#endif
       
       const LangOptions & lang_opts = CI.getLangOpts ();
       if (lang_opts.ModuleFeatures.empty ())
@@ -359,7 +395,7 @@ private:
 	    verbose ("Language module features: %s",  Feature.str().c_str());
 	}
 
-      verbose ("setjmp exceptions: %u", lang_opts.SjLjExceptions);
+      verbose ("Setjmp exceptions: %u", lang_opts.SjLjExceptions);
 
       const PreprocessorOptions & pre_opts = CI.getPreprocessorOpts ();
       if (pre_opts.Macros.empty ())
