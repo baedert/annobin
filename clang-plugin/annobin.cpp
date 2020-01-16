@@ -1,5 +1,5 @@
 /* annobin - a clang plugin for annotating the output binary file.
-   Copyright (c) 2019 Red Hat.
+   Copyright (c) 2019, 2020 Red Hat.
    Created by Nick Clifton and Serge Guelton.
 
   This is free software; you can redistribute it and/or modify it
@@ -20,6 +20,7 @@
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Sema/SemaConsumer.h"
 #include "llvm/Support/raw_ostream.h"
+#include "clang/Basic/Version.h"
 
 using namespace std;
 using namespace clang;
@@ -28,13 +29,13 @@ using namespace llvm;
 #include "annobin-global.h"
 #include <string.h>
 #include <ctype.h>
-
+#include <libiberty.h>
 
 #define inform(FORMAT, ...)				    \
   do							    \
     {							    \
       fflush (stdout);					    \
-      fprintf (stderr, "Annobin plugin for clang: ");	    \
+      fprintf (stderr, "Annobin: ");			    \
       fprintf (stderr, FORMAT, ## __VA_ARGS__);		    \
       putc ('\n', stderr);				    \
     }							    \
@@ -46,7 +47,7 @@ using namespace llvm;
       if (be_verbose)					    \
 	{						    \
           fflush (stdout);				    \
-          fprintf (stderr, "Annobin plugin for clang: ");   \
+          fprintf (stderr, "Annobin: ");		    \
           fprintf (stderr, FORMAT, ## __VA_ARGS__);	    \
           putc ('\n', stderr);				    \
 	}						    \
@@ -57,7 +58,7 @@ using namespace llvm;
   do							    \
     {							    \
       fflush (stdout);					    \
-      fprintf (stderr, "Annobin plugin for clang: Internal Error: ");	    \
+      fprintf (stderr, "Annobin: Internal Error: ");	    \
       fprintf (stderr, FORMAT, ## __VA_ARGS__);		    \
       putc ('\n', stderr);				    \
       exit (-1);					    \
@@ -66,16 +67,11 @@ using namespace llvm;
 
 namespace
 {
-  /* Version number.  NB: Keep the numeric and string versions in sync
-     Also, keep in sync with the major_version and minor_version definitions
-     in annocheck/annocheck.c.
-     FIXME: This value should be defined in only one place...  */
-  static unsigned int   annobin_version = 901;
-  static const char *   version_string = "901";
+  static unsigned int   annobin_version = ANNOBIN_VERSION;
   static bool           be_verbose = false;
   static bool           target_start_sym_bias = false;
-  static const char *   annobin_current_file_start = "_annobin_current_file_start";
-  static const char *   annobin_current_file_end   = "_annobin_current_file_end";
+  static const char *   annobin_current_file_start = NULL;
+  static const char *   annobin_current_file_end   = NULL;
   
   class AnnobinConsumer : public ASTConsumer
   {
@@ -86,61 +82,70 @@ private:
     AnnobinConsumer (CompilerInstance & CI) : CI (CI)
     {
     }
-
-#define START_TEXT   "\
-\t.pushsection .text\n\
-\t.global _annobin_current_file_start\n\
-\t.type   _annobin_current_file_start, STT_NOTYPE\n\
-\t.equiv  _annobin_current_file_start, .text\n\
-\t.size   _annobin_current_file_start, 0\n\
-\t.pushsection .text.zzz\n\
-\t.global _annobin_current_file_end\n			\
-\t.type   _annobin_current_file_end, STT_NOTYPE\n\
-\t.equiv  _annobin_current_file_end, .text.zzz\n\
-\t.size   _annobin_current_file_end, 0\n\
-\t.popsection\n"
-    
     
     void
     HandleTranslationUnit (ASTContext & Context) override
     {
-      verbose ("Generate start symbol");
-      AddAsmText (Context, START_TEXT);
-      
-      char buf [64];
+      static char buf [6400];
 
-      verbose ("Generate version note");
-      sprintf (buf, "%dL%d", SPEC_VERSION, annobin_version);
+      SourceManager & src = Context.getSourceManager ();
+      const char * filename = src.getFilename (src.getLocForStartOfFile (src.getMainFileID ())).str ().c_str ();
+
+      filename = convert_to_valid_symbol_name (filename);
+      verbose ("Generate start and end symbols based on: %s", filename);
+      annobin_current_file_start = concat ("_annobin_", filename, "_start", NULL);
+      annobin_current_file_end   = concat ("_annobin_", filename, "_end", NULL);
+
+#define START_TEXT   "\
+\t.pushsection .text\n\
+\t.global %s\n\
+\t.type   %s, STT_NOTYPE\n\
+\t.equiv  %s, .text\n\
+\t.size   %s, 0\n\
+\t.pushsection .text.zzz\n\
+\t.global %s\n\
+\t.type   %s, STT_NOTYPE\n\
+\t.equiv  %s, .text.zzz\n\
+\t.size   %s, 0\n\
+\t.popsection\n"
+
+      sprintf (buf, START_TEXT,
+	       annobin_current_file_start, annobin_current_file_start, annobin_current_file_start, annobin_current_file_start,
+	       annobin_current_file_end, annobin_current_file_end, annobin_current_file_end, annobin_current_file_end);
+	       
+      AddAsmText (Context, buf);
+      
+      sprintf (buf, "%d%c%d", SPEC_VERSION, ANNOBIN_TOOL_ID_CLANG, annobin_version);
       OutputStringNote (Context,
 			GNU_BUILD_ATTRIBUTE_VERSION, buf,
-			"version note",
-			annobin_current_file_start,
-			annobin_current_file_end,
-			GNU_BUILD_ATTRS_SECTION_NAME);
+			"version note");
 
-      verbose ("Generate run note");
-      OutputStringNote (Context,
-			GNU_BUILD_ATTRIBUTE_TOOL,
-			"running clang 7.0.1",
-			"tool note",
-			annobin_current_file_start,
-			annobin_current_file_end,
-			GNU_BUILD_ATTRS_SECTION_NAME);
+      sprintf (buf, "running on %s", getClangFullVersion ().c_str ());
+      OutputStringNote (Context, GNU_BUILD_ATTRIBUTE_TOOL,
+			buf, "tool note (running on)");
 			
-      verbose ("Generate build note");
-      OutputStringNote (Context,
-			GNU_BUILD_ATTRIBUTE_TOOL,
-			"annobin clang 7.0.1",
-			"tool note",
-			annobin_current_file_start,
-			annobin_current_file_end,
-			GNU_BUILD_ATTRS_SECTION_NAME);
-			
+      sprintf (buf, "annobin built by clang version %s", CLANG_VERSION_STRING);
+      OutputStringNote (Context, GNU_BUILD_ATTRIBUTE_TOOL,
+			buf, "tool note (plugin built by)");
+
+      // FIXME: Since we are using documented clang API functions
+      // we assume that a version mistmatch bewteen the plugin builder
+      // and the plugin consumer does not matter.  Check this...
       CheckOptions (CI, Context);
     }
 
   private:
 
+    const char *
+    convert_to_valid_symbol_name (const char * name)
+    {
+      char * output = xstrdup (name);
+      for (int i = 0; output[i] != 0; i++)
+	if (!isalnum (output[i]))
+	  output[i] = '_';
+      return output;
+    }
+    
     void
     AddAsmText (ASTContext & Context, StringRef text)
     {
@@ -157,15 +162,15 @@ private:
 	 clang::StringLiteral::Create (Context, text, clang::StringLiteral::Ascii,
 				       /*Pascal*/ false,
 				       Context.getConstantArrayType (Context.CharTy,
-								     llvm::APInt(32, text.size() + 1),
+								     llvm::APInt (32, text.size () + 1),
 								     clang::ArrayType::Normal,
 								     /*IndexTypeQuals*/ 0
 								     ),
-				       SourceLocation()),
+				       SourceLocation ()),
 	 {},
 	 {});
 
-      CI.getASTConsumer().HandleTopLevelDecl (DeclGroupRef (NewDecl));
+      CI.getASTConsumer ().HandleTopLevelDecl (DeclGroupRef (NewDecl));
     }
     
     static void
@@ -191,10 +196,11 @@ private:
 		const char *  end_symbol,
 		const char *  section_name)
     {
-      static char text_buffer[2560] = {0};
-      static char buf[1280];
+      static char text_buffer[2560];  // FIXME: This should be dynamic and extendable.
+      static char buf[1280];  // Likewise.
       static const int align = 4;
-      
+
+      text_buffer[0] = 0;
       sprintf (buf, ".pushsection %s, \"\", %%note", section_name);
       add_line_to_note (text_buffer, buf);
       sprintf (buf, ".balign %d", align);
@@ -304,99 +310,109 @@ private:
     OutputStringNote (ASTContext &  Context,
 		      const char    string_type,
 		      const char *  string,
-		      const char *  name_description,
-		      const char *  start_symbol,
-		      const char *  end_symbol,
-		      const char *  section_name)
+		      const char *  name_description)
     {
       unsigned int len = strlen (string);
       char * buffer;
 
       buffer = (char *) malloc (len + 5);
 
-      sprintf (buffer, "GA%c%c%s", GNU_BUILD_ATTRIBUTE_TYPE_STRING, string_type, string);
+      sprintf (buffer, "GA%c%c%s", STRING, string_type, string);
 
+      verbose ("Record %s as '%s'", name_description, string);
       /* Be kind to readers of the assembler source, and do
 	 not put control characters into ascii strings.  */
       OutputNote (Context,
 		  buffer, len + 5, isprint (string_type), name_description,
-		  OPEN,
-		  start_symbol, end_symbol, section_name);
+		  OPEN, annobin_current_file_start, annobin_current_file_end,
+		  GNU_BUILD_ATTRS_SECTION_NAME);
 
       free (buffer);
     }
 
     void
+    OutputNumericNote (ASTContext &  Context,
+		       const char *  numeric_name,
+		       unsigned int  val,
+		       const char *  name_description)
+    {
+      char buffer [128];  // FIXME: This should be dynamic and extendable.
+      unsigned len = sprintf (buffer, "GA%c%s", NUMERIC, numeric_name);
+      char last_byte = 0;
+
+      // For non-alphabetic names, we do not need, or want, the terminating
+      // NUL at the end of the string.
+      if (! isprint (numeric_name[0]))
+	--len;
+
+      verbose ("Record %s value of %u", name_description, val);
+	
+      do
+	{
+	  last_byte = buffer[++len] = val & 0xff;
+	  val >>= 8;
+	}
+      while (val);
+
+      if (last_byte != 0)
+	buffer[++len] = 0;
+
+      OutputNote (Context, buffer, len + 1, false, name_description,
+		  OPEN, annobin_current_file_start, annobin_current_file_end,
+		  GNU_BUILD_ATTRS_SECTION_NAME);
+    }
+    
+    void
     CheckOptions (CompilerInstance & CI, ASTContext & Context)
     {
-      char buffer [128];
       const CodeGenOptions & CodeOpts = CI.getCodeGenOpts ();
 
-      verbose ("Checking options..");
-#if 1
-      verbose ("Record cf-protection: (branch: %s) (return: %s)",
-	       CodeOpts.CFProtectionBranch ? "on" : "off",
-	       CodeOpts.CFProtectionReturn ? "on" : "off"
-	       );
-      unsigned len = sprintf (buffer, "GA%ccf_protection", NUMERIC);
-      char val = 0;
+      unsigned int val = 0;
       val += CodeOpts.CFProtectionBranch ? 1 : 0;
       val += CodeOpts.CFProtectionReturn ? 2 : 0;
-      /* We bias the value by 1 so that we do not get confused by a zero value.  */
+      // We bias the value by 1 so that we do not get confused by a zero value.
       val += 1;
-      buffer[++len] = val;
-      buffer[++len] = 0;
-
-      OutputNote (Context, buffer, len + 1, false, "-fcf-protection status",
-		  OPEN,
-		  annobin_current_file_start, annobin_current_file_end,
-		  GNU_BUILD_ATTRS_SECTION_NAME);
-#endif
+      OutputNumericNote (Context, "cf_protection", val, "Control Flow protection");
       
       // The -cfguard option is Windows only - so we ignore it.
 
-#if 1
-      verbose ("Record -O: %d", CodeOpts.OptimizationLevel);
-      len = sprintf (buffer, "GA%cGOW", NUMERIC);
       val = CodeOpts.OptimizationLevel;
       if (val > 3)
 	val = 3;
-      buffer[++len] = 0x3;
-      buffer[++len] = val << 1;
-      buffer[++len] = 0;
-
-      OutputNote (Context, buffer, len + 1, false, "Optimization Level",
-		  OPEN,
-		  annobin_current_file_start, annobin_current_file_end,
-		  GNU_BUILD_ATTRS_SECTION_NAME);
-#endif
+      // The optimization level occupies bits 9..11 of the GOW value.
+      val <<= 9;
+      if (Context.getDiagnostics().getEnableAllWarnings())
+	val |= (1 << 14);
+      OutputNumericNote (Context, "GOW", val, "Optimization Level and Wall");
 
 #if CLANG_VERSION_MAJOR > 7
-      verbose ("Record speculative load hardening: %s", CodeOpts.SpeculativeLoadHardening ? "on" : "off");
-
-      len = sprintf (buffer, "GA%cSpecLoadHarden", NUMERIC);
-      buffer[++len] = CodeOpts.SpeculativeLoadHardening ? 2 : 1;
-      buffer[++len] = 0;
-
-      OutputNote (Context, buffer, len + 1, false, "Speculative Load Hardening",
-		  OPEN,
-		  annobin_current_file_start, annobin_current_file_end,
-		  GNU_BUILD_ATTRS_SECTION_NAME);
+      val = CodeOpts.SpeculativeLoadHardening ? 2 : 1;
+      OutputNumericNote (Context, "SpecLoadHarden", val, "Speculative Load Hardening");
 #endif
       
       const LangOptions & lang_opts = CI.getLangOpts ();
-      if (lang_opts.ModuleFeatures.empty ())
-	{
-	  verbose ("No language module features");
-	}
-      else
-	{
-	  for (StringRef Feature : lang_opts.ModuleFeatures)
-	    verbose ("Language module features: %s",  Feature.str().c_str());
-	}
 
-      verbose ("Setjmp exceptions: %u", lang_opts.SjLjExceptions);
+      val = lang_opts.getStackProtector() == clang::LangOptions::SSPOff ? 0 : 2;
+      char stack_prot[2] = {GNU_BUILD_ATTRIBUTE_STACK_PROT, 0};
+      OutputNumericNote (Context, stack_prot, val, "Stack Protection");
 
+
+      val = lang_opts.Sanitize.has (clang::SanitizerKind::SafeStack);
+      OutputNumericNote (Context, "sanitize_safe_stack", val, "Sanitize Safe Stack");
+
+      val = lang_opts.Sanitize.has (clang::SanitizerKind::CFICastStrict) ? 1 : 0;
+      val += lang_opts.Sanitize.has (clang::SanitizerKind::CFIDerivedCast) ? 2 : 0;
+      val += lang_opts.Sanitize.has (clang::SanitizerKind::CFIICall) ? 4 : 0;
+      val += lang_opts.Sanitize.has (clang::SanitizerKind::CFIMFCall) ? 8 : 0;
+      val += lang_opts.Sanitize.has (clang::SanitizerKind::CFIUnrelatedCast) ? 16 : 0;
+      val += lang_opts.Sanitize.has (clang::SanitizerKind::CFINVCall) ? 32 : 0;
+      val += lang_opts.Sanitize.has (clang::SanitizerKind::CFIVCall) ? 64 : 0;
+      OutputNumericNote (Context, "sanitize_cfi", val, "Sanitize Control Flow Integrity");
+
+      val = lang_opts.PIE ? 4 : 0;
+      char pic[2] = {GNU_BUILD_ATTRIBUTE_PIC, 0};
+      OutputNumericNote (Context, pic, val, "PIE");
+            
       const PreprocessorOptions & pre_opts = CI.getPreprocessorOpts ();
       if (pre_opts.Macros.empty ())
 	{
@@ -488,7 +504,7 @@ private:
 	  else if (args[i] == "enable")
 	    enabled = true;
 	  else if (args[i] == "version")
-	    inform ("version %s", version_string);
+	    inform ("Annobin plugin version: %u", annobin_version);
 	  else if (args[i] == "verbose")
 	    be_verbose = true;
 	  else

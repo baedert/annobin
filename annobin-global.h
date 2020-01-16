@@ -1,5 +1,5 @@
 /* annobin - Header file for the annobin package.
-   Copyright (c) 2019 Red Hat.
+   Copyright (c) 2019, 2020 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -53,6 +53,16 @@
 
 #define NOTE_GNU_PROPERTY_SECTION_NAME	".note.gnu.property"
 #define GNU_BUILD_ATTRS_SECTION_NAME	".gnu.build.attributes"
+
+/* Characters used in the GNU_BUILD_ATTRIBUTE_VERSION note to identify the code producer.  */
+#define ANNOBIN_TOOL_ID_CLANG       'L'
+#define ANNOBIN_TOOL_ID_ASSEMBLER   'a'
+#define ANNOBIN_TOOL_ID_LINKER      'l'
+#define ANNOBIN_TOOL_ID_GCC         'p'
+#define ANNOBIN_TOOL_ID_GCC_COLD    'c'
+#define ANNOBIN_TOOL_ID_GCC_HOT     'h'
+#define ANNOBIN_TOOL_ID_GCC_STARTUP 's'
+#define ANNOBIN_TOOL_ID_GCC_EXIT    'e'
 
 /* Values used in GNU .note.gnu.property notes (NT_GNU_PROPERTY_TYPE_0).  */
 #define GNU_PROPERTY_STACK_SIZE			1

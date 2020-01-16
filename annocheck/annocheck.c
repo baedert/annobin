@@ -1,5 +1,5 @@
 /* annocheck - A tool for checking security features of binares.
-   Copyright (c) 2018 - 2019 Red Hat.
+   Copyright (c) 2018 - 2020 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
