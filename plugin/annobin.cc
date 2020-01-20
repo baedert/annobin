@@ -2133,8 +2133,8 @@ plugin_init (struct plugin_name_args *    plugin_info,
       else if (sizeof (global_options) != extra->st_size)
 	{
 	  ice ("The size of the global_options structure has changed - please rebuild annobin");
-	  annobin_inform (INFORM_ALWAYS, "Build time size: %#x run time size: %#x (32-bit host)",
-			  sizeof (global_options), extra->st_size);
+	  annobin_inform (INFORM_ALWAYS, "Build time size: %#lx run time size: %#lx (32-bit host)",
+			  (long) sizeof (global_options), (long) extra->st_size);
 	  return 1;
 	}
     }
@@ -2150,8 +2150,8 @@ plugin_init (struct plugin_name_args *    plugin_info,
       else if (sizeof (global_options) != extra->st_size)
 	{
 	  ice ("The size of the global_options structure has changed - please rebuild annobin");
-	  annobin_inform (INFORM_ALWAYS, "Build time size: %#x run time size: %#x (64-bit host)",
-			  sizeof (global_options), extra->st_size);
+	  annobin_inform (INFORM_ALWAYS, "Build time size: %#lx run time size: %#lx (64-bit host)",
+			  (long) sizeof (global_options), (long) extra->st_size);
 	  return 1;
 	}
     }

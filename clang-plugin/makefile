@@ -28,10 +28,13 @@ annobin.so: annobin.cpp
 run-annobin: annobin.so
 	$(CC) -fplugin=./annobin.so \
    -D_FORTIFY_SOURCE=2 \
-   -O2 -fPIE -Wall \
+   -O2 \
+   -fPIE \
+    -Wall \
    -fsanitize=safe-stack \
    -fstack-protector \
    -fcf-protection \
+   -mspeculative-load-hardening \
    -Xclang -plugin-arg-annobin -Xclang verbose \
    -Xclang -plugin-arg-annobin -Xclang version \
    hello.c \
