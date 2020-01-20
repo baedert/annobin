@@ -389,7 +389,8 @@ skip_check (enum test_index check, const char * component_name)
   if (streq (component_name, "elf_init.c")
       || streq (component_name, "init.c"))
     {
-      einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
+      if (check < TEST_MAX)
+	einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
       return true;
     }
 
