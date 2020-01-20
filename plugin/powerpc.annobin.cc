@@ -12,6 +12,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annobin.h"
 
 static int saved_tls_size;

@@ -12,6 +12,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annobin.h"
 
 /* The target specific part of the plugin must prodive the

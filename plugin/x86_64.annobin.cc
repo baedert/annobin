@@ -12,6 +12,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annobin.h"
 
 #define GNU_PROPERTY_X86_ISA_1_USED		0xc0000000

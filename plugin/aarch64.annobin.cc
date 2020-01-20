@@ -12,6 +12,7 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#include "annobin-global.h"
 #include "annobin.h"
 
 /* For AArch64 we do not bother recording the ABI, since this is already
