@@ -29,18 +29,19 @@ run-annobin: annobin.so
 	$(CC) -fplugin=./annobin.so \
    -D_FORTIFY_SOURCE=2 \
    -O2 \
+   -g -grecord-gcc-switches \
    -fPIE \
     -Wall \
    -fsanitize=safe-stack \
-   -fstack-protector \
+   -fstack-protector-strong \
    -fcf-protection \
-   -mspeculative-load-hardening \
+   -fsanitize=cfi-cast-strict \
    -Xclang -plugin-arg-annobin -Xclang verbose \
    -Xclang -plugin-arg-annobin -Xclang version \
    hello.c \
    -save-temps
 	$(STRIP) --merge-notes a.out
-	$(READELF) --wide --notes a.out
+	$(READELF) --wide --notes hello.o
 
 clean:
 	rm -f annobin.so annobin.o hello.bc hello.i hello.o hello.s a.out

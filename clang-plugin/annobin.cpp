@@ -383,6 +383,7 @@ private:
       val <<= 9;
       if (Context.getDiagnostics().getEnableAllWarnings())
 	val |= (1 << 14);
+      verbose ("Optimization = %d, Wall = %d", CodeOpts.OptimizationLevel, Context.getDiagnostics().getEnableAllWarnings());
       OutputNumericNote (Context, "GOW", val, "Optimization Level and Wall");
 
 #if CLANG_VERSION_MAJOR > 7
@@ -392,7 +393,14 @@ private:
       
       const LangOptions & lang_opts = CI.getLangOpts ();
 
-      val = lang_opts.getStackProtector() == clang::LangOptions::SSPOff ? 0 : 2;
+      switch (lang_opts.getStackProtector())
+	{
+	case clang::LangOptions::SSPStrong: val = 2; break;
+	case clang::LangOptions::SSPOff: val = 0; break;
+	case clang::LangOptions::SSPOn: val = 1; break;
+	default: val = 0; break;
+	}
+	  
       char stack_prot[2] = {GNU_BUILD_ATTRIBUTE_STACK_PROT, 0};
       OutputNumericNote (Context, stack_prot, val, "Stack Protection");
 

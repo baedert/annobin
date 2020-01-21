@@ -190,6 +190,12 @@ built_by_gcc (void)
   return per_file.tool == TOOL_GCC;
 }
 
+static inline bool
+built_by_clang (void)
+{
+  return per_file.tool == TOOL_CLANG;
+}
+
 static void
 warn (annocheck_data * data, const char * message)
 {
@@ -1358,6 +1364,10 @@ walk_build_notes (annocheck_data *     data,
 		}
 	      else
 		{
+		  /* FIXME: At the moment the clang plugin is unable to detect -Wall.  */
+		  if (built_by_clang ())
+		    break;
+
 		  if (! skip_check (TEST_WARNINGS, get_component_name (data, sec, note_data, prefer_func_name)))
 		    {
 		      report_i (VERBOSE, "%s: FAIL: (%s): Compiled without either -Wall or -Wformat-security",
@@ -1502,6 +1512,54 @@ walk_build_notes (annocheck_data *     data,
 	      tests[TEST_STACK_REALIGN].num_pass ++;
 	      break;
 	    }
+	}
+      else if (streq (attr, "sanitize_cfi"))
+	{
+	  if (value < 1
+	      && skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
+	    break;
+
+	  if (! built_by_clang())
+	    report_s (VERBOSE, "%s: WARN: (%s): Control flow sanitization note found, but the compiler is not clang",
+		      data, sec, note_data, prefer_func_name, NULL);
+
+	  if (value < 1)
+	    {
+	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled with insufficient Control Flow sanitization",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_CF_PROTECTION].num_fail ++;
+	    }
+	  else /* FIXME: Should we check that specific sanitizations are enabled ?  */
+	    {
+	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with sufficient Control Flow sanitization",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_CF_PROTECTION].num_pass ++;
+	    }
+	  break;
+	}
+      else if (streq (attr, "sanitize_safe_stack"))
+	{
+	  if (value < 1
+	      && skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
+	    break;
+
+	  if (! built_by_clang())
+	    report_s (VERBOSE, "%s: WARN: (%s): Stack protection sanitization note found, but the compiler is not clang",
+		      data, sec, note_data, prefer_func_name, NULL);
+
+	  if (value < 1)
+	    {
+	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled with insufficient Stack Safe sanitization",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_STACK_PROT].num_fail ++;
+	    }
+	  else
+	    {
+	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with sufficient Stack Safe sanitization",
+		      data, sec, note_data, prefer_func_name, NULL);
+	      tests[TEST_STACK_PROT].num_pass ++;
+	    }
+	  break;
 	}
       else
 	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
@@ -2072,6 +2130,21 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 		}
 	    }
 
+	  if (! skip_check (TEST_WARNINGS, NULL))
+	    {
+	      if (strstr (string, "-Wall")
+		  || strstr (string, "-Wformat-security"))
+		{
+		  tests[TEST_WARNINGS].num_pass ++;
+		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient warning enablement", data->filename);
+		}
+	      else
+		{
+		  tests[TEST_WARNINGS].num_fail ++;
+		  einfo (VERBOSE, "%s: FAIL: Not compiled with -Wall or -Wformat-security", data->filename);
+		}
+	    }
+
 	  if ((per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64)
 	      && ! skip_check (TEST_CF_PROTECTION, NULL))
 	    {
@@ -2581,7 +2654,7 @@ show_WARNINGS (annocheck_data * data, test * results)
     }
   else if (results->num_pass == 0)
     {
-      if (! built_by_gcc ())
+      if (! built_by_compiler ())
 	skip (data, "Checking for warning options (not built by gcc");
       else
 	maybe (data, "No data about compilation warnings found");
@@ -2609,8 +2682,8 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
     pass (data, "Good GNU Property note");
   else if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
     {
-      if (! built_by_gcc ())
-	skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a non-GCC tool, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
+      if (! built_by_compiler ())
+	skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
       else
 	fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled");
     }
@@ -3157,7 +3230,7 @@ finish (annocheck_data * data)
     {
       if (per_file.e_type == ET_REL)
 	skip (data, "Not checking for gaps (object file)");
-      else if (! built_by_gcc ())
+      else if (! built_by_compiler ())
 	skip (data, "Not checking for gaps (non-gcc compiled binary)");
       else
 	check_for_gaps (data);
