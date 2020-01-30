@@ -95,6 +95,7 @@ target_triplet = @target@
 subdir = plugin
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acx.m4 \
+	$(top_srcdir)/config/debuginfod.m4 \
 	$(top_srcdir)/config/depstand.m4 \
 	$(top_srcdir)/config/disable-rpath.m4 \
 	$(top_srcdir)/config/gcc-plugin.m4 \
@@ -245,6 +246,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
+LIBDEBUGINFOD = @LIBDEBUGINFOD@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@

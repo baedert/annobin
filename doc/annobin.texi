@@ -92,6 +92,7 @@ in the section entitled ``GNU Free Documentation License''.
 * Invocation::      How to add Binary Annotations to your application.
 * Examining::       How to examine the information stored in the binary.
 * Annocheck::       Analysing your application's compilation.
+* Debuginfod::      Using Annocheck with debuginfod.
 * Legacy Scripts::  Other ways to use the information stored in the binary.
 * GNU FDL::         GNU Free Documentation License
 @end menu
@@ -955,6 +956,25 @@ By default the tool will report times in microseconds, but you can
 change this to reporting in seconds with the @option{--sec} or in
 nanoseconds with the @option{--nsec}.  The default can be restored
 with the @option{--usec} option.
+
+@c man end
+
+@c -----------------------------------------------------------------
+@node Debuginfod
+@chapter Using annocheck with debuginfod
+
+@c man begin
+debuginfod is a web service that indexes ELF/DWARF debugging resources
+by build-id and serves them over HTTP.
+
+'annocheck' can be built with the debuginfod client library 'libdebuginfod'
+using the '--with-debuginfod' configure option.  This option is enabled
+by default if 'libdebuginfod' is installed and found at configure time.
+This allows 'annocheck' to automatically query debuginfod servers for
+separate debug files when the files are otherwise not found.
+
+debuginfod is packaged with elfutils, starting with version 0.178.
+You can get the latest version from 'https://sourceware.org/elfutils/'.
 
 @c man end
 

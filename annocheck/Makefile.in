@@ -96,6 +96,7 @@ bin_PROGRAMS = annocheck$(EXEEXT)
 subdir = annocheck
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acx.m4 \
+	$(top_srcdir)/config/debuginfod.m4 \
 	$(top_srcdir)/config/depstand.m4 \
 	$(top_srcdir)/config/disable-rpath.m4 \
 	$(top_srcdir)/config/gcc-plugin.m4 \
@@ -123,7 +124,7 @@ am_annocheck_OBJECTS = annocheck-annocheck.$(OBJEXT) \
 	annocheck-built-by.$(OBJEXT)
 annocheck_OBJECTS = $(am_annocheck_OBJECTS)
 am__DEPENDENCIES_1 =
-annocheck_DEPENDENCIES = $(am__DEPENDENCIES_1)
+annocheck_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -226,6 +227,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
+LIBDEBUGINFOD = @LIBDEBUGINFOD@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
@@ -328,7 +330,7 @@ top_srcdir = @top_srcdir@
 AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
 annocheck_SOURCES = annocheck.c timing.c size.c notes.c hardened.c built-by.c annocheck.h
-annocheck_LDADD = -lelf -ldw $(RPMLIBS) -liberty
+annocheck_LDADD = -lelf -ldw $(RPMLIBS) -liberty $(LIBDEBUGINFOD)
 annocheck_CFLAGS = -O2 -ansi -g -Wall -Werror
 all: all-am
 

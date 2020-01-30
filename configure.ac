@@ -121,6 +121,9 @@ fi
 
 AC_SUBST([plugindir])
 
+# Check for debuginfod availability
+DEBUGINFOD
+
 DISABLE_RPATH
 
 ACX_LT_HOST_FLAGS

@@ -14,11 +14,15 @@
 
 #include "annobin-global.h"
 #include "annocheck.h"
+#include "config.h"
 #include <rpm/rpmlib.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <elfutils/libdwelf.h>
 #include <elfutils/libdwfl.h>
+#if HAVE_LIBDEBUGINFOD
+#include <elfutils/debuginfod.h>
+#endif
 
 /* Maximum number of input files.  FIXME: Use a linked list instead.  */
 #define MAX_NUM_FILES 256
@@ -781,6 +785,7 @@ follow_debuglink (annocheck_data * data)
       const char *     path = NULL;
       const char *     leadin = "/usr/lib/debug/.build-id";
       unsigned char *  d = (unsigned char *) build_id_ptr;
+      ssize_t          len = build_id_len;
       char             build_id_dir[3];
       char *           build_id_name;
       char *           n;
@@ -799,13 +804,13 @@ follow_debuglink (annocheck_data * data)
       
       debugfile = n = xmalloc (strlen (leadin)
                                + strlen (path)
-			       + build_id_len * 2
+			       + len * 2
 			       + strlen (".debug") + 6);
       
       sprintf (build_id_dir, "%02x", * d++);
-      build_id_len --;
-      build_id_name = n = xmalloc (build_id_len * 2 + 1);
-      while (build_id_len --)
+      len --;
+      build_id_name = n = xmalloc (len * 2 + 1);
+      while (len --)
 	n += sprintf (n, "%02x", *d++);      
       
       if (* path)
@@ -934,6 +939,34 @@ follow_debuglink (annocheck_data * data)
 	  TRY_DEBUG ("%s%s%.*s%lu%s", DEBUGDIR_2, canon_dir, (int) (dash - link) + 1, link, revision, end);
 	}
     }
+
+#if HAVE_LIBDEBUGINFOD
+  if (build_id_len > 0)
+    {
+      debuginfod_client *client = debuginfod_begin ();
+
+      if (client != NULL)
+        {
+          free (debugfile);
+          debugfile = NULL;
+
+	  TRY_DEBUG ("DEBUGINFOD_URLS=%s", getenv (DEBUGINFOD_URLS_ENV_VAR) ?: "" );
+          /* If the debug file is successfully downloaded, debugfile will be
+             set to the path of the local copy.  */
+          fd = debuginfod_find_debuginfo (client, build_id_ptr, build_id_len, & debugfile);
+
+          debuginfod_end (client);
+
+          if (fd >= 0)
+            {
+              /* Ensure file is read-only.  */
+              close (fd);
+              if ((fd = open (debugfile, O_RDONLY)) != -1)
+                goto found;
+            }
+        }
+    }
+#endif /* HAVE_LIBDEBUGINFOD */
 
   /* Failed to find the file.  */
   einfo (VERBOSE, "%s: warn: Could not find separate debug file: %s", data->filename, link);

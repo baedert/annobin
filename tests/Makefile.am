@@ -18,6 +18,10 @@ TESTS=compile-test \
       instrumentation-test \
       section-size-test
 
+if HAVE_DEBUGINFOD
+TESTS += debuginfod-test
+endif
+
 XFAIL_TESTS=hardening-fail-test \
       missing-notes-test \
       active-checks-test \

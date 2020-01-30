@@ -39,6 +39,7 @@ the section entitled "GNU Free Documentation License".
 * Invocation::      How to add Binary Annotations to your application.
 * Examining::       How to examine the information stored in the binary.
 * Annocheck::       Analysing your application's compilation.
+* Debuginfod::      Using Annocheck with debuginfod.
 * Legacy Scripts::  Other ways to use the information stored in the binary.
 * GNU FDL::         GNU Free Documentation License
 
@@ -461,7 +462,7 @@ The exact meaning of the values is specific to gcc, but any non-zero
 number means that the feature has been enabled in some way.
 
 
-File: annobin.info,  Node: Annocheck,  Next: Legacy Scripts,  Prev: Examining,  Up: Top
+File: annobin.info,  Node: Annocheck,  Next: Debuginfod,  Prev: Examining,  Up: Top
 
 4 Analysing an application's compilation.
 *****************************************
@@ -819,9 +820,28 @@ with the '--nsec'.  The default can be restored with the '--usec'
 option.
 
 
-File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Annocheck,  Up: Top
+File: annobin.info,  Node: Debuginfod,  Next: Legacy Scripts,  Prev: Annocheck,  Up: Top
 
-5 How to use the information stored in the binary.
+5 Using annocheck with debuginfod
+*********************************
+
+debuginfod is a web service that indexes ELF/DWARF debugging resources
+by build-id and serves them over HTTP.
+
+   'annocheck' can be built with the debuginfod client library
+'libdebuginfod' using the '-with-debuginfod' configure option.  This
+option is enabled by default if 'libdebuginfod' is installed and found
+at configure time.  This allows 'annocheck' to automatically query
+debuginfod servers for separate debug files when the files are otherwise
+not found.
+
+   debuginfod is packaged with elfutils, starting with version 0.178.
+You can get the latest version from 'https://sourceware.org/elfutils/'.
+
+
+File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Debuginfod,  Up: Top
+
+6 How to use the information stored in the binary.
 **************************************************
 
 The 'annobin' package includes some example scripts that demonstrate how
@@ -844,7 +864,7 @@ still included in the annobin sources.
 
 File: annobin.info,  Node: Who Built Me,  Next: ABI Checking,  Up: Legacy Scripts
 
-5.1 The built-by script
+6.1 The built-by script
 =======================
 
      built-by
@@ -946,7 +966,7 @@ version of a tool that was built between a range of dates.
 
 File: annobin.info,  Node: ABI Checking,  Next: Hardening Checks,  Prev: Who Built Me,  Up: Legacy Scripts
 
-5.2 The check-abi script
+6.2 The check-abi script
 ========================
 
      check-abi
@@ -1031,7 +1051,7 @@ used uniformly throughout the binary.
 
 File: annobin.info,  Node: Hardening Checks,  Next: Checking Archives,  Prev: ABI Checking,  Up: Legacy Scripts
 
-5.3 The hardened script
+6.3 The hardened script
 =======================
 
      hardened
@@ -1178,7 +1198,7 @@ compiled with '-O2' or higher and the '-fstack-protector-strong',
 
 File: annobin.info,  Node: Checking Archives,  Prev: Hardening Checks,  Up: Legacy Scripts
 
-5.4 The run-on-binaries-in script
+6.4 The run-on-binaries-in script
 =================================
 
      run-on-binaries-in
@@ -1749,27 +1769,28 @@ their use in free software.
 
 Tag Table:
 Node: Top705
-Node: Introduction1681
-Node: Invocation3787
-Node: Examining9559
-Node: The Version Encoding12291
-Node: The STACK Encoding12682
-Node: The PIC Encoding13280
-Node: The GOW Encoding13908
-Node: The CF Encoding15458
-Node: The ENUM Encoding16530
-Node: The INSTRUMENT Encoding16919
-Node: Annocheck18293
-Node: Built-By20819
-Node: Hardened22349
-Node: Notes27380
-Node: Section-Size28024
-Node: Timing30178
-Node: Legacy Scripts30825
-Node: Who Built Me31592
-Node: ABI Checking34352
-Node: Hardening Checks36466
-Node: Checking Archives40552
-Node: GNU FDL42974
+Node: Introduction1734
+Node: Invocation3840
+Node: Examining9612
+Node: The Version Encoding12344
+Node: The STACK Encoding12735
+Node: The PIC Encoding13333
+Node: The GOW Encoding13961
+Node: The CF Encoding15511
+Node: The ENUM Encoding16583
+Node: The INSTRUMENT Encoding16972
+Node: Annocheck18346
+Node: Built-By20868
+Node: Hardened22398
+Node: Notes27429
+Node: Section-Size28073
+Node: Timing30227
+Node: Debuginfod30874
+Node: Legacy Scripts31644
+Node: Who Built Me32412
+Node: ABI Checking35172
+Node: Hardening Checks37286
+Node: Checking Archives41372
+Node: GNU FDL43794
 
 End Tag Table

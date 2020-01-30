@@ -88,9 +88,11 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+@HAVE_DEBUGINFOD_TRUE@am__append_1 = debuginfod-test
 subdir = tests
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acx.m4 \
+	$(top_srcdir)/config/debuginfod.m4 \
 	$(top_srcdir)/config/depstand.m4 \
 	$(top_srcdir)/config/disable-rpath.m4 \
 	$(top_srcdir)/config/gcc-plugin.m4 \
@@ -370,6 +372,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
+LIBDEBUGINFOD = @LIBDEBUGINFOD@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
@@ -469,18 +472,10 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-TESTS = compile-test \
-      hardening-test \
-      hardening-fail-test \
-      missing-notes-test \
-      active-checks-test \
-      abi-test \
-      function-sections-test \
-      assembler-gap-test \
-      dynamic-notes-test \
-      instrumentation-test \
-      section-size-test
-
+TESTS = compile-test hardening-test hardening-fail-test \
+	missing-notes-test active-checks-test abi-test \
+	function-sections-test assembler-gap-test dynamic-notes-test \
+	instrumentation-test section-size-test $(am__append_1)
 XFAIL_TESTS = hardening-fail-test \
       missing-notes-test \
       active-checks-test \
@@ -746,6 +741,13 @@ instrumentation-test.log: instrumentation-test
 section-size-test.log: section-size-test
 	@p='section-size-test'; \
 	b='section-size-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+debuginfod-test.log: debuginfod-test
+	@p='debuginfod-test'; \
+	b='debuginfod-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
