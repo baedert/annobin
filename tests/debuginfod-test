@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2018-2019 Red Hat.
+# Copyright (c) 2018-2020 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -23,14 +23,25 @@ GCC=${GCC:-gcc}
 ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
 OBJCOPY=${OBJCOPY:-objcopy}
 CURL=${CURL:-curl}
+SS=${SS:-ss}
 DEBUGINFOD=${DEBUGINFOD:-debuginfod}
 PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
 FAIL="debuginfod-test: FAIL:"
 
-if [ -z $(command -v $DEBUGINFOD) -o -z $(command -v $CURL) ]; then
-  echo "$FAIL Could not find debuginfod or curl"
+if [ -z $(command -v $DEBUGINFOD) ]; then
+  echo "$FAIL Could not find debuginfod"
+  exit 1
+fi
+
+if [ -z $(command -v $CURL) ]; then
+  echo "$FAIL Could not find curl"
+  exit 1
+fi
+
+if [ -z $(command -v $SS) ]; then
+  echo "$FAIL Could not find ss"
   exit 1
 fi
 
@@ -101,7 +112,6 @@ wait_ready()
   fi
 }
 
-echo "TESTTEST"
 # Wait for server to initialize.
 wait_ready $PORT 'ready' 1
 wait_ready $PORT 'thread_work_total{role="traverse"}' 1
@@ -113,8 +123,6 @@ $ANNOCHECK -v -v --ignore-gaps --skip-entry debuginfod-test.exe > debuginfod-tes
 
 if [ $PID != 0 ]; then kill -INT $PID; wait $PID; fi
 
-echo "TEST"
-
 # FAIL if separate debuginfo is not found in client cache.
 grep --silent -e "Opened separate debug file: .*debuginfod_cache" debuginfod-test.out
 if [ $? != 0 ]; then
@@ -122,5 +130,3 @@ if [ $? != 0 ]; then
   cat debuginfod-test.out
   exit 1
 fi
-
-echo "TEST2"
