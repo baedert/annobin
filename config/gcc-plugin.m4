@@ -99,6 +99,10 @@ else
          fi
          ;;
        *)
+         # Add the include/ subdirectory of the plugin dir to CPPFLAGS since
+         # the plugin headers are normally installed there.
+         #
+         CPPFLAGS="$CPPFLAGS -I$gcc_plugin_dir/include"
          ;;
     esac
   fi

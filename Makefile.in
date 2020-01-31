@@ -97,6 +97,7 @@ am__aclocal_m4_deps = $(top_srcdir)/config/acx.m4 \
 	$(top_srcdir)/config/disable-rpath.m4 \
 	$(top_srcdir)/config/gcc-plugin.m4 \
 	$(top_srcdir)/config/lead-dot.m4 \
+	$(top_srcdir)/config/libelf.m4 $(top_srcdir)/config/libgomp.m4 \
 	$(top_srcdir)/config/libtool-link.m4 \
 	$(top_srcdir)/config/libtool.m4 \
 	$(top_srcdir)/config/lthostflags.m4 \
@@ -198,7 +199,7 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 CSCOPE = cscope
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = plugin scripts doc tests annocheck
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -336,7 +337,9 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = plugin scripts doc tests annocheck
+@COND_TESTS_TRUE@MAYBE_TESTS = tests
+@COND_ANNOCHECK_TRUE@MAYBE_ANNOCHECK = annocheck
+SUBDIRS = plugin scripts doc $(MAYBE_TESTS) $(MAYBE_ANNOCHECK)
 dist_doc_DATA = LICENSE COPYING3
 ACLOCAL_AMFLAGS = -I config
 all: all-recursive

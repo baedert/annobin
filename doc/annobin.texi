@@ -88,13 +88,13 @@ Documentation License version 1.3.  A copy of the license is included
 in the section entitled ``GNU Free Documentation License''.
 
 @menu
-* Introduction::    What is Binary Annotation ?
-* Invocation::      How to add Binary Annotations to your application.
-* Examining::       How to examine the information stored in the binary.
-* Annocheck::       Analysing your application's compilation.
-* Debuginfod::      Using Annocheck with debuginfod.
-* Legacy Scripts::  Other ways to use the information stored in the binary.
-* GNU FDL::         GNU Free Documentation License
+* Introduction::           What is Binary Annotation ?
+* Invocation::             How to add Binary Annotations to your application.
+* Examining::              How to examine the information stored in the binary.
+* Annocheck::              Analysing your application's compilation.
+* Configure Options::      Configuring annobin and annocheck.
+* Legacy Scripts::         Other ways to use the information stored in the binary.
+* GNU FDL::                GNU Free Documentation License
 @end menu
 @end ifnottex
 
@@ -960,22 +960,48 @@ with the @option{--usec} option.
 @c man end
 
 @c -----------------------------------------------------------------
-@node Debuginfod
-@chapter Using annocheck with debuginfod
+@node Configure Options
+@chapter Configuring annobin and annocheck 
 
 @c man begin
+When building annobin and annocheck from the sources there are a
+few configure options available to customise the build:
+
+@table @code
+@item --with-debuginfod
 debuginfod is a web service that indexes ELF/DWARF debugging resources
 by build-id and serves them over HTTP.
 
-'annocheck' can be built with the debuginfod client library 'libdebuginfod'
-using the '--with-debuginfod' configure option.  This option is enabled
-by default if 'libdebuginfod' is installed and found at configure time.
-This allows 'annocheck' to automatically query debuginfod servers for
-separate debug files when the files are otherwise not found.
+By default the @command{annocheck} program will be built and linked
+with the debuginfod client library @file{libdebuginfod} if it is
+present at build time.  The @option{--with-debuginfod} configure
+option can be used to force the linking against the library even if
+the run-time @command{debuginfod} program cannot be found.
+Alternatively the @option{--without debuginfod} can be used to force
+annobin to be built without @file{libdebuginfod} support, even if it
+is present on the build system.
 
 debuginfod is packaged with elfutils, starting with version 0.178.
 You can get the latest version from 'https://sourceware.org/elfutils/'.
 
+@item --with-gmp=PATH
+The @option{--with-gmp=PATH} option can be used to specify an
+alternative path to the gmp libraries, if necessary.
+
+@item --without-libelf
+The annocheck program uses @file{libelf} to read ELF binaries.  By
+default the configure system will detect if the library is installed
+and if not, then it will disable the building of @command{annocheck}
+and the running of the tests.  (Since they use @command{annocheck}).
+This behaviour can be overrridden by the @option{--without-libelf}
+option which forces the build to assume that libelf is absent even if
+it would normally be detected.
+
+@item --enable-maintainer-mode
+This enables the regeneration of the @file{Makefile} and
+@file{configure} files when building the @command{annobin} sources.
+
+@end table
 @c man end
 
 @c -----------------------------------------------------------------

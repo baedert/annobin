@@ -35,13 +35,13 @@ the section entitled "GNU Free Documentation License".
 
 * Menu:
 
-* Introduction::    What is Binary Annotation ?
-* Invocation::      How to add Binary Annotations to your application.
-* Examining::       How to examine the information stored in the binary.
-* Annocheck::       Analysing your application's compilation.
-* Debuginfod::      Using Annocheck with debuginfod.
-* Legacy Scripts::  Other ways to use the information stored in the binary.
-* GNU FDL::         GNU Free Documentation License
+* Introduction::           What is Binary Annotation ?
+* Invocation::             How to add Binary Annotations to your application.
+* Examining::              How to examine the information stored in the binary.
+* Annocheck::              Analysing your application's compilation.
+* Configure Options::      Configuring annobin and annocheck.
+* Legacy Scripts::         Other ways to use the information stored in the binary.
+* GNU FDL::                GNU Free Documentation License
 
 
 File: annobin.info,  Node: Introduction,  Next: Invocation,  Prev: Top,  Up: Top
@@ -462,7 +462,7 @@ The exact meaning of the values is specific to gcc, but any non-zero
 number means that the feature has been enabled in some way.
 
 
-File: annobin.info,  Node: Annocheck,  Next: Debuginfod,  Prev: Examining,  Up: Top
+File: annobin.info,  Node: Annocheck,  Next: Configure Options,  Prev: Examining,  Up: Top
 
 4 Analysing an application's compilation.
 *****************************************
@@ -820,26 +820,49 @@ with the '--nsec'.  The default can be restored with the '--usec'
 option.
 
 
-File: annobin.info,  Node: Debuginfod,  Next: Legacy Scripts,  Prev: Annocheck,  Up: Top
+File: annobin.info,  Node: Configure Options,  Next: Legacy Scripts,  Prev: Annocheck,  Up: Top
 
-5 Using annocheck with debuginfod
-*********************************
+5 Configuring annobin and annocheck
+***********************************
 
-debuginfod is a web service that indexes ELF/DWARF debugging resources
-by build-id and serves them over HTTP.
+When building annobin and annocheck from the sources there are a few
+configure options available to customise the build:
 
-   'annocheck' can be built with the debuginfod client library
-'libdebuginfod' using the '-with-debuginfod' configure option.  This
-option is enabled by default if 'libdebuginfod' is installed and found
-at configure time.  This allows 'annocheck' to automatically query
-debuginfod servers for separate debug files when the files are otherwise
-not found.
+'--with-debuginfod'
+     debuginfod is a web service that indexes ELF/DWARF debugging
+     resources by build-id and serves them over HTTP.
 
-   debuginfod is packaged with elfutils, starting with version 0.178.
-You can get the latest version from 'https://sourceware.org/elfutils/'.
+     By default the 'annocheck' program will be built and linked with
+     the debuginfod client library 'libdebuginfod' if it is present at
+     build time.  The '--with-debuginfod' configure option can be used
+     to force the linking against the library even if the run-time
+     'debuginfod' program cannot be found.  Alternatively the '--without
+     debuginfod' can be used to force annobin to be built without
+     'libdebuginfod' support, even if it is present on the build system.
+
+     debuginfod is packaged with elfutils, starting with version 0.178.
+     You can get the latest version from
+     'https://sourceware.org/elfutils/'.
+
+'--with-gmp=PATH'
+     The '--with-gmp=PATH' option can be used to specify an alternative
+     path to the gmp libraries, if necessary.
+
+'--without-libelf'
+     The annocheck program uses 'libelf' to read ELF binaries.  By
+     default the configure system will detect if the library is
+     installed and if not, then it will disable the building of
+     'annocheck' and the running of the tests.  (Since they use
+     'annocheck').  This behaviour can be overrridden by the
+     '--without-libelf' option which forces the build to assume that
+     libelf is absent even if it would normally be detected.
+
+'--enable-maintainer-mode'
+     This enables the regeneration of the 'Makefile' and 'configure'
+     files when building the 'annobin' sources.
 
 
-File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Debuginfod,  Up: Top
+File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Configure Options,  Up: Top
 
 6 How to use the information stored in the binary.
 **************************************************
@@ -1769,28 +1792,28 @@ their use in free software.
 
 Tag Table:
 Node: Top705
-Node: Introduction1734
-Node: Invocation3840
-Node: Examining9612
-Node: The Version Encoding12344
-Node: The STACK Encoding12735
-Node: The PIC Encoding13333
-Node: The GOW Encoding13961
-Node: The CF Encoding15511
-Node: The ENUM Encoding16583
-Node: The INSTRUMENT Encoding16972
-Node: Annocheck18346
-Node: Built-By20868
-Node: Hardened22398
-Node: Notes27429
-Node: Section-Size28073
-Node: Timing30227
-Node: Debuginfod30874
-Node: Legacy Scripts31644
-Node: Who Built Me32412
-Node: ABI Checking35172
-Node: Hardening Checks37286
-Node: Checking Archives41372
-Node: GNU FDL43794
+Node: Introduction1785
+Node: Invocation3891
+Node: Examining9663
+Node: The Version Encoding12395
+Node: The STACK Encoding12786
+Node: The PIC Encoding13384
+Node: The GOW Encoding14012
+Node: The CF Encoding15562
+Node: The ENUM Encoding16634
+Node: The INSTRUMENT Encoding17023
+Node: Annocheck18397
+Node: Built-By20926
+Node: Hardened22456
+Node: Notes27487
+Node: Section-Size28131
+Node: Timing30285
+Node: Configure Options30932
+Node: Legacy Scripts32766
+Node: Who Built Me33541
+Node: ABI Checking36301
+Node: Hardening Checks38415
+Node: Checking Archives42501
+Node: GNU FDL44923
 
 End Tag Table

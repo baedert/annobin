@@ -3,7 +3,7 @@
 # license   : GNU GPL v3; see accompanying LICENSE file.
 
 AC_PREREQ(2.64)
-AC_INIT([Binary Annotations], 8.8,,[annobin-plugin])
+AC_INIT([Binary Annotations], 9.0,,[annobin-plugin])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_SRCDIR([plugin/annobin.h])
 
@@ -51,6 +51,11 @@ AC_CHECK_LIB([rpm], [rpmReadPackageFile], [RPMLIBS="-lrpm"], [AC_MSG_ERROR(["Req
 AC_CHECK_LIB([rpmio], [rpmConfigDir], [RPMLIBS="$RPMLIBS -lrpmio"], [AC_MSG_ERROR(["Required library 'rpmio' not found.])])
 AC_SUBST(RPMLIBS)
 
+# Use an alternative GMP if requested.
+GMP
+
+# Detect the presence of libelf - or allow the user to override.
+LIBELF
 
 AC_MSG_CHECKING([whether to enable maintainer-specific portions of Makefiles])
 AC_ARG_ENABLE(maintainer-mode,
@@ -131,6 +136,8 @@ AC_SUBST(target_noncanonical)
 AC_TYPE_INT64_T
 AC_TYPE_UINT64_T
 AC_HEADER_SYS_WAIT
+AM_CONDITIONAL([COND_TESTS], [test "$with_libelf" != no])
+AM_CONDITIONAL([COND_ANNOCHECK], [test "$with_libelf" != no])
 AC_CONFIG_FILES(scripts/Makefile plugin/Makefile doc/Makefile Makefile tests/Makefile annocheck/Makefile)
 AC_CONFIG_HEADERS(plugin/config.h)
 AC_OUTPUT
