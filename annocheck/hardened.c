@@ -1759,42 +1759,53 @@ check_dynamic_section (annocheck_data *    data,
 }
 
 static bool
-check_progbits_section (annocheck_data *     data,
-			annocheck_section *  sec)
+check_comment_section (annocheck_data *     data,
+		       annocheck_section *  sec)
 {
   if (sec->data->d_size <= 11 || ! streq (sec->secname, ".comment"))
     return true;
 
   const char * tool = (const char *) sec->data->d_buf;
+  const char * tool_end = tool + sec->data->d_size;
 
   if (tool[0] == 0)
     tool ++; /* Not sure why this can happen, but it does.  */
 
-  unsigned int version;
-  const char * where;
-  static const char * gcc_prefix = "GCC: (GNU) ";
-  if ((where = strstr (tool, gcc_prefix)) != NULL)
+  /* Note - it is possible to have multiple builder IDs in the .comment section.
+     eg:  GCC: (GNU) 8.3.1 20191121 (Red Hat 8.3.1-5)\0GCC: (GNU) 9.2.1 20191120 (Red Hat 9.2.1-2).
+     so we keep scanning until we do not find any more.  */
+  while (tool < tool_end)
     {
-      /* FIXME: This assumes that the gcc identifier looks like: "GCC: (GNU) 8.1.1""  */
-      version = (unsigned int) strtod (where + strlen (gcc_prefix), NULL);
-      set_producer (data, TOOL_GCC, version, "comment section");
-      einfo (VERBOSE2, "%s: built by gcc version %u (extracted from '%s' in comment section)",
-	     data->filename, version, where);
-    }
+      unsigned int version;
+      const char * where;
+      static const char * gcc_prefix = "GCC: (GNU) ";
 
-  static const char * clang_prefix = "clang version ";
-  if ((where = strstr (tool, clang_prefix)) != NULL)
-    {
-      /* FIXME: This assumes that the clang identifier looks like: "clang version 7.0.1""  */
-      version = (unsigned int) strtod (where + strlen (clang_prefix), NULL);
-      set_producer (data, TOOL_CLANG, version, "comment section");
-      einfo (VERBOSE2, "%s: built by clang version %u (extracted from '%s' in comment section)",
-	     data->filename, version, where);
-    }
+      if ((where = strstr (tool, gcc_prefix)) != NULL)
+	{
+	  /* FIXME: This assumes that the gcc identifier looks like: "GCC: (GNU) 8.1.1""  */
+	  version = (unsigned int) strtod (where + strlen (gcc_prefix), NULL);
+	  set_producer (data, TOOL_GCC, version, "comment section");
+	  einfo (VERBOSE2, "%s: built by gcc version %u (extracted from '%s' in comment section)",
+		 data->filename, version, where);
+	  tool += strlen (tool) + 1;
+	}
 
-  /* FIXME:
-     Should we report comment strings that we did not recognise ?
-     Are there other compilers that put IDs into the comment section ?  */
+      static const char * clang_prefix = "clang version ";
+
+      if ((where = strstr (tool, clang_prefix)) != NULL)
+	{
+	  /* FIXME: This assumes that the clang identifier looks like: "clang version 7.0.1""  */
+	  version = (unsigned int) strtod (where + strlen (clang_prefix), NULL);
+	  set_producer (data, TOOL_CLANG, version, "comment section");
+	  einfo (VERBOSE2, "%s: built by clang version %u (extracted from '%s' in comment section)",
+		 data->filename, version, where);
+	  tool += strlen (tool) + 1;
+	}
+
+      /* FIXME:
+	 Should we report comment strings that we did not recognise ?
+	 Are there other compilers that put IDs into the comment section ?  */
+    }
 
   return true;
 }
@@ -1810,7 +1821,7 @@ check_sec (annocheck_data *     data,
     case SHT_NOTE:     return check_note_section (data, sec);
     case SHT_STRTAB:   return check_string_section (data, sec);
     case SHT_DYNAMIC:  return check_dynamic_section (data, sec);
-    case SHT_PROGBITS: return check_progbits_section (data, sec);
+    case SHT_PROGBITS: return check_comment_section (data, sec);
     default:           return true;
     }
 }

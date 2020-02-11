@@ -762,7 +762,6 @@ record_cf_protection_note (const char * start, const char * end, int type, const
   buffer[++len] = flag_cf_protection + 1;
   buffer[++len] = 0;
 
-  annobin_inform (INFORM_VERBOSE, "Record cf-protection status of %d", flag_cf_protection);
   annobin_output_static_note (buffer, len + 1, false, "numeric: -fcf-protection status",
 			      start, end, type, sec_name);
 }
@@ -1501,15 +1500,19 @@ emit_global_notes (const char * suffix)
 			       global_stack_prot_option >= 0 ? global_stack_prot_option : 0,
 			       "numeric: -fstack-protector status",
 			       NULL, NULL, OPEN, sec);
-  annobin_inform (INFORM_VERBOSE, "Record stack protector setting of %d", global_stack_prot_option >= 0 ? global_stack_prot_option : 0);
+  annobin_inform (INFORM_VERBOSE, "Record global stack protector setting of %d",
+		  global_stack_prot_option >= 0 ? global_stack_prot_option : 0);
 
 #ifdef flag_stack_clash_protection
   /* Record -fstack-clash-protection option.  */
   record_stack_clash_note (NULL, NULL, OPEN, sec);
+  annobin_inform (INFORM_VERBOSE, "Record global stack clash protection setting of %d", flag_stack_clash_protection);
 #endif
+
 #ifdef flag_cf_protection
   /* Record -fcf-protection option.  */
   record_cf_protection_note (NULL, NULL, OPEN, sec);
+  annobin_inform (INFORM_VERBOSE, "Record global cf protection setting of %d", flag_cf_protection);
 #endif
 
   record_fortify_level (global_fortify_level, OPEN, sec);
@@ -1618,11 +1621,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 #ifdef flag_stack_clash_protection
   global_stack_clash_option = flag_stack_clash_protection;
 #endif
+
 #ifdef flag_cf_protection
   global_cf_option = flag_cf_protection;
   if (annobin_active_checks && ((flag_cf_protection & CF_FULL) == 0))
     error ("-fcf-protection=full needed");
 #endif
+
   global_stack_prot_option = flag_stack_protect;
   global_pic_option = compute_pic_option ();
   global_short_enums = flag_short_enums;
