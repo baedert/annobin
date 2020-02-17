@@ -29,11 +29,15 @@ annobin_target_start_symbol_bias (void)
   return 0;
 }
 
-void
+int
 annobin_save_target_specific_information (void)
 {
+#ifdef aarch64_branch_protection_string
+  CHECK_LOCATION_OF ("-mbranch-protection", OPT_mbranch_protection_, x_aarch64_branch_protection_string);
+#endif
+  CHECK_LOCATION_OF ("-mtls-dialect", OPT_mtls_dialect_, x_aarch64_tls_dialect);
+  return 0;
 }
-
 
 void
 annobin_record_global_target_notes (const char * sec)

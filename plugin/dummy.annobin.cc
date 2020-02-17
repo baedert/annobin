@@ -30,9 +30,10 @@ annobin_target_start_symbol_bias (void)
   return 0;
 }
 
-void
+int
 annobin_save_target_specific_information (void)
 {
+  return 0;
 }
 
 void

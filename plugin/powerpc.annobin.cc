@@ -17,10 +17,10 @@
 
 static int saved_tls_size;
 
-void
+int
 annobin_save_target_specific_information (void)
 {
-  ;
+  return 0;
 }
 
 signed int

@@ -2161,13 +2161,32 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	}
     }
 
+  // Extra paranoia -check that the flags that we are going to examine
+  // are where we think they are in the global options structure.
+#ifdef flag_stack_clash_protection
+  CHECK_LOCATION_OF ("-fstack-clash-protection", OPT_fstack_clash_protection, x_flag_stack_clash_protection);
+#endif
+#ifdef flag_cf_protection
+  CHECK_LOCATION_OF ("-fcf-protection", OPT_fcf_protection_, x_flag_cf_protection);
+#endif
+  CHECK_LOCATION_OF ("-fpic", OPT_fpic, x_flag_pic);
+  CHECK_LOCATION_OF ("-fpie", OPT_fpie, x_flag_pie);
+  CHECK_LOCATION_OF ("-fstack-protector", OPT_fstack_protector, x_flag_stack_protect);
+
+  // FIXME: Should we check the location of utility flags that we also examine ?
+  // Ie: flag_verbose_asm, flag_function_sections, flag_reorder_functions,
+  // flag_profile_values, flag_sanitize, flag_instrument_functions, profile_arc,
+  // profile_arc_flag, flag_instrument_function_entry_exit, flag_stack_usage_info,
+  // flag_omit_frame_pointer, flag_short_enums, flag_generate_lto
+  
   /* Record global compiler options.
      NB/ The format of these strings is important, as knowledge
      of their layout is embedded into hardended.c.  */
   run_version   = concat ("running gcc ", version->basever, " ", version->datestamp, NULL);
   build_version = concat ("annobin gcc ", gcc_version.basever, " ", gcc_version.datestamp, NULL);
 
-  annobin_save_target_specific_information ();
+  if (annobin_save_target_specific_information () == 1)
+    return 1;
 
   target_start_sym_bias = annobin_target_start_symbol_bias ();
 

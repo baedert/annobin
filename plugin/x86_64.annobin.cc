@@ -42,47 +42,18 @@ static unsigned long  min_x86_isa = 0;
 static unsigned long  max_x86_isa = 0;
 static int            global_stack_realign = 0;
 
-#ifdef flag_cet
-static int                     global_cet = -1;
-static int                     global_set_switch = -1;
-static unsigned HOST_WIDE_INT  global_ibt = 0;
-static unsigned HOST_WIDE_INT  global_shstk = 0;
-#endif
-
 signed int
 annobin_target_start_symbol_bias (void)
 {
   return 0;
 }
 
-void
+int
 annobin_save_target_specific_information (void)
 {
+  CHECK_LOCATION_OF ("-mstackrealign", OPT_mstackrealign, x_ix86_force_align_arg_pointer);
+  return 0;
 }
-
-#ifdef flag_cet
-static void
-record_cet_note (const char * start, const char * end, int type, const char * sec_name)
-{
-  char buffer [128];
-  unsigned len = sprintf (buffer, "GA%ccet status", NUMERIC);
-
-  /* We bias the values by 1 so that we do not get confused by a zero value.  */
-  buffer[++len] = flag_cet + 1;
-  buffer[++len] = flag_cet_switch + 1;
-  buffer[++len] = (ix86_isa_flags2 & OPTION_MASK_ISA_IBT) ? 2 : 1;
-  buffer[++len] = (ix86_isa_flags & OPTION_MASK_ISA_SHSTK) ? 2 : 1;
-  buffer[++len] = 0;
-
-  annobin_inform (INFORM_VERBOSE, "x86_64: Record CET values of %d:%d:%lx:%lx",
-		  flag_cet, flag_cet_switch,
-		  ix86_isa_flags2 & OPTION_MASK_ISA_IBT,
-		  ix86_isa_flags & OPTION_MASK_ISA_SHSTK);
-
-  annobin_output_static_note (buffer, len + 1, false, "numeric: -mcet status",
-			      start, end, type, sec_name);
-}
-#endif
 
 void
 annobin_record_global_target_notes (const char * sec)
@@ -104,15 +75,6 @@ annobin_record_global_target_notes (const char * sec)
   annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
 			      NULL, NULL, OPEN, sec);
   annobin_inform (INFORM_VERBOSE, "x86_64: Record global stack realign setting of %s", global_stack_realign ? "false" : "true");
-
-  
-#ifdef flag_cet
-  global_cet = flag_cet;
-  global_set_switch = flag_cet_switch;
-  global_ibt = ix86_isa_flags2 & OPTION_MASK_ISA_IBT;
-  global_shstk = ix86_isa_flags & OPTION_MASK_ISA_SHSTK;
-  record_cet_note (NULL, NULL, OPEN, sec);
-#endif
 }
 
 void
@@ -149,24 +111,6 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 				  aname, aname_end, FUNC, sec_name);
       aname = aname_end = NULL;
     }
-
-#ifdef flag_cet
-  if (force
-      || (global_cet != flag_cet)
-      || (global_set_switch != flag_cet_switch)
-      || (global_ibt != (ix86_isa_flags2 & OPTION_MASK_ISA_IBT))
-      || (global_shstk != (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)))
-    {
-      annobin_inform (INFORM_VERBOSE, "x86_64: Recording CET value of %d:%d:%lx:%lx for %s",
-		      flag_cet, flag_cet_switch,
-		      (ix86_isa_flags2 & OPTION_MASK_ISA_IBT),
-		      (ix86_isa_flags & OPTION_MASK_ISA_SHSTK)
-		      func_name);
-	
-      record_cet_note (aname, aname_end, FUNC, sec_name);
-      aname = aname_end = NULL;
-    }
-#endif
 }
 
 static unsigned int

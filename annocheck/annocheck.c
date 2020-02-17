@@ -203,7 +203,7 @@ add_file (const char * filename)
 static void
 print_version (void)
 {
-  einfo (INFO, "Version %d.%d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
+  einfo (INFO, "Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
 
   checker * tool;
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)

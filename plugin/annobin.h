@@ -38,8 +38,9 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 #include <tree.h>
 #include <elf.h>
 
-/* Called during plugin_init().  */
-extern void annobin_save_target_specific_information (void);
+/* Called during plugin_init().
+   Returns 0 upon success and 1 if there is a failure.  */
+extern int annobin_save_target_specific_information (void);
 
 /* Called during PLUGIN_START_UNIT.
    Should only produce notes for the static tools, ie
@@ -87,8 +88,7 @@ extern void ice (const char *);
    characters.  NAME_DESCRIPTION is a description of the name field, using
    in comments and verbose output.
 
-   FIXME: Finish comment.
- */
+   FIXME: Finish comment.  */
 extern void annobin_output_note (const char * NAME,
 				 unsigned     NAMESZ,
 				 bool         NAME_IS_STRING,
@@ -110,3 +110,25 @@ extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;
 extern unsigned long  annobin_total_static_stack_usage;
 extern unsigned long  annobin_max_stack_size;
+
+// A utility macro that checks that the name and offset of the indicated
+// option actually match up to the value held in the cl_options array.
+#define CHECK_LOCATION_OF(FLAG_NAME, CL_OPTION_ENTRY, FLAG_OFFSET)	\
+  do									\
+    {									\
+      if (strncmp (cl_options[CL_OPTION_ENTRY].opt_text, FLAG_NAME,	\
+		   sizeof (FLAG_NAME) - 1) != 0				\
+	  || (cl_options[CL_OPTION_ENTRY].flag_var_offset		\
+	      != offsetof (struct gcc_options, FLAG_OFFSET)))		\
+	{								\
+	  ice ("The location of the " #FLAG_NAME " flag has changed - please rebuild annobin"); \
+	  annobin_inform (INFORM_ALWAYS, "Build time offset: %lx.  Run time offset: %lx", \
+			  (long) offsetof (struct gcc_options, FLAG_OFFSET),  \
+			  (long) cl_options[CL_OPTION_ENTRY].flag_var_offset); \
+	  annobin_inform (INFORM_ALWAYS, "Expeceted name: %s.  Actual name: %s", \
+			  FLAG_NAME,					\
+			  cl_options[CL_OPTION_ENTRY].opt_text);	\
+	  return 1;							\
+	}								\
+    }									\
+  while (0)
