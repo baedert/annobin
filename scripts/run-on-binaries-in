@@ -636,7 +636,7 @@ run_on_file ()
 	*"Zip archive"*)
 	    decompress $abs_file unzip "-q" $file
 	    ;;
-	*"bzip compressed data"*)
+	*"bzip2 compressed data"*)
 	    decompress $abs_file bzip2 "--quiet --decompress" $file
 	    ;;
 	*"gzip compressed data"*)

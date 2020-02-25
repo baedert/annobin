@@ -824,7 +824,7 @@ walk_build_notes (annocheck_data *     data,
 	     format is "annobin gcc X.Y.Z DATE" and "running gcc X.Y.Z DATE".  */
 	  if (sscanf (attr + 1, "running gcc %u.%u.%u", & major, & minor, & rel) == 3)
 	    {
-	      einfo (VERBOSE2, "%s: info: Annobin plugin ran on gcc version %u.%u.%u",
+	      einfo (VERBOSE2, "%s: info: Detected information created by an annobin plugin running on gcc version %u.%u.%u",
 		     data->filename, major, minor, rel);
 	      if (per_file.run_major == 0)
 		{
@@ -865,7 +865,7 @@ walk_build_notes (annocheck_data *     data,
 
 	  if (sscanf (attr + 1, "annobin gcc %u.%u.%u", & major, & minor, & rel) == 3)
 	    {
-	      einfo (VERBOSE, "%s: info: Annobin plugin built by gcc version %u.%u.%u",
+	      einfo (VERBOSE, "%s: info: Detected information stored by an annobin plugin built by gcc version %u.%u.%u",
 		     data->filename, major, minor, rel);
 
 	      if (per_file.anno_major == 0)
@@ -893,7 +893,7 @@ walk_build_notes (annocheck_data *     data,
 	      per_file.anno_minor = minor;
 	      per_file.anno_rel = rel;
 	      if ((per_file.run_minor != 0 && per_file.run_minor != minor)
-		  || (per_file.run_rel != 0   && per_file.run_rel != rel))
+		  || (per_file.run_rel != 0 && per_file.run_rel != rel))
 		{
 		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
 			 data->filename, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
@@ -907,7 +907,7 @@ walk_build_notes (annocheck_data *     data,
 
 	  if (sscanf (attr + 1, "annobin built by clang version %u.%u.%u", & major, & minor, & rel) == 3)
 	    {
-	      einfo (VERBOSE, "%s: info: Annobin plugin built by clang version %u.%u.%u",
+	      einfo (VERBOSE, "%s: info: Detected information stored by an annobin plugin built by clang version %u.%u.%u",
 		     data->filename, major, minor, rel);
 
 	      if (per_file.anno_major == 0)
@@ -935,9 +935,9 @@ walk_build_notes (annocheck_data *     data,
 	      per_file.anno_minor = minor;
 	      per_file.anno_rel = rel;
 	      if ((per_file.run_minor != 0 && per_file.run_minor != minor)
-		  || (per_file.run_rel != 0   && per_file.run_rel != rel))
+		  || (per_file.run_rel != 0 && per_file.run_rel != rel))
 		{
-		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by clang %u.%u.%u but run on clang version %u.%u.%u",
+		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by clang version %u.%u.%u but run on clang version %u.%u.%u",
 			 data->filename, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
 			 per_file.run_major, per_file.run_minor, per_file.run_rel);
 		  einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
@@ -949,7 +949,7 @@ walk_build_notes (annocheck_data *     data,
 	  
 	  if (sscanf (attr + 1, "running on clang version %u.%u.%u", & major, & minor, & rel) == 3)
 	    {
-	      einfo (VERBOSE2, "%s: info: Annobin plugin ran on clang version %u.%u.%u",
+	      einfo (VERBOSE2, "%s: info: Detected information stored by an annobin plugin running on clang version %u.%u.%u",
 		     data->filename, major, minor, rel);
 	      if (per_file.run_major == 0)
 		{
@@ -1364,8 +1364,9 @@ walk_build_notes (annocheck_data *     data,
 		}
 	      else
 		{
-		  /* FIXME: At the moment the clang plugin is unable to detect -Wall.  */
-		  if (built_by_clang ())
+		  /* FIXME: At the moment the clang plugin is unable to detect -Wall.
+		     for clang v9+.  */
+		  if (built_by_clang () && per_file.version > 8)
 		    break;
 
 		  if (! skip_check (TEST_WARNINGS, get_component_name (data, sec, note_data, prefer_func_name)))

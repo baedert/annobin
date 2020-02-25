@@ -9,17 +9,20 @@ PLUGIN_OPTIONS = \
   -shared \
   -fPIC
 
-CC=clang
+INCDIR = ..
+
+all: run-annobin
+
+annobin.so: annobin.cpp
+	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) -I$(INCDIR) $< -o $@ -liberty
+
 #READELF=readelf
 READELF=/work/builds/binutils/current/x86_64-pc-linux-gnu/binutils/readelf
 
 #STRIP=strip
 STRIP=/work/builds/binutils/current/x86_64-pc-linux-gnu/binutils/strip-new
 
-all: run-annobin
-
-annobin.so: annobin.cpp
-	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) $< -o $@ -liberty
+CC=clang
 
 # Note: enabling -fcf-protection results in this error from the linker:
 #   /bin/ld: error: hello.o: <corrupt x86 feature size: 0x8>

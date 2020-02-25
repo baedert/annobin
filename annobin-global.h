@@ -15,7 +15,7 @@
 /* The version of the package.
    NB/ This number is expected to be in the form "Mmm" where
    "M" is major version number and "mm" is the minor version number.  */
-#define ANNOBIN_VERSION 908
+#define ANNOBIN_VERSION 909
 
 /* The version of the annotation specification supported.  */
 #define SPEC_VERSION  3

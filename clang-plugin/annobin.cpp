@@ -29,7 +29,11 @@ using namespace llvm;
 #include "annobin-global.h"
 #include <string.h>
 #include <ctype.h>
-#include <libiberty.h>
+
+// The definition of basename() in libiberty.h needs configuration
+// support, so for now we just provide a simple prototype for the
+// one function in the libiberty library that we actually use.
+extern "C" char *concat (const char *, ...);
 
 #define inform(FORMAT, ...)				    \
   do							    \
@@ -139,7 +143,9 @@ private:
     const char *
     convert_to_valid_symbol_name (const char * name)
     {
-      char * output = xstrdup (name);
+      char * output = strdup (name);
+      if (output == NULL)
+	return NULL;
       for (int i = 0; output[i] != 0; i++)
 	if (!isalnum (output[i]))
 	  output[i] = '_';
@@ -163,9 +169,11 @@ private:
 				       /*Pascal*/ false,
 				       Context.getConstantArrayType (Context.CharTy,
 								     llvm::APInt (32, text.size () + 1),
+#if CLANG_VERSION_MAJOR > 8
+								     nullptr,
+#endif								     
 								     clang::ArrayType::Normal,
-								     /*IndexTypeQuals*/ 0
-								     ),
+								     /*IndexTypeQuals*/ 0),
 				       SourceLocation ()),
 	 {},
 	 {});
@@ -381,6 +389,8 @@ private:
 	val = 3;
       // The optimization level occupies bits 9..11 of the GOW value.
       val <<= 9;
+      // FIXME: The value of Context.getDiagnostics().getEnableAllWarnings() does
+      // not appear to be valid in clang v9 onwatds. :-(
       if (Context.getDiagnostics().getEnableAllWarnings())
 	val |= (1 << 14);
       verbose ("Optimization = %d, Wall = %d", CodeOpts.OptimizationLevel, Context.getDiagnostics().getEnableAllWarnings());
