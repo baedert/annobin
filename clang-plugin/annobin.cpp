@@ -102,12 +102,12 @@ private:
 
 #define START_TEXT   "\
 \t.pushsection .text\n\
-\t.global %s\n\
+\t.hidden %s\n\
 \t.type   %s, STT_NOTYPE\n\
 \t.equiv  %s, .text\n\
 \t.size   %s, 0\n\
 \t.pushsection .text.zzz\n\
-\t.global %s\n\
+\t.hidden %s\n\
 \t.type   %s, STT_NOTYPE\n\
 \t.equiv  %s, .text.zzz\n\
 \t.size   %s, 0\n\
