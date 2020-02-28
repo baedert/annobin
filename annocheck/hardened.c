@@ -54,8 +54,6 @@ static struct per_file
   bool        debuginfo_file;
   bool        compiled_code_seen;
   bool        build_notes_seen;
-  bool        warned_about_instrumentation;
-  bool        warned_version_mismatch;
   int         num_fails;
   int         num_maybes;
   unsigned    anno_major;
@@ -65,9 +63,13 @@ static struct per_file
   unsigned    run_minor;
   unsigned    run_rel;
 
-  enum tool     tool;
-  unsigned int  version;
-  bool          warned;
+  enum tool   tool;
+  uint        version;
+  
+  bool        warned_producer;
+  bool        warned_about_instrumentation;
+  bool        warned_version_mismatch;
+  bool        warned_command_line;
 } per_file;
 
 static hardened_note_data *  ranges = NULL;
@@ -546,11 +548,11 @@ set_producer (annocheck_data *     data,
     {
       if (per_file.version != version)
 	{
-	  if (! per_file.warned)
+	  if (! per_file.warned_producer)
 	    {
 	      einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
 		     data->filename, version, per_file.version);
-	      per_file.warned = true;
+	      per_file.warned_producer = true;
 	    }
 
 	  if (per_file.version < version)
@@ -560,20 +562,20 @@ set_producer (annocheck_data *     data,
   else if ((per_file.tool == TOOL_GAS && tool == TOOL_GCC)
 	   || (per_file.tool == TOOL_GCC && tool == TOOL_GAS))
     {
-      if (! per_file.warned)
+      if (! per_file.warned_producer)
 	{
 	  info (data, "Mixed assembler and GCC detected - treating as pure GCC");
-	  per_file.warned = true;
+	  per_file.warned_producer = true;
 	}
 
       per_file.tool = TOOL_GCC;
     }
   else if (per_file.tool != TOOL_MIXED)
     {
-      if (! per_file.warned)
+      if (! per_file.warned_producer)
 	{
 	  warn (data, "This binary was built by more than one tool");
-	  per_file.warned = true;
+	  per_file.warned_producer = true;
 	}
 
       per_file.tool = TOOL_MIXED;
@@ -1777,9 +1779,11 @@ check_comment_section (annocheck_data *     data,
      so we keep scanning until we do not find any more.  */
   while (tool < tool_end)
     {
+      static const char * gcc_prefix = "GCC: (GNU) ";
+      static const char * clang_prefix = "clang version ";
+      static const char * lld_prefix = "Linker: LLD ";
       unsigned int version;
       const char * where;
-      static const char * gcc_prefix = "GCC: (GNU) ";
 
       if ((where = strstr (tool, gcc_prefix)) != NULL)
 	{
@@ -1788,24 +1792,25 @@ check_comment_section (annocheck_data *     data,
 	  set_producer (data, TOOL_GCC, version, "comment section");
 	  einfo (VERBOSE2, "%s: built by gcc version %u (extracted from '%s' in comment section)",
 		 data->filename, version, where);
-	  tool += strlen (tool) + 1;
 	}
-
-      static const char * clang_prefix = "clang version ";
-
-      if ((where = strstr (tool, clang_prefix)) != NULL)
+      else if ((where = strstr (tool, clang_prefix)) != NULL)
 	{
 	  /* FIXME: This assumes that the clang identifier looks like: "clang version 7.0.1""  */
 	  version = (unsigned int) strtod (where + strlen (clang_prefix), NULL);
 	  set_producer (data, TOOL_CLANG, version, "comment section");
 	  einfo (VERBOSE2, "%s: built by clang version %u (extracted from '%s' in comment section)",
 		 data->filename, version, where);
-	  tool += strlen (tool) + 1;
+	}
+      else if ((where = strstr (tool, lld_prefix)) != NULL)
+	{
+	  einfo (VERBOSE2, "ignoring linker version string found in .comment section");
+	}
+      else if (*tool)
+	{
+	  einfo (VERBOSE2, "unrecognised component in .comment section: %s", tool);
 	}
 
-      /* FIXME:
-	 Should we report comment strings that we did not recognise ?
-	 Are there other compilers that put IDs into the comment section ?  */
+      tool += strlen (tool) + 1;
     }
 
   return true;
@@ -2172,8 +2177,11 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 		}
 	    }
 	}
-      else
-	warn (data, "Command line options not recorded by -grecord-gcc-switches");
+      else if (! per_file.warned_command_line)
+	{
+	  warn (data, "Command line options not recorded by -grecord-gcc-switches");
+	  per_file.warned_command_line = true;
+	}
 
       break;
     }

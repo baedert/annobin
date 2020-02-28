@@ -11,7 +11,7 @@ AC_DEFUN([DEBUGINFOD],
 AC_ARG_WITH([debuginfod],
         AC_HELP_STRING([--with-debuginfod],
                        [Enable debuginfo lookups with debuginfod (auto/yes/no)]),
-        [], [with_debuginfod=auto])
+        [], [with_debuginfod=no])
 AC_MSG_CHECKING([whether to use debuginfod])
 AC_MSG_RESULT([$with_debuginfod])
 

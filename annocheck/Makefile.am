@@ -6,7 +6,7 @@ AUTOMAKE_OPTIONS = no-dependencies
 
 
 bin_PROGRAMS = annocheck
-annocheck_SOURCES = annocheck.c timing.c size.c notes.c hardened.c built-by.c annocheck.h
+annocheck_SOURCES = annocheck.c timing.c size.c notes.c hardened.c built-by.c annocheck.h ../annobin-global.h
 annocheck_LDADD = -lelf -ldw $(RPMLIBS) -liberty $(LIBDEBUGINFOD)
 annocheck_CFLAGS = -O2 -ansi -g -Wall -Werror
 

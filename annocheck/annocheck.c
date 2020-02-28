@@ -1739,7 +1739,7 @@ main (int argc, const char ** argv)
     return EXIT_FAILURE;
 
   if (level == 0)
-    einfo (INFO, "Version %d.%d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
+    einfo (INFO, "Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
   
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
     if (tool->start_scan != NULL)
