@@ -2620,6 +2620,8 @@ show_ENTRY (annocheck_data * data, test * results)
     skip (data, "Entry point instruction is ENDBR.  (Not a dynamic executable)");
   else if (results->num_maybe == 0) /* Ie there was no PT_INTERP segment.  */
     skip (data, "Entry point instruction is ENDBR.  (Not an executable)");
+  else if (! per_file.compiled_code_seen)
+    skip (data, "Entry point not ENDBR, but code not produced by a known compiler");
   else if (per_file.e_entry == 0)
     maybe (data, "Entry point address is zero");
   else if (results->num_fail > 0)
@@ -3212,39 +3214,37 @@ finish (annocheck_data * data)
      of this binary.  */
   (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
 
-  if (! per_file.build_notes_seen)
-    {
+  if (! per_file.build_notes_seen
       /* NB/ This code must happen after the call to annocheck_walk_dwarf()
 	 as that function is responsible for following links to debuginfo
 	 files.  */
-
-      if (data->dwarf_fd != data->fd)
+      && data->dwarf_filename != NULL
+      && data->dwarf_fd != data->fd)
+    {
+      struct checker hardened_notechecker =
 	{
-	  struct checker hardened_notechecker =
-	    {
-	     "Hardened",
-	     NULL,  /* start_file */
-	     interesting_note_sec,
-	     check_note_section,
-	     NULL, /* interesting_seg */
-	     NULL, /* check_seg */
-	     NULL, /* end_file */
-	     NULL, /* process_arg */
-	     NULL, /* usage */
-	     NULL, /* version */
-	     NULL, /* start_scan */
-	     NULL, /* end_scan */
-	     NULL, /* internal */
-	    };
+	 "Hardened",
+	 NULL,  /* start_file */
+	 interesting_note_sec,
+	 check_note_section,
+	 NULL, /* interesting_seg */
+	 NULL, /* check_seg */
+	 NULL, /* end_file */
+	 NULL, /* process_arg */
+	 NULL, /* usage */
+	 NULL, /* version */
+	 NULL, /* start_scan */
+	 NULL, /* end_scan */
+	 NULL, /* internal */
+	};
 
-	  /* There is a separate debuginfo file.  Scan it to see if there are any notes that we can use.  */
-	  einfo (VERBOSE, "%s: info: Running subchecker on %s", data->filename, data->dwarf_filename);
-	  annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, data->filename, data->dwarf_fd);
-	}
-
-      if (! per_file.build_notes_seen)
-	fail (data, "Build notes were not found for this executable");
+      /* There is a separate debuginfo file.  Scan it to see if there are any notes that we can use.  */
+      einfo (VERBOSE, "%s: info: Running subchecker on %s", data->filename, data->dwarf_filename);
+      annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, data->filename, data->dwarf_fd);
     }
+
+  if (! per_file.build_notes_seen && per_file.compiled_code_seen)
+    fail (data, "Build notes were not found for this executable");
 
   if (! ignore_gaps)
     {

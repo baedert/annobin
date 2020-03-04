@@ -218,6 +218,9 @@ builtby_check_sec (annocheck_data *     data,
   if (streq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
     return annocheck_walk_notes (data, sec, builtby_note_walker, (void *) data->filename);
 
+  if (streq (sec->secname, ".note.go.buildid"))
+    found (".note.go.buildid", data->filename, "Go cmd/compile ?.?.?");
+
   return true; /* Allow the search to continue.  */
 }
 
