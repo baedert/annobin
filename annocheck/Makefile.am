@@ -1,4 +1,4 @@
-# copyright : Copyright (c) 2017-2019 Red Hat
+# copyright : Copyright (c) 2017-2020 Red Hat
 # license   : GNU GPL v3; see accompanying LICENSE file
 
 AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'

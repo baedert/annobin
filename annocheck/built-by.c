@@ -1,5 +1,5 @@
 /* Checks the builder of the binary file. 
-   Copyright (c) 2018 - 2019 Red Hat.
+   Copyright (c) 2018 - 2020 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -20,18 +20,19 @@
 
 static const char * istool = NULL;
 static const char * nottool = NULL;
-static const char * last_tool = NULL;
 
 static bool disabled = true;
-
-static bool found_builder;
 static bool all = false;
+static bool is_obj = false;
 
 static bool
 builtby_start (annocheck_data * data)
 {
-  found_builder = false;
-  last_tool = NULL;
+  if (data->is_32bit)
+    is_obj = elf32_getehdr (data->elf)->e_type == ET_REL;
+  else
+    is_obj = elf64_getehdr (data->elf)->e_type == ET_REL;
+
   return true;
 }
 
@@ -40,9 +41,6 @@ builtby_interesting_sec (annocheck_data *     data,
 			 annocheck_section *  sec)
 {
   if (disabled)
-    return false;
-
-  if (! all && found_builder)
     return false;
 
   if (sec->shdr.sh_size == 0)
@@ -54,36 +52,119 @@ builtby_interesting_sec (annocheck_data *     data,
   return sec->shdr.sh_type == SHT_NOTE;
 }
 
+struct entry
+{
+  const char * program;
+  const char * version;
+  struct entry * prev;
+  struct entry * next;
+};
+
+static struct entry * first_entry = NULL;
+
 static bool
+add_tool (const char * program, const char * version)
+{
+  struct entry * new_entry;
+  struct entry * entry;
+
+  for (entry = first_entry; entry != NULL; entry = entry->next)
+    {
+      if (streq (entry->program, program)
+	  && (strstr (version, entry->version)
+	      || strstr (entry->version, version)))
+	return false;
+    }
+  
+  new_entry = xmalloc (sizeof * new_entry);
+  new_entry->program = program;
+  new_entry->version = version;
+  new_entry->next = first_entry;
+  new_entry->prev = NULL;
+  first_entry = new_entry;
+  return true;
+}
+
+#define STR_AND_LEN(str)  (str), sizeof (str) - 1
+
+static void
+parse_tool (const char * tool, const char ** program, const char ** version, const char * source)
+{
+  static struct
+  {
+    const char * prefix;
+    const int    length;
+    const char * program;
+  }
+  prefixes [] =
+    {
+     { STR_AND_LEN ("gcc "), "gcc" }, /* From annobin notes.  */
+     { STR_AND_LEN ("running gcc "), "gcc" }, /* From annobin notes.  */
+     { STR_AND_LEN ("annobin gcc "), "gcc" }, /* From annobin notes.  */
+     { STR_AND_LEN ("annobin gcc "), "gcc" }, /* From annobin notes.  */
+     { STR_AND_LEN ("GCC: (GNU) "), "gcc" }, /* .comment section.  */
+     { STR_AND_LEN ("GNU C89 "), "gcc" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("GNU C99 "), "gcc" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("GNU C11 "), "gcc" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("GNU C17 "), "gcc" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("rustc version "), "rust" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("Go cmd/compile "), "go" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("GNU AS "), "as" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("Guile "), "guile" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("GHC "), "ghc" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("LDC "), "d" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("ldc "), "d" }, /* .comment section.  */
+     { STR_AND_LEN ("running on clang version "), "clang" }, /* From annobin notes.  */
+     { STR_AND_LEN ("clang version "), "clang" },  /* .comment section.  */
+     { STR_AND_LEN ("Linker: LLD "), "lld" } /* .comment section.  */
+    };
+
+  int i;
+  for (i = ARRAY_SIZE (prefixes); i--;)
+    {
+      if (strneq (prefixes[i].prefix, tool, prefixes[i].length))
+	{
+	  * program = prefixes[i].program;
+	  * version = tool + prefixes[i].length;
+	  return;
+	}
+    }
+
+  einfo (VERBOSE, "UNEXPECTED TOOL STRING: %s (source %s)", tool, source);
+  * program = tool;
+  * version = strchr (tool, ' ') + 1;
+}
+
+static void
 found (const char * source, const char * filename, const char * tool)
 {
+  const char * program;
+  const char * version;
+
+  parse_tool (tool, & program, & version, source);
+  
   /* FIXME: Regexps would be better.  */
-  if (nottool != NULL && streq (nottool, tool))
-    return true;
+  if (nottool != NULL && streq (nottool, program))
+    return;
 
-  if (istool != NULL && ! streq (istool, tool))
-    return true;
+  if (istool != NULL && ! streq (istool, program))
+    return;
 
-  if (last_tool && streq (tool, last_tool))
-    return true;
+  bool is_new = add_tool (program, version);
 
   if (all)
-    einfo (INFO, "%s was built by %s [%s]", filename, tool, source);
-  else
-    einfo (INFO, "%s was built by %s", filename, tool);
-    
-  found_builder = true;
-  last_tool = tool;
-  return all; /* Stop further searches unless checking for all builder notes.  */
+    einfo (INFO, "%s was built by %s (version %s) [%s]", filename, program, version, source);
+  else if (is_new)
+    einfo (INFO, "%s was built by %s (version %s)", filename, program, version);
 }
 
 static bool
 builtby_note_walker (annocheck_data *     data,
 		     annocheck_section *  sec,
-		     GElf_Nhdr *            note,
-		     size_t                 name_offset,
-		     size_t                 data_offset,
-		     void *                 ptr)
+		     GElf_Nhdr *          note,
+		     size_t               name_offset,
+		     size_t               data_offset,
+		     void *               ptr)
 {
   if (note->n_type != NT_GNU_BUILD_ATTRIBUTE_OPEN)
     return true;
@@ -102,7 +183,10 @@ builtby_note_walker (annocheck_data *     data,
   if (namedata[pos - 1] != GNU_BUILD_ATTRIBUTE_TYPE_STRING)
     return false;
 
-  return found ("annobin note", (const char *) ptr, namedata + pos + 1);
+  if (strncmp ((const char *) namedata + pos + 1, STR_AND_LEN ("annobin built")) != 0)
+    found ("annobin note", (const char *) ptr, namedata + pos + 1);
+
+  return true;
 }
 
 static bool
@@ -112,6 +196,7 @@ builtby_check_sec (annocheck_data *     data,
   if (streq (sec->secname, ".comment"))
     {
       const char * tool = (const char *) sec->data->d_buf;
+      const char * tool_end = tool + sec->data->d_size;
 
       if (sec->data->d_size == 0)
 	return true; /* The .comment section is empty, so keep on searching.  */
@@ -119,7 +204,15 @@ builtby_check_sec (annocheck_data *     data,
       if (tool[0] == 0)
 	tool ++; /* Not sure why this can happen, but it does.  */
 
-      return found (".comment section", data->filename, tool);
+      while (tool < tool_end)
+	{
+	  if (* tool)
+	    found (".comment section", data->filename, tool);
+
+	  tool += strlen (tool) + 1;
+	}
+
+      return true;
     }
 
   if (streq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
@@ -127,34 +220,6 @@ builtby_check_sec (annocheck_data *     data,
 
   return true; /* Allow the search to continue.  */
 }
-
-enum producer
-{
-  PRODUCER_UNKNOWN,
-  PRODUCER_GCC,
-  PRODUCER_GAS,
-  PRODUCER_CLANG,
-  PRODUCER_RUST,
-  PRODUCER_GO
-};
-   
-typedef struct tool_id
-{
-  const char *  producer_string;
-  enum producer producer_id;
-} tool_id;
-
-static const tool_id tools[] =
-{
- /* { "GNU C++", PRODUCER_GXX }, */
-  { "GNU C", PRODUCER_GCC },
-  { "rustc version", PRODUCER_RUST },
-  { "clang version", PRODUCER_CLANG },
-  { "clang LLVM", PRODUCER_CLANG }, /* Is this right ?  */
-  { "Go cmd/compile", PRODUCER_GO },
-  { "GNU AS", PRODUCER_GAS },
-  { NULL, 0 }
-};
 
 /* Look for DW_AT_producer attributes.  */
 
@@ -172,29 +237,10 @@ builtby_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, voi
     return einfo (ERROR, "%s: DWARF DW_AT_producer attribute does not have a string value", data->filename);
 
   einfo (VERBOSE, "%s: DW_AT_producer string: %s", data->filename, string);
-  
-  const tool_id *  tool;
-  enum producer    producer = PRODUCER_UNKNOWN;
 
-  for (tool = tools; tool->producer_string != NULL; tool ++)
-    if (strstr (string, tool->producer_string))
-      {
-	producer = tool->producer_id;
-	break;
-      }
-
-  switch (producer)
-    {
-    default:
-    case PRODUCER_UNKNOWN: found ("DWARF attribute", data->filename, string); break;
-    case PRODUCER_GCC:     found ("DWARF attribute", data->filename, "gcc"); break;
-    case PRODUCER_RUST:    found ("DWARF attribute", data->filename, "rust"); break;
-    case PRODUCER_CLANG:   found ("DWARF attribute", data->filename, "clang"); break;
-    case PRODUCER_GO:      found ("DWARF attribute", data->filename, "go"); break;
-    case PRODUCER_GAS:     found ("DWARF attribute", data->filename, "gas"); break;
-    }
+  found ("DWARF attribute", data->filename, string);
   
-  return all;
+  return true;
 }
 
 static bool
@@ -203,14 +249,33 @@ builtby_finish (annocheck_data * data)
   if (disabled)
     return true;
 
-  if (found_builder && ! all)
-    return true;
-
-  (void) annocheck_walk_dwarf (data, builtby_dwarf_walker, NULL);
+  if (! is_obj)
+    /* Object files contain unrelocated DWARF debug info, which
+       can lead to bogus DW_AT_producer strings.  */
+    (void) annocheck_walk_dwarf (data, builtby_dwarf_walker, NULL);
     
-  if (! found_builder)
-    einfo (INFO, "%s: could not determine builder", data->filename);
+  if (first_entry == NULL)
+    {
+      if (istool)
+	einfo (VERBOSE, "%s: not built by %s", data->filename, istool);
+      else if (nottool)
+	einfo (VERBOSE, "%s: was built by %s", data->filename, nottool);
+      else
+	einfo (INFO, "%s: could not determine builder", data->filename);
+    }
+  else
+    {
+      struct entry * entry;
+      struct entry * next = NULL;
 
+      for (entry = first_entry; entry != NULL; entry = next)
+	{
+	  next = entry->next;
+	  free (entry);
+	}
+
+      first_entry = NULL;
+    }
   return true;
 }
 
@@ -291,12 +356,12 @@ builtby_usage (void)
 static void
 builtby_version (void)
 {
-  einfo (INFO, "Version 1.0");
+  einfo (INFO, "Version 1.1");
 }
 
 struct checker builtby_checker = 
 {
-  "Built By",
+  "BuiltBy",
   builtby_start,
   builtby_interesting_sec,
   builtby_check_sec,
