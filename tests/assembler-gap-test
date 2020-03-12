@@ -23,7 +23,7 @@ GAS=${GAS:-as}
 GCC=${GCC:-gcc}
 READELF=${READELF:-readelf}
 ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
+PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 

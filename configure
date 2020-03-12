@@ -592,7 +592,7 @@ PACKAGE_STRING='Binary Annotations 9.0'
 PACKAGE_BUGREPORT=''
 PACKAGE_URL=''
 
-ac_unique_file="plugin/annobin.h"
+ac_unique_file="gcc-plugin/annobin.h"
 # Factoring default headers for most tests.
 ac_includes_default="\
 #include <stdio.h>
@@ -633,6 +633,8 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 LIBOBJS
+COND_CLANG_FALSE
+COND_CLANG_TRUE
 COND_ANNOCHECK_FALSE
 COND_ANNOCHECK_TRUE
 COND_TESTS_FALSE
@@ -18495,9 +18497,17 @@ else
   COND_ANNOCHECK_FALSE=
 fi
 
-ac_config_files="$ac_config_files scripts/Makefile plugin/Makefile doc/Makefile Makefile tests/Makefile annocheck/Makefile"
+ if test "$with_clang" == yes; then
+  COND_CLANG_TRUE=
+  COND_CLANG_FALSE='#'
+else
+  COND_CLANG_TRUE='#'
+  COND_CLANG_FALSE=
+fi
 
-ac_config_headers="$ac_config_headers plugin/config.h"
+ac_config_files="$ac_config_files scripts/Makefile gcc-plugin/Makefile doc/Makefile Makefile tests/Makefile annocheck/Makefile"
+
+ac_config_headers="$ac_config_headers gcc-plugin/config.h"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -18646,6 +18656,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${COND_ANNOCHECK_TRUE}" && test -z "${COND_ANNOCHECK_FALSE}"; then
   as_fn_error $? "conditional \"COND_ANNOCHECK\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${COND_CLANG_TRUE}" && test -z "${COND_CLANG_FALSE}"; then
+  as_fn_error $? "conditional \"COND_CLANG\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 
@@ -19627,12 +19641,12 @@ do
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
     "libtool-rpath-patch") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool-rpath-patch" ;;
     "scripts/Makefile") CONFIG_FILES="$CONFIG_FILES scripts/Makefile" ;;
-    "plugin/Makefile") CONFIG_FILES="$CONFIG_FILES plugin/Makefile" ;;
+    "gcc-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES gcc-plugin/Makefile" ;;
     "doc/Makefile") CONFIG_FILES="$CONFIG_FILES doc/Makefile" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "tests/Makefile") CONFIG_FILES="$CONFIG_FILES tests/Makefile" ;;
     "annocheck/Makefile") CONFIG_FILES="$CONFIG_FILES annocheck/Makefile" ;;
-    "plugin/config.h") CONFIG_HEADERS="$CONFIG_HEADERS plugin/config.h" ;;
+    "gcc-plugin/config.h") CONFIG_HEADERS="$CONFIG_HEADERS gcc-plugin/config.h" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac

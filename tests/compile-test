@@ -17,7 +17,7 @@ rm -f hello.o hello2.o hello3.o libhello.so compile-test.exe hello.i hello.s
 GCC=${GCC:-gcc}
 READELF=${READELF:-readelf}
 OBJCOPY=${OBJCOPY:-objcopy}
-PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
+PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 

@@ -390,7 +390,7 @@ private:
       // The optimization level occupies bits 9..11 of the GOW value.
       val <<= 9;
       // FIXME: The value of Context.getDiagnostics().getEnableAllWarnings() does
-      // not appear to be valid in clang v9 onwatds. :-(
+      // not appear to be valid in clang v9 onwards. :-(
       if (Context.getDiagnostics().getEnableAllWarnings())
 	val |= (1 << 14);
       verbose ("Optimization = %d, Wall = %d", CodeOpts.OptimizationLevel, Context.getDiagnostics().getEnableAllWarnings());
@@ -427,7 +427,12 @@ private:
       val += lang_opts.Sanitize.has (clang::SanitizerKind::CFIVCall) ? 64 : 0;
       OutputNumericNote (Context, "sanitize_cfi", val, "Sanitize Control Flow Integrity");
 
-      val = lang_opts.PIE ? 4 : 0;
+      if (lang_opts.PIE)
+	val = 4;
+      else if (lang_opts.PICLevel > 0)
+	val = 2;
+      else
+	val = 0;
       char pic[2] = {GNU_BUILD_ATTRIBUTE_PIC, 0};
       OutputNumericNote (Context, pic, val, "PIE");
             

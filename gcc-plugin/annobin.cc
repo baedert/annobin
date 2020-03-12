@@ -1791,10 +1791,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	  else
 	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
 	}
+
       if (global_glibcxx_assertions != 1)
-	{
-	  annobin_inform (INFORM_ALWAYS, _("Warning: -D_GLIBCXX_ASSERTIONS not defined"));
-	}
+	annobin_inform (INFORM_ALWAYS, _("Warning: -D_GLIBCXX_ASSERTIONS not defined"));
     }
 
   /* It is possible that no code will end up in the .text section.

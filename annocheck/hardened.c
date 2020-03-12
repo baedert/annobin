@@ -198,6 +198,12 @@ built_by_clang (void)
   return per_file.tool == TOOL_CLANG;
 }
 
+static inline bool
+built_by_mixed (void)
+{
+  return per_file.tool == TOOL_MIXED;
+}
+
 static void
 warn (annocheck_data * data, const char * message)
 {
@@ -570,11 +576,14 @@ set_producer (annocheck_data *     data,
 
       per_file.tool = TOOL_GCC;
     }
-  else if (per_file.tool != TOOL_MIXED)
+  else if (! built_by_mixed ())
     {
       if (! per_file.warned_producer)
 	{
-	  warn (data, "This binary was built by more than one tool");
+	  einfo (VERBOSE, "%s: WARN: This binary was built by more than one tool (%s and %s)",
+		 data->filename,
+		get_producer_name (per_file.tool),
+		get_producer_name (tool));
 	  per_file.warned_producer = true;
 	}
 
@@ -867,7 +876,7 @@ walk_build_notes (annocheck_data *     data,
 
 	  if (sscanf (attr + 1, "annobin gcc %u.%u.%u", & major, & minor, & rel) == 3)
 	    {
-	      einfo (VERBOSE, "%s: info: Detected information stored by an annobin plugin built by gcc version %u.%u.%u",
+	      einfo (VERBOSE2, "%s: info: Detected information stored by an annobin plugin built by gcc version %u.%u.%u",
 		     data->filename, major, minor, rel);
 
 	      if (per_file.anno_major == 0)
@@ -909,7 +918,7 @@ walk_build_notes (annocheck_data *     data,
 
 	  if (sscanf (attr + 1, "annobin built by clang version %u.%u.%u", & major, & minor, & rel) == 3)
 	    {
-	      einfo (VERBOSE, "%s: info: Detected information stored by an annobin plugin built by clang version %u.%u.%u",
+	      einfo (VERBOSE2, "%s: info: Detected information stored by an annobin plugin built by clang version %u.%u.%u",
 		     data->filename, major, minor, rel);
 
 	      if (per_file.anno_major == 0)
@@ -1370,6 +1379,8 @@ walk_build_notes (annocheck_data *     data,
 		     for clang v9+.  */
 		  if (built_by_clang () && per_file.version > 8)
 		    break;
+		  if (built_by_mixed ())
+		    break;
 
 		  if (! skip_check (TEST_WARNINGS, get_component_name (data, sec, note_data, prefer_func_name)))
 		    {
@@ -1522,7 +1533,7 @@ walk_build_notes (annocheck_data *     data,
 	      && skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
 	    break;
 
-	  if (! built_by_clang())
+	  if (! built_by_clang() && ! built_by_mixed ())
 	    report_s (VERBOSE, "%s: WARN: (%s): Control flow sanitization note found, but the compiler is not clang",
 		      data, sec, note_data, prefer_func_name, NULL);
 
@@ -1546,7 +1557,7 @@ walk_build_notes (annocheck_data *     data,
 	      && skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
 	    break;
 
-	  if (! built_by_clang())
+	  if (! built_by_clang() && ! built_by_mixed ())
 	    report_s (VERBOSE, "%s: WARN: (%s): Stack protection sanitization note found, but the compiler is not clang",
 		      data, sec, note_data, prefer_func_name, NULL);
 
@@ -2121,10 +2132,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 		  einfo (VERBOSE2, "%s: PASS: Compiled with -fpic/-fpie", data->filename);
 		}
 	      else
-		{
-		  tests[TEST_PIC].num_fail ++;
-		  einfo (VERBOSE, "%s: FAIL: Not compiled with -fpic/-fpie", data->filename);
-		}
+		einfo (VERBOSE2, "%s: MAYB: -fPIC/-fPIE not found in DW_AT_producer string", data->filename);
 	    }
 
 	  if (! skip_check (TEST_STACK_PROT, NULL))
@@ -2141,25 +2149,20 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 		  einfo (VERBOSE, "%s: FAIL: Compiled with insufficient stack protection", data->filename);
 		}
 	      else
-		{
-		  tests[TEST_STACK_PROT].num_fail ++;
-		  einfo (VERBOSE, "%s: FAIL: Not compiled with -fstack-protector-strong", data->filename);
-		}
+		einfo (VERBOSE2, "%s: MAYB: -fstack-protector not found in DW_AT_producer string", data->filename);
 	    }
 
 	  if (! skip_check (TEST_WARNINGS, NULL))
 	    {
 	      if (strstr (string, "-Wall")
-		  || strstr (string, "-Wformat-security"))
+		  || strstr (string, "-Wformat-security")
+		  || strstr (string, "-Werror=format-security"))
 		{
 		  tests[TEST_WARNINGS].num_pass ++;
 		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient warning enablement", data->filename);
 		}
 	      else
-		{
-		  tests[TEST_WARNINGS].num_fail ++;
-		  einfo (VERBOSE, "%s: FAIL: Not compiled with -Wall or -Wformat-security", data->filename);
-		}
+		einfo (VERBOSE2, "%s: MAYB: -Wall/-Wformat-security not found in DW_AT_producer string", data->filename);
 	    }
 
 	  if ((per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64)
@@ -2171,10 +2174,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 		  einfo (VERBOSE, "%s: PASS: Compiled with control flow protection enabled", data->filename);
 		}
 	      else
-		{
-		  tests[TEST_CF_PROTECTION].num_fail ++;
-		  einfo (VERBOSE, "%s: FAIL: Not compiled with control flow protection enabled", data->filename);
-		}
+		einfo (VERBOSE2, "%s: MAYB: -fcf-protection not found in DW_AT_producer string", data->filename);
 	    }
 	}
       else if (! per_file.warned_command_line)
@@ -2725,7 +2725,7 @@ show_BIND_NOW (annocheck_data * data, test * results)
   else if (per_file.tool == TOOL_GO)
     /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
     skip (data, "Test for -Wl,-z,now.  (Binary was built by GO)");
-  else if (per_file.tool == TOOL_MIXED)
+  else if (built_by_mixed ())
     /* FIXME: Should be changed once GO supports PIE & BIND_NOW.  */
     skip (data, "Test for -Wl,-z,now.  (Binary was built by different compilers)");
   else if (results->num_pass == 0 || results->num_fail > 0)

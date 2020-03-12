@@ -113,7 +113,7 @@ DIST_COMMON = $(srcdir)/Makefile.am $(top_srcdir)/configure \
 am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
-CONFIG_HEADER = $(top_builddir)/plugin/config.h
+CONFIG_HEADER = $(top_builddir)/gcc-plugin/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 AM_V_P = $(am__v_P_@AM_V@)
@@ -199,7 +199,7 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 CSCOPE = cscope
-DIST_SUBDIRS = plugin scripts doc tests annocheck
+DIST_SUBDIRS = gcc-plugin scripts doc tests annocheck clang-plugin
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -339,7 +339,8 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 @COND_TESTS_TRUE@MAYBE_TESTS = tests
 @COND_ANNOCHECK_TRUE@MAYBE_ANNOCHECK = annocheck
-SUBDIRS = plugin scripts doc $(MAYBE_TESTS) $(MAYBE_ANNOCHECK)
+@COND_CLANG_TRUE@MAYBE_CLANG = clang-plugin
+SUBDIRS = gcc-plugin scripts doc $(MAYBE_TESTS) $(MAYBE_ANNOCHECK) $(MAYBE_CLANG)
 dist_doc_DATA = LICENSE COPYING3
 ACLOCAL_AMFLAGS = -I config
 all: all-recursive

@@ -20,7 +20,7 @@ rm -f hello.o property-note.o hello3.o property-note-test.exe property-note-test
 GAS=${GAS:-as}
 GCC=${GCC:-gcc}
 ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
+PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fPIE -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection -p"

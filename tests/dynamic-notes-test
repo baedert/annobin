@@ -19,6 +19,6 @@ rm -f hello.o
 
 GCC=${GCC:-gcc}
 READELF=${READELF:-readelf}
-PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
+PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 $GCC -fplugin=$PLUGIN -c -fplugin-arg-annobin-no-static-notes $srcdir/hello.c -fplugin-arg-annobin-dynamic-notes

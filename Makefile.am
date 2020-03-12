@@ -1,4 +1,4 @@
-## Copyright (C) 2017-2018 Red Hat.
+## Copyright (C) 2017-2020 Red Hat.
 
 ## You should have received a copy of the GNU General Public License v3
 ## along with this program; see the file COPYING3.  If not see
@@ -14,6 +14,10 @@ if COND_ANNOCHECK
   MAYBE_ANNOCHECK = annocheck
 endif
 
-SUBDIRS = plugin scripts doc $(MAYBE_TESTS) $(MAYBE_ANNOCHECK)
+if COND_CLANG
+  MAYBE_CLANG = clang-plugin
+endif
+
+SUBDIRS = gcc-plugin scripts doc $(MAYBE_TESTS) $(MAYBE_ANNOCHECK) $(MAYBE_CLANG)
 dist_doc_DATA = LICENSE COPYING3
 ACLOCAL_AMFLAGS = -I config

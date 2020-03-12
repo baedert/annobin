@@ -15,7 +15,7 @@
 rm -f hello.o hello2.o hello3.o libhello.so hardening-fail-test.exe
 
 GCC=${GCC:-gcc}
-PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
+PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach -fplugin-arg-annobin-active-checks"
 

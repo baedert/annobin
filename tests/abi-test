@@ -17,7 +17,7 @@ rm -f hello.o hello2.o hello3.o libhello.so abi-test.exe
 GCC=${GCC:-gcc}
 READELF=${READELF:-readelf}
 OBJCOPY=${OBJCOPY:-objcopy}
-PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
+PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
