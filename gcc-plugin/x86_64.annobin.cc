@@ -51,7 +51,7 @@ annobin_target_start_symbol_bias (void)
 int
 annobin_save_target_specific_information (void)
 {
-  CHECK_LOCATION_OF ("-mstackrealign", OPT_mstackrealign, x_ix86_force_align_arg_pointer);
+  CHECK_LOCATION_OF ("-mstackrealign", OPT_mstackrealign);
   return 0;
 }
 

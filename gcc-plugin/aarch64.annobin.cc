@@ -33,9 +33,9 @@ int
 annobin_save_target_specific_information (void)
 {
 #ifdef aarch64_branch_protection_string
-  CHECK_LOCATION_OF ("-mbranch-protection", OPT_mbranch_protection_, x_aarch64_branch_protection_string);
+  CHECK_LOCATION_OF ("-mbranch-protection", OPT_mbranch_protection_);
 #endif
-  CHECK_LOCATION_OF ("-mtls-dialect", OPT_mtls_dialect_, x_aarch64_tls_dialect);
+  CHECK_LOCATION_OF ("-mtls-dialect", OPT_mtls_dialect_);
   return 0;
 }
 

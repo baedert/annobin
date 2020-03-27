@@ -103,28 +103,23 @@ extern void annobin_output_note (const char * NAME,
 extern void annobin_output_static_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned, const char *);
 extern void annobin_output_bool_note (const char, const bool, const char *, const char *, const char *, unsigned, const char *);
 extern void annobin_output_string_note (const char, const char *, const char *, const char *, const char *, unsigned, const char *);
-
 extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, const char *, unsigned, const char *);
+extern int  annobin_get_gcc_option (unsigned int);
 
 extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;
 extern unsigned long  annobin_total_static_stack_usage;
 extern unsigned long  annobin_max_stack_size;
 
-// A utility macro that checks that the name and offset of the indicated
-// option actually match up to the value held in the cl_options array.
-#define CHECK_LOCATION_OF(FLAG_NAME, CL_OPTION_ENTRY, FLAG_OFFSET)	\
+// A utility macro that checks that the name of the provided option
+// entry actually matches up to the value held in the cl_options array.
+#define CHECK_LOCATION_OF(FLAG_NAME, CL_OPTION_ENTRY)			\
   do									\
     {									\
       if (strncmp (cl_options[CL_OPTION_ENTRY].opt_text, FLAG_NAME,	\
-		   sizeof (FLAG_NAME) - 1) != 0				\
-	  || (cl_options[CL_OPTION_ENTRY].flag_var_offset		\
-	      != offsetof (struct gcc_options, FLAG_OFFSET)))		\
+		   sizeof (FLAG_NAME) - 1) != 0)			\
 	{								\
 	  ice ("The location of the " #FLAG_NAME " flag has changed - please rebuild annobin"); \
-	  annobin_inform (INFORM_ALWAYS, "Build time offset: %lx.  Run time offset: %lx", \
-			  (long) offsetof (struct gcc_options, FLAG_OFFSET),  \
-			  (long) cl_options[CL_OPTION_ENTRY].flag_var_offset); \
 	  annobin_inform (INFORM_ALWAYS, "Expeceted name: %s.  Actual name: %s", \
 			  FLAG_NAME,					\
 			  cl_options[CL_OPTION_ENTRY].opt_text);	\

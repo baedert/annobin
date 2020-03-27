@@ -249,6 +249,7 @@ annobin_emit_asm (const char * text, const char * comment)
       fprintf (asm_out_file, "\t");
       len = fprintf (asm_out_file, "%s", text);
     }
+
   if (flag_verbose_asm && comment)
     {
       if (len == 0)
@@ -593,16 +594,68 @@ annobin_output_numeric_note (const char     numeric_type,
 			      start, end, note_type, sec_name);
 }
 
+/* Returns the value of gcc command line option CL_OPTION_INDEX.  */
+
+int
+annobin_get_gcc_option (unsigned int cl_option_index)
+{
+  /* Some flags are not stored in the global_options structure.  */
+  if (cl_option_index == OPT_flto)
+    return flag_lto != NULL;
+  if (cl_option_index == OPT_fsanitize_)
+    return flag_sanitize;
+  
+  if (cl_option_index >= cl_options_count)
+    {
+      annobin_inform (INFORM_ALWAYS, "debugging: index = %u max = %u\n", cl_option_index, cl_options_count);
+      ice ("attempting to access an unknown gcc command line option");
+      return -1;
+    }
+
+  void * flag = option_flag_var (cl_option_index, & global_options);
+  if (flag == NULL)
+    {
+      annobin_inform (INFORM_ALWAYS, "debugging: index = %u max = %u\n", cl_option_index, cl_options_count);
+      ice ("attempting to access a gcc command line option that is not stored in global_options");
+      return -1;
+    }
+
+  const struct cl_option *option = cl_options + cl_option_index;
+  switch (option->var_type)
+    {
+    case CLVC_EQUAL:
+#if GCCPLUGIN_VERSION_MAJOR >= 9
+    case CLVC_SIZE:
+#endif
+    case CLVC_BOOLEAN:
+      if (option->cl_host_wide_int)
+	return * ((HOST_WIDE_INT *) flag);
+      else
+	return * ((int *) flag);
+
+    case CLVC_ENUM:
+      return cl_enums[option->var_enum].get (flag);
+
+    default:
+      annobin_inform (INFORM_ALWAYS, "type = %d, opt = %d\n", option->var_type, cl_option_index);
+      ice ("unsupport gcc command line option type");
+      return -1;
+    }
+}
+
 static int
 compute_pic_option (void)
 {
-  if (flag_pie > 1)
+  int val = annobin_get_gcc_option (OPT_fpie);
+  if (val > 1)
     return 4;
-  if (flag_pie)
+  if (val)
     return 3;
-  if (flag_pic > 1)
+
+  val = annobin_get_gcc_option (OPT_fpic);
+  if (val > 1)
     return 2;
-  if (flag_pic)
+  if (val)
     return 1;
   return 0;
 }
@@ -744,7 +797,7 @@ record_stack_clash_note (const char * start, const char * end, int type, const c
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cstack_clash",
-			  flag_stack_clash_protection ? BOOL_T : BOOL_F);
+			  annobin_get_gcc_option (OPT_fstack_clash_protection) ? BOOL_T : BOOL_F);
 
   annobin_output_static_note (buffer, len + 1, true, "bool: -fstack-clash-protection status",
 			      start, end, type, sec_name);
@@ -758,8 +811,8 @@ record_cf_protection_note (const char * start, const char * end, int type, const
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%ccf_protection", NUMERIC);
 
-  /* We bias the flag_cf_protection enum value by 1 so that we do not get confused by a zero value.  */
-  buffer[++len] = flag_cf_protection + 1;
+  /* We bias the cf_protection enum value by 1 so that we do not get confused by a zero value.  */
+  buffer[++len] = annobin_get_gcc_option (OPT_fcf_protection_) + 1;
   buffer[++len] = 0;
 
   annobin_output_static_note (buffer, len + 1, false, "numeric: -fcf-protection status",
@@ -772,13 +825,14 @@ record_frame_pointer_note (const char * start, const char * end, int type, const
 {
   char buffer [128];
   unsigned len;
+  int val = annobin_get_gcc_option (OPT_fomit_frame_pointer);
 
-  if (flag_omit_frame_pointer)
+  if (val)
     len = sprintf (buffer, "GA%comit_frame_pointer", BOOL_T);
   else
     len = sprintf (buffer, "GA%comit_frame_pointer", BOOL_F);
 
-  annobin_inform (INFORM_VERBOSE, "Record omit-frame-pointer status of %d", flag_omit_frame_pointer);
+  annobin_inform (INFORM_VERBOSE, "Record omit-frame-pointer status of %d", val);
   annobin_output_static_note (buffer, len + 1, true, "bool: -fomit-frame-pointer status",
 			      start, end, type, sec_name);
 }
@@ -888,14 +942,15 @@ annobin_emit_function_notes (bool force)
   if (annobin_note_count > count)
     start_sym = end_sym = NULL;
 
-  if (flag_stack_protect != -1
-      && (force
-	  || global_stack_prot_option != flag_stack_protect))
+  int current_val = annobin_get_gcc_option (OPT_fstack_protector);
+  if (current_val != -1
+      && (force || global_stack_prot_option != current_val))
     {
       annobin_inform (INFORM_VERBOSE, "Recording stack protection status of %d for %s",
-		      flag_stack_protect, func_name);
+		      current_val, func_name);
 
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, flag_stack_protect,
+      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
+				   current_val,
 				   "numeric: -fstack-protector status",
 				   start_sym, end_sym, FUNC, sec_name);
 
@@ -904,11 +959,11 @@ annobin_emit_function_notes (bool force)
     }
 
 #ifdef flag_stack_clash_protection
-  if (force
-      || global_stack_clash_option != flag_stack_clash_protection)
+  current_val = annobin_get_gcc_option (OPT_fstack_clash_protection);
+  if (force || global_stack_clash_option != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording stack clash protection status of %d for %s",
-		      flag_stack_clash_protection, func_name);
+		      current_val, func_name);
 
       record_stack_clash_note (start_sym, end_sym, FUNC, sec_name);
       start_sym = end_sym = NULL;
@@ -916,55 +971,59 @@ annobin_emit_function_notes (bool force)
 #endif
 
 #ifdef flag_cf_protection
-  if (force
-      || global_cf_option != flag_cf_protection)
+  current_val = annobin_get_gcc_option (OPT_fcf_protection_);
+  if (force || global_cf_option != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording control flow protection status of %d for %s",
-		      flag_cf_protection, func_name);
+		      current_val, func_name);
 
       record_cf_protection_note (start_sym, end_sym, FUNC, sec_name);
       start_sym = end_sym = NULL;
     }
 #endif
 
-  if (force || global_omit_frame_pointer != flag_omit_frame_pointer)
+  current_val = annobin_get_gcc_option (OPT_fomit_frame_pointer);
+  if (force || global_omit_frame_pointer != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording omit_frame_pointer status of %d for %s",
-		      flag_omit_frame_pointer, func_name);
+		      current_val, func_name);
 
       record_frame_pointer_note (start_sym, end_sym, FUNC, sec_name);
       start_sym = end_sym = NULL;
     }
 
-  if (force
-      || global_pic_option != compute_pic_option ())
+  current_val = compute_pic_option ();
+  if (force || global_pic_option != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording PIC status of %s", func_name);
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, compute_pic_option (),
+      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, current_val,
 				   "numeric: pic type", start_sym, end_sym,
 				   FUNC, sec_name);
       start_sym = end_sym = NULL;
     }
 
-  if (force
-      || global_GOWall_options != compute_GOWall_options ())
+  current_val = compute_GOWall_options ();
+  if (force || global_GOWall_options != (unsigned) current_val)
     {
-      record_GOW_settings (compute_GOWall_options (), true, func_name, start_sym, end_sym, sec_name);
+      annobin_inform (INFORM_VERBOSE, "Recording debug/optimize/warning value of %x for %s",
+		      current_val, func_name);
+      record_GOW_settings (current_val, true, func_name, start_sym, end_sym, sec_name);
       start_sym = end_sym = NULL;
     }
 
-  if (flag_short_enums != -1
-      && (force
-	  || global_short_enums != flag_short_enums))
+  current_val = annobin_get_gcc_option (OPT_fshort_enums);
+  if (current_val != -1
+      && (force || global_short_enums != current_val))
     {
-      annobin_inform (INFORM_VERBOSE, "Recording enum size for %s", func_name);
-      annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, flag_short_enums,
-				flag_short_enums ? "bool: short-enums: on" : "bool: short-enums: off",
+      annobin_inform (INFORM_VERBOSE, "Recording short enums in use in %s", func_name);
+      annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, current_val,
+				current_val ? "bool: short-enums: on" : "bool: short-enums: off",
 				start_sym, end_sym, FUNC, sec_name);
       start_sym = end_sym = NULL;
     }
 
-  if (annobin_enable_stack_size_notes && flag_stack_usage_info)
+  current_val = annobin_get_gcc_option (OPT_fstack_usage);
+  if (annobin_enable_stack_size_notes && current_val)
     {
       if ((unsigned long) current_function_static_stack_size > stack_threshold)
 	{
@@ -985,8 +1044,8 @@ annobin_emit_function_notes (bool force)
 	annobin_max_stack_size = current_function_static_stack_size;
     }
 
-  /* Always record the fortify and assertion levels as we cannot be sure that
-     the global values have been recorded.  cf BZ 1703500.  */
+  /* Always record the fortify and assertion levels as we cannot be
+     sure that the global values have been recorded.  cf BZ 1703500.  */
   record_fortify_level (global_fortify_level, FUNC, sec_name);
   record_glibcxx_assertions (global_glibcxx_assertions, FUNC, sec_name);
 }
@@ -1086,10 +1145,10 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       current_func.section_name = concat (annobin_get_section_name (current_function_decl), NULL);
     }
 
-  else if (flag_function_sections)
+  else if (annobin_get_gcc_option (OPT_ffunction_sections))
     {
       /* Special case: at -O2 or higher special functions get a prefix added.  */
-      if (flag_reorder_functions)
+      if (annobin_get_gcc_option (OPT_freorder_functions))
 	{
           if (startup)
 	    current_func.section_name = concat (STARTUP_SECTION, ".", current_func.asm_name, NULL);
@@ -1109,7 +1168,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	current_func.section_name = concat (CODE_SECTION, ".", current_func.asm_name, NULL);
     }
 
-  else if (flag_reorder_functions /* && targetm_common.have_named_sections */)
+  else if (annobin_get_gcc_option (OPT_freorder_functions) /* && targetm_common.have_named_sections */)
     {
       /* Attempt to determine the section into which the code will be placed.
 	 We could call targetm.asm_out_function_section but that ends up calling
@@ -1127,7 +1186,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	}
       else if (startup)
 	{
-	  if (!in_lto_p && ! flag_profile_values)
+	  if (!in_lto_p && ! annobin_get_gcc_option (OPT_fprofile_values))
 	    current_func.section_name = concat (STARTUP_SECTION, NULL);
 	}
       else if (exit)
@@ -1137,7 +1196,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       else if (likely)
 	{
 	  /* FIXME: Never seen this one, either.  */
-	  if (!in_lto_p && ! flag_profile_values)
+	  if (!in_lto_p && ! annobin_get_gcc_option (OPT_fprofile_values))
 	    current_func.section_name = concat (HOT_SECTION, NULL);
 	}
     }
@@ -1506,13 +1565,15 @@ emit_global_notes (const char * suffix)
 #ifdef flag_stack_clash_protection
   /* Record -fstack-clash-protection option.  */
   record_stack_clash_note (NULL, NULL, OPEN, sec);
-  annobin_inform (INFORM_VERBOSE, "Record global stack clash protection setting of %d", flag_stack_clash_protection);
+  annobin_inform (INFORM_VERBOSE, "Record global stack clash protection setting of %d",
+		  annobin_get_gcc_option (OPT_fstack_clash_protection));
 #endif
 
 #ifdef flag_cf_protection
   /* Record -fcf-protection option.  */
   record_cf_protection_note (NULL, NULL, OPEN, sec);
-  annobin_inform (INFORM_VERBOSE, "Record global cf protection setting of %d", flag_cf_protection);
+  annobin_inform (INFORM_VERBOSE, "Record global cf protection setting of %d",
+		  annobin_get_gcc_option (OPT_fcf_protection_));
 #endif
 
   record_fortify_level (global_fortify_level, OPEN, sec);
@@ -1540,32 +1601,34 @@ emit_global_notes (const char * suffix)
 
      FIXME: At the moment we do not check to see if any of these flags change
      on a per-function basis.  */
-  if (flag_instrument_function_entry_exit
+  if (annobin_get_gcc_option (OPT_finstrument_functions)
 #ifdef flag_sanitize
-      || flag_sanitize
+      || annobin_get_gcc_option (OPT_fsanitize_)
 #endif
-      || profile_flag
-      || profile_arc_flag)
+      || annobin_get_gcc_option (OPT_fprofile)
+      || annobin_get_gcc_option (OPT_fprofile_arcs))
     {
       char buffer[128];
       unsigned int len = sprintf (buffer, "GA%cINSTRUMENT:%u/%u/%u/%u",
 				  GNU_BUILD_ATTRIBUTE_TYPE_STRING,
 #ifdef flag_sanitize
-				  flag_sanitize,
+				  annobin_get_gcc_option (OPT_fsanitize_) ? 1 : 0,
 #else
 				  0,
 #endif
-				  flag_instrument_function_entry_exit,
-				  profile_flag, profile_arc_flag);
+				  annobin_get_gcc_option (OPT_finstrument_functions),
+				  annobin_get_gcc_option (OPT_fprofile),
+				  annobin_get_gcc_option (OPT_fprofile_arcs));
       annobin_inform (INFORM_VERBOSE,
 		      "Instrumentation options enabled: sanitize: %u, function entry/exit: %u, profiling: %u, profile arcs: %u",
 #ifdef flag_sanitize
-		      flag_sanitize,
+		      annobin_get_gcc_option (OPT_fsanitize_) ? 1 : 0,
 #else
 		      0,
 #endif
-		      flag_instrument_function_entry_exit,
-		      profile_flag, profile_arc_flag);
+		      annobin_get_gcc_option (OPT_finstrument_functions),
+		      annobin_get_gcc_option (OPT_fprofile),
+		      annobin_get_gcc_option (OPT_fprofile_arcs));
 
       annobin_output_note (buffer, len + 1, true, "string: details of profiling enablement",
 			   NULL, NULL, 0, false, OPEN, sec);
@@ -1619,20 +1682,20 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     flag_stack_usage_info = 1;
 
 #ifdef flag_stack_clash_protection
-  global_stack_clash_option = flag_stack_clash_protection;
+  global_stack_clash_option = annobin_get_gcc_option (OPT_fstack_clash_protection);
 #endif
 
 #ifdef flag_cf_protection
-  global_cf_option = flag_cf_protection;
-  if (annobin_active_checks && ((flag_cf_protection & CF_FULL) == 0))
+  global_cf_option = annobin_get_gcc_option (OPT_fcf_protection_);
+  if (annobin_active_checks && ((global_cf_option & CF_FULL) == 0))
     error ("-fcf-protection=full needed");
 #endif
 
-  global_stack_prot_option = flag_stack_protect;
+  global_stack_prot_option = annobin_get_gcc_option (OPT_fstack_protector);
   global_pic_option = compute_pic_option ();
-  global_short_enums = flag_short_enums;
+  global_short_enums = annobin_get_gcc_option (OPT_fshort_enums);
   global_GOWall_options = compute_GOWall_options ();
-  global_omit_frame_pointer = flag_omit_frame_pointer;
+  global_omit_frame_pointer = annobin_get_gcc_option (OPT_fomit_frame_pointer);
 
   if (annobin_active_checks && optimize < 2 && ! optimize_debug)
     error ("optimization level is too low!");
@@ -1779,7 +1842,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
       if (global_glibcxx_assertions == -1)
 	global_glibcxx_assertions = 1;
     }
-  else if (flag_generate_lto)
+  else if (annobin_get_gcc_option (OPT_flto))
     {
       /* Because of the hack above, if we know that we are generating a
 	 lto object file and the preprocessor values are insufficient,
@@ -2121,6 +2184,8 @@ plugin_init (struct plugin_name_args *    plugin_info,
       return 0;
     }
 
+#if 0 // Now that we are accessing gcc options via the offsets stored in the cl_options array, we should be immune to changes in the size of the global_options structure.
+  
   // Almost everything of interest to annobin is held in the global_options
   // structure.  Make sure that this structure has not changed in size between
   // the time that this code was compiled and the time that the plugin is run.
@@ -2159,18 +2224,19 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	  return 1;
 	}
     }
+#endif
 
   // Extra paranoia -check that the flags that we are going to examine
   // are where we think they are in the global options structure.
 #ifdef flag_stack_clash_protection
-  CHECK_LOCATION_OF ("-fstack-clash-protection", OPT_fstack_clash_protection, x_flag_stack_clash_protection);
+  CHECK_LOCATION_OF ("-fstack-clash-protection", OPT_fstack_clash_protection);
 #endif
 #ifdef flag_cf_protection
-  CHECK_LOCATION_OF ("-fcf-protection", OPT_fcf_protection_, x_flag_cf_protection);
+  CHECK_LOCATION_OF ("-fcf-protection", OPT_fcf_protection_);
 #endif
-  CHECK_LOCATION_OF ("-fpic", OPT_fpic, x_flag_pic);
-  CHECK_LOCATION_OF ("-fpie", OPT_fpie, x_flag_pie);
-  CHECK_LOCATION_OF ("-fstack-protector", OPT_fstack_protector, x_flag_stack_protect);
+  CHECK_LOCATION_OF ("-fpic", OPT_fpic);
+  CHECK_LOCATION_OF ("-fpie", OPT_fpie);
+  CHECK_LOCATION_OF ("-fstack-protector", OPT_fstack_protector);
 
   // FIXME: Should we check the location of utility flags that we also examine ?
   // Ie: flag_verbose_asm, flag_function_sections, flag_reorder_functions,

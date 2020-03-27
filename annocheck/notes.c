@@ -1,5 +1,5 @@
 /* Displays the Annobin notes in binary files.
-   Copyright (c) 2019 Red Hat.
+   Copyright (c) 2019-2020 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -24,6 +24,7 @@ typedef struct local_note
   ulong start;
   ulong end;
   uint value;
+  bool open;
   const char * data;
 } local_note;
 
@@ -83,7 +84,7 @@ record_new_range (ulong start, ulong end)
 #define RANGE_ALLOC_DELTA    16
 
 static void
-record_note (uint value, const char * data)
+record_note (uint value, const char * data, bool open)
 {
   if (num_saved_notes >= num_allocated_notes)
     {
@@ -100,6 +101,7 @@ record_note (uint value, const char * data)
   note->start = saved_start;
   note->end   = saved_end;
   note->value = value;
+  note->open  = open;
   note->data  = data;
   ++ num_saved_notes;
 }
@@ -251,7 +253,7 @@ notes_walk (annocheck_data *     data,
       return true;
     }
 
-  record_note (value, attr);
+  record_note (value, attr, note->n_type == NT_GNU_BUILD_ATTRIBUTE_OPEN);
 
   return true;
 }
@@ -328,6 +330,11 @@ notes_end_file (annocheck_data * data)
 
       einfo (PARTIAL, "  ");
 
+      if (note->open)
+	einfo (PARTIAL, "[O] ");
+      else
+	einfo (PARTIAL, "[F] ");
+      
       uint value = note->value;
 
       switch (note->data[0])
@@ -365,7 +372,7 @@ notes_end_file (annocheck_data * data)
 	  /* Convert the pic value into a pass/fail result.  */
 	  switch (value)
 	    {
-	    default: einfo (PARTIAL, "PIC: *unknown*\n"); break;
+	    default: einfo (PARTIAL, "PIC: *unknown (%d)*\n", value); break;
 	    case 0:  einfo (PARTIAL, "PIC: none\n"); break;
 	    case 1:
 	    case 2:  einfo (PARTIAL, "PIC: -fpic\n"); break;
@@ -377,7 +384,7 @@ notes_end_file (annocheck_data * data)
 	case GNU_BUILD_ATTRIBUTE_STACK_PROT:
 	  switch (value)
 	    {
-	    default: einfo (PARTIAL, "Stack Protection: *unknown*\n"); break;
+	    default: einfo (PARTIAL, "Stack Protection: *unknown (%d)*\n", value); break;
 	    case 0:  einfo (PARTIAL, "Stack Protection: None\n"); break;
 	    case 1:  einfo (PARTIAL, "Stack Protection: Basic\n"); break;
 	    case 4:  einfo (PARTIAL, "Stack Protection: Explicit\n"); break;
@@ -391,10 +398,20 @@ notes_end_file (annocheck_data * data)
 	    {
 	    case 1:  einfo (PARTIAL, "Short Enums: Used\n"); break;
 	    case 0:  einfo (PARTIAL, "Short Enums: Not Used\n"); break;
-	    default: einfo (PARTIAL, "Short Enums: *unknown*\n"); break;
+	    default: einfo (PARTIAL, "Short Enums: *unknown (%d)*\n", value); break;
 	    }
 	  break;
 
+	case 'b':
+	  if (const_strneq (note->data, "branch_protection:"))
+	    {
+	      einfo (PARTIAL, "AArch64 Branch Protection: %s\n",
+		     note->data + strlen ("branch_protection:"));
+	    }
+	  else
+	    einfo (PARTIAL, "Unknown b-type note: '%s', value %d\n", note->data, note->value);
+	  break;
+	  
 	case 'c':
 	  if (streq (note->data, "cf_protection"))
 	    {
@@ -402,7 +419,7 @@ notes_end_file (annocheck_data * data)
 	      switch (value)
 		{
 		default:
-		  einfo (PARTIAL, "*unknown*\n"); break;
+		  einfo (PARTIAL, "*unknown (%d)*\n", value); break;
 		case 4: 
 		case 8:
 		  einfo (PARTIAL, "Full\n"); break;
@@ -419,7 +436,7 @@ notes_end_file (annocheck_data * data)
 		}
 	    }
 	  else
-	    einfo (PARTIAL, "Unknown: '%s', value %d\n", note->data, note->value);
+	    einfo (PARTIAL, "Unknown c-type note: '%s', value %d\n", note->data, note->value);
 	  break;
 
 	case 'F':
@@ -428,8 +445,10 @@ notes_end_file (annocheck_data * data)
 	      einfo (PARTIAL, "FORTIFY: ");
 	      switch (value)
 		{
+		case 255:
+		  einfo (PARTIAL, "not detected\n"); break;
 		default:
-		  einfo (PARTIAL, "*unknown*\n"); break;
+		  einfo (PARTIAL, "*unknown (%d)*\n", value); break;
 		case 0:
 		case 1:
 		case 2:
@@ -437,14 +456,14 @@ notes_end_file (annocheck_data * data)
 		}
 	    }
 	  else
-	    einfo (PARTIAL, "Unknown: '%s', value %d\n", note->data, note->value);
+	    einfo (PARTIAL, "Unknown F-type note: '%s', value %d\n", note->data, note->value);
 	  break;
 
 	case 'G':
 	  if (streq (note->data, "GOW"))
 	    {
 	      if (value == -1)
-		einfo (PARTIAL, "Optimization: *unknown*\n");
+		einfo (PARTIAL, "Optimization: *unknown (-1)*\n");
 	      else if (value & (1 << 13))
 		einfo (PARTIAL, "Optimization: -Og\n");
 	      else
@@ -458,11 +477,48 @@ notes_end_file (annocheck_data * data)
 		{
 		case 0: einfo (PARTIAL, "Not defined\n"); break;
 		case 1: einfo (PARTIAL, "Defined\n"); break;
-		default: einfo (PARTIAL, "*unknown*\n"); break;
+		default: einfo (PARTIAL, "*unknown (%d)*\n", value); break;
 		}
 	    }
 	  else
-	    einfo (PARTIAL, "Unknown: '%s', value %d", note->data, note->value);
+	    einfo (PARTIAL, "Unknown G-type note: '%s', value %d", note->data, note->value);
+	  break;
+
+	case 'I':
+	  if (const_strneq (note->data, "INSTRUMENT:"))
+	    {
+	      unsigned int sanitize, instrument, profile, arcs;
+	      const char * attr = note->data + strlen ("INSTRUMENT:");
+
+	      einfo (PARTIAL, "INSTRUMENTATION:\n       ");
+	      if (sscanf (attr, "%u/%u/%u/%u", & sanitize, & instrument, & profile, & arcs) != 4)
+		{
+		  einfo (PARTIAL, "*corrupt*");
+		}
+	      else
+		{
+		  einfo (PARTIAL, "-fsanitize: %s\n       ", sanitize ? "enabled" : "disabled");
+		  einfo (PARTIAL, "-finstrument-functions: %s\n       ", instrument ? "enabled" : "disabled");
+		  einfo (PARTIAL, "-fprofile: %s\n       ", profile ? "enabled" : "disabled");
+		  einfo (PARTIAL, "-fprofile-arcs: %s\n", arcs ? "enabled" : "disabled");
+		}
+	    }
+	  else
+	    einfo (PARTIAL, "Unknown I-type note: '%s', value %d\n", note->data, note->value);
+	  break;
+	  
+	case 'o':
+	  if (streq (note->data, "omit_frame_pointer"))
+	    {
+	      switch (value)
+		{
+		default: einfo (PARTIAL, "Omit Frame Pointer: *unknown (%d)*\n", value); break;
+		case 0:  einfo (PARTIAL, "Omit Frame Pointer: No\n"); break;
+		case 1:  einfo (PARTIAL, "Omit Frame Pointer: Yes\n"); break;
+		}
+	    }
+	  else
+	    einfo (PARTIAL, "Unknown o-type note: '%s', value %d\n", note->data, note->value);
 	  break;
 
 	case 's':
@@ -473,7 +529,7 @@ notes_end_file (annocheck_data * data)
 		{
 		case 0: einfo (PARTIAL, "Not enabled\n"); break;
 		case 1: einfo (PARTIAL, "Enabled\n"); break;
-		default: einfo (PARTIAL, "*unknown*\n"); break;
+		default: einfo (PARTIAL, "*unknow (%d)n*\n", value); break;
 		}
 	    }
 	  else if (streq (note->data, "stack_realign"))
@@ -481,27 +537,29 @@ notes_end_file (annocheck_data * data)
 	      einfo (PARTIAL, "Stack Realign: ");
 	      switch (value)
 		{
-		default: einfo (PARTIAL, "*unknown*\n"); break;
+		default: einfo (PARTIAL, "*unknown (%d)*\n", value); break;
 		case 0:  einfo (PARTIAL, "Not enabled\n"); break;
 		case 1:  einfo (PARTIAL, "Enabled\n"); break;
 		}
 	    }
-	  else
-	    einfo (PARTIAL, "Unknown: '%s', value %d\n", note->data, note->value);
-	  break;
-
-	case 'o':
-	  if (streq (note->data, "omit_frame_pointer"))
+	  else if (streq (note->data, "sanitize_cfi"))
 	    {
-	      switch (value)
-		{
-		default: einfo (PARTIAL, "Omit Frame Pointer: *unknown*\n"); break;
-		case 0:  einfo (PARTIAL, "Omit Frame Pointer: No\n"); break;
-		case 1:  einfo (PARTIAL, "Omit Frame Pointer: Yes\n"); break;
-		}
+	      einfo (PARTIAL, "Sanitize CFI: ");
+	      if (value < 1)
+		einfo (PARTIAL, "disabled\n");
+	      else
+		einfo (PARTIAL, "enabled\n");
+	    }
+	  else if (streq (note->data, "sanitize_safe_stack"))
+	    {
+	      einfo (PARTIAL, "Sanitize SafeStack: ");
+	      if (value < 1)
+		einfo (PARTIAL, "disabled\n");
+	      else
+		einfo (PARTIAL, "enabled\n");
 	    }
 	  else
-	    einfo (PARTIAL, "Unknown: '%s', value %d\n", note->data, note->value);
+	    einfo (PARTIAL, "Unknown s-type note: '%s', value %d\n", note->data, note->value);
 	  break;
 
 	default:
