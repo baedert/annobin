@@ -602,9 +602,11 @@ annobin_get_gcc_option (unsigned int cl_option_index)
   /* Some flags are not stored in the global_options structure.  */
   if (cl_option_index == OPT_flto)
     return flag_lto != NULL;
+#ifdef flag_sanitize
   if (cl_option_index == OPT_fsanitize_)
     return flag_sanitize;
-  
+#endif
+
   if (cl_option_index >= cl_options_count)
     {
       annobin_inform (INFORM_ALWAYS, "debugging: index = %u max = %u\n", cl_option_index, cl_options_count);
@@ -612,6 +614,99 @@ annobin_get_gcc_option (unsigned int cl_option_index)
       return -1;
     }
 
+  /* Sometimes a discrepancy between the gcc used to build annobin
+     and the gcc running annobin will mean that an option has moved
+     in the cl_options array.  We check here and if necessary adjust
+     the index. */
+  static struct cl_index_remap
+  {
+    bool checked;
+    const char * option_name;
+    const unsigned int original_index;
+    unsigned int real_index;
+  } cl_remap [] =
+      {
+       /* This is an array of the options that we know annobin wants to access.  */
+#ifdef flag_stack_clash_protection
+       { false, "-fstack-clash-protection", OPT_fstack_clash_protection, 0},
+#endif
+#ifdef flag_cf_protection
+       { false, "-fcf-protection", OPT_fcf_protection_, 0},
+#endif
+       { false, "-fpic", OPT_fpic, 0},
+       { false, "-fpie", OPT_fpie, 0},
+       { false, "-fstack-protector", OPT_fstack_protector, 0},
+       { false, "-fomit-frame-pointer", OPT_fomit_frame_pointer, 0},
+       { false, "-fshort-enums", OPT_fshort_enums, 0}, 
+       { false, "-fstack-usage", OPT_fstack_usage, 0}, 
+       { false, "-ffunction-sections", OPT_ffunction_sections, 0},
+       { false, "-freorder-functions", OPT_freorder_functions, 0},
+       { false, "-fprofile-values", OPT_fprofile_values, 0},
+       { false, "-finstrument-functions", OPT_finstrument_functions, 0},
+       { false, "-fprofile", OPT_fprofile, 0},
+       { false, "-fprofile-arcs", OPT_fprofile_arcs, 0}
+      };
+
+  int i;
+  for (i = ARRAY_SIZE (cl_remap); --i;)
+    {
+      if (cl_remap[i].original_index != cl_option_index)
+	continue;
+
+      if (cl_remap[i].checked)
+	{
+	  cl_option_index = cl_remap[i].real_index;
+	}
+      else if (strncmp (cl_options[cl_option_index].opt_text, cl_remap[i].option_name,
+			strlen (cl_remap[i].option_name)) == 0)
+	{
+	  cl_remap[i].checked = true;
+	  cl_remap[i].real_index = cl_remap[i].original_index;
+	}
+      else
+	{
+	  /* Search the cl_options array for the option we are expecting.  */
+	  int j;
+	  for (j = 0; j < cl_options_count; j++)
+	    {
+	      if (strncmp (cl_options[j].opt_text, cl_remap[i].option_name,
+			   strlen (cl_remap[i].option_name)) == 0)
+		{
+		  cl_remap[i].checked = true;
+		  cl_remap[i].real_index = j;
+		  annobin_inform (INFORM_VERBOSE, "had to remap option index %u to %u for option %s",
+				  cl_option_index, j, cl_remap[i].option_name);
+		  cl_option_index = j;
+		  break;
+		}
+	    }
+
+	  if (j == cl_options_count)
+	    {
+	      /* The option is no longer in the array!  */
+#if 0
+	      annobin_inform (INFORM_ALWAYS, "debugging: option = %s index = %u\n", cl_remap[i].option_name, cl_option_index);
+	      ice ("gcc command option missing from cl_options array");
+#else
+	      annobin_inform (INFORM_VERBOSE, "option %s (index %u) not in cl_options\n", cl_remap[i].option_name, cl_option_index);
+#endif
+	      cl_remap[i].checked = true;
+	      cl_remap[i].real_index = cl_option_index;
+	    }
+	}
+      break;
+    }
+
+  if (i < 0)
+    {
+      /* The option was not recorded in our cl_remap array.
+	 This will happen with target specific options.
+	 Assume that they have not moved.
+	 FIXME: Better would be to have the name passed in.  */
+      annobin_inform (INFORM_VERBOSE, "unrecorded gcc option index = %u", cl_option_index);
+    }
+
+  
   void * flag = option_flag_var (cl_option_index, & global_options);
   if (flag == NULL)
     {
@@ -2225,18 +2320,6 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	}
     }
 #endif
-
-  // Extra paranoia -check that the flags that we are going to examine
-  // are where we think they are in the global options structure.
-#ifdef flag_stack_clash_protection
-  CHECK_LOCATION_OF ("-fstack-clash-protection", OPT_fstack_clash_protection);
-#endif
-#ifdef flag_cf_protection
-  CHECK_LOCATION_OF ("-fcf-protection", OPT_fcf_protection_);
-#endif
-  CHECK_LOCATION_OF ("-fpic", OPT_fpic);
-  CHECK_LOCATION_OF ("-fpie", OPT_fpie);
-  CHECK_LOCATION_OF ("-fstack-protector", OPT_fstack_protector);
 
   // FIXME: Should we check the location of utility flags that we also examine ?
   // Ie: flag_verbose_asm, flag_function_sections, flag_reorder_functions,

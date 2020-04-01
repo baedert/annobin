@@ -110,20 +110,3 @@ extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;
 extern unsigned long  annobin_total_static_stack_usage;
 extern unsigned long  annobin_max_stack_size;
-
-// A utility macro that checks that the name of the provided option
-// entry actually matches up to the value held in the cl_options array.
-#define CHECK_LOCATION_OF(FLAG_NAME, CL_OPTION_ENTRY)			\
-  do									\
-    {									\
-      if (strncmp (cl_options[CL_OPTION_ENTRY].opt_text, FLAG_NAME,	\
-		   sizeof (FLAG_NAME) - 1) != 0)			\
-	{								\
-	  ice ("The location of the " #FLAG_NAME " flag has changed - please rebuild annobin"); \
-	  annobin_inform (INFORM_ALWAYS, "Expeceted name: %s.  Actual name: %s", \
-			  FLAG_NAME,					\
-			  cl_options[CL_OPTION_ENTRY].opt_text);	\
-	  return 1;							\
-	}								\
-    }									\
-  while (0)

@@ -1706,7 +1706,11 @@ static bool
 check_dynamic_section (annocheck_data *    data,
 		       annocheck_section * sec)
 {
-  size_t num_entries = sec->shdr.sh_size / sec->shdr.sh_entsize;
+  if (sec->shdr.sh_size == 0 || sec->shdr.sh_entsize == 0)
+    {
+      einfo (VERBOSE, "%s: WARN: Dynamic section %s is empty - ignoring", data->filename, sec->secname);
+      return true;
+    }
 
   if (tests[TEST_DYNAMIC].num_pass == 0)
     {
@@ -1717,6 +1721,8 @@ check_dynamic_section (annocheck_data *    data,
       einfo (VERBOSE, "%s: FAIL: contains multiple dynamic sections", data->filename);
       tests[TEST_DYNAMIC].num_fail ++;
     }
+
+  size_t num_entries = sec->shdr.sh_size == 0 / sec->shdr.sh_entsize;
 
   /* Walk the dynamic tags.  */
   while (num_entries --)
