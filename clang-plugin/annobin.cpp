@@ -27,60 +27,77 @@ using namespace clang;
 using namespace llvm;
 
 #include "annobin-global.h"
-#include <string.h>
-#include <ctype.h>
-
-// The definition of basename() in libiberty.h needs configuration
-// support, so for now we just provide a simple prototype for the
-// one function in the libiberty library that we actually use.
-extern "C" char *concat (const char *, ...);
-
-#define inform(FORMAT, ...)				    \
-  do							    \
-    {							    \
-      fflush (stdout);					    \
-      fprintf (stderr, "Annobin: ");			    \
-      fprintf (stderr, FORMAT, ## __VA_ARGS__);		    \
-      putc ('\n', stderr);				    \
-    }							    \
-  while (0)
-  
-#define verbose(FORMAT, ...)				    \
-  do							    \
-    {							    \
-      if (be_verbose)					    \
-	{						    \
-          fflush (stdout);				    \
-          fprintf (stderr, "Annobin: ");		    \
-          fprintf (stderr, FORMAT, ## __VA_ARGS__);	    \
-          putc ('\n', stderr);				    \
-	}						    \
-    }							    \
-  while (0)
-
-#define ice(FORMAT, ...)				    \
-  do							    \
-    {							    \
-      fflush (stdout);					    \
-      fprintf (stderr, "Annobin: Internal Error: ");	    \
-      fprintf (stderr, FORMAT, ## __VA_ARGS__);		    \
-      putc ('\n', stderr);				    \
-      exit (-1);					    \
-    }							    \
-  while (0)
+#include <cstring>
+#include <cctype>
+#include <cstdarg>
+#include <sstream>
 
 namespace
 {
-  static unsigned int   annobin_version = ANNOBIN_VERSION;
-  static bool           be_verbose = false;
-  static bool           target_start_sym_bias = false;
-  static const char *   annobin_current_file_start = NULL;
-  static const char *   annobin_current_file_end   = NULL;
-  
+  static const unsigned int   annobin_version = ANNOBIN_VERSION;
+  bool                        be_verbose = false;
+
+  // Helper functions used throughout this file.
+  template<class... Tys>
+  char *
+  concat (Tys const&... args)
+  {
+    std::ostringstream oss;
+
+    (void) std::initializer_list<int>{((oss << args), 1)...};
+    return strdup (oss.str().c_str());
+  }
+
+  static inline void
+  inform (char const fmt[], ...)
+  {
+    va_list args;
+
+    va_start (args, fmt);
+    fflush (stdout);
+    fprintf (stderr, "Annobin: ");
+    vfprintf (stderr, fmt, args);
+    fputc ('\n', stderr);
+    va_end (args);
+  }
+
+  static inline void
+  verbose (char const fmt[], ...)
+  {
+    if (! be_verbose)
+      return;
+
+    va_list args;
+
+    va_start (args, fmt);
+    fflush (stdout);
+    fprintf (stderr, "Annobin: ");
+    vfprintf (stderr, fmt, args);
+    fputc ('\n', stderr);
+    va_end (args);
+  }
+
+  static inline void
+  ice (char const fmt[], ...)
+  {
+    va_list args;
+
+    va_start (args, fmt);
+    fflush (stdout);
+    fprintf (stderr, "Annobin: Internal Error: ");
+    vfprintf (stderr, fmt , args);
+    fputc ('\n', stderr);
+    va_end (args);
+    exit (EXIT_FAILURE);
+  }
+
   class AnnobinConsumer : public ASTConsumer
   {
 private:
     CompilerInstance& CI;
+    bool              target_start_sym_bias = false;
+    char const*       annobin_current_file_start = nullptr;
+    char const*       annobin_current_file_end = nullptr;
 
   public:
     AnnobinConsumer (CompilerInstance & CI) : CI (CI)
@@ -93,14 +110,14 @@ private:
       static char buf [6400];
 
       SourceManager & src = Context.getSourceManager ();
-      const char * filename = src.getFilename (src.getLocForStartOfFile (src.getMainFileID ())).str ().c_str ();
+      std::string filename = src.getFilename (src.getLocForStartOfFile (src.getMainFileID ())).str ().c_str ();
 
-      filename = convert_to_valid_symbol_name (filename);
-      verbose ("Generate start and end symbols based on: %s", filename);
-      annobin_current_file_start = concat ("_annobin_", filename, "_start", NULL);
-      annobin_current_file_end   = concat ("_annobin_", filename, "_end", NULL);
+      convert_to_valid_symbol_name (filename);
+      verbose ("Generate start and end symbols based on: %s", filename.c_str());
+      annobin_current_file_start = concat ("_annobin_", filename, "_start");
+      annobin_current_file_end   = concat ("_annobin_", filename, "_end");
 
-#define START_TEXT   "\
+      static const char START_TEXT[] = "\
 \t.pushsection .text\n\
 \t.hidden %s\n\
 \t.type   %s, STT_NOTYPE\n\
@@ -111,14 +128,13 @@ private:
 \t.type   %s, STT_NOTYPE\n\
 \t.equiv  %s, .text.zzz\n\
 \t.size   %s, 0\n\
-\t.popsection\n"
-
+\t.popsection\n";
       sprintf (buf, START_TEXT,
 	       annobin_current_file_start, annobin_current_file_start, annobin_current_file_start, annobin_current_file_start,
 	       annobin_current_file_end, annobin_current_file_end, annobin_current_file_end, annobin_current_file_end);
-	       
+
       AddAsmText (Context, buf);
-      
+
       sprintf (buf, "%d%c%d", SPEC_VERSION, ANNOBIN_TOOL_ID_CLANG, annobin_version);
       OutputStringNote (Context,
 			GNU_BUILD_ATTRIBUTE_VERSION, buf,
@@ -140,16 +156,12 @@ private:
 
   private:
 
-    const char *
-    convert_to_valid_symbol_name (const char * name)
+    void
+    convert_to_valid_symbol_name (std::string& name)
     {
-      char * output = strdup (name);
-      if (output == NULL)
-	return NULL;
-      for (int i = 0; output[i] != 0; i++)
-	if (!isalnum (output[i]))
-	  output[i] = '_';
-      return output;
+      for( auto & c : name)
+	if (!isalnum (c))
+	  c = '_';
     }
     
     void
@@ -182,17 +194,14 @@ private:
     }
     
     static void
-    add_line_to_note (char * buffer, const char * text, const char * comment = NULL)
+    add_line_to_note (std::ostringstream & buffer, const char * text, const char * comment = nullptr)
     {
-      static char buf[12800];
-
+      buffer << '\t' << text;
       if (comment)
-	sprintf (buf, "\t%s \t/* %s */\n", text, comment);
-      else
-	sprintf (buf, "\t%s\n", text);
-      strcat (buffer, buf);
+        buffer << " \t/* " << comment << " */";
+      buffer << '\n';
     }
-    
+
     void
     OutputNote (ASTContext &  Context,
 		const char *  name,
@@ -200,21 +209,20 @@ private:
 		bool          name_is_string,
 		const char *  name_description,
 		unsigned int  type,
-		const char *  start_symbol,
-		const char *  end_symbol,
+		const char * start_symbol,
+		const char * end_symbol,
 		const char *  section_name)
     {
-      static char text_buffer[2560];  // FIXME: This should be dynamic and extendable.
-      static char buf[1280];  // Likewise.
+      std::ostringstream text_buffer;
+      static char buf[1280];  // FIXME: We should be using a dynamically alloctaed buffer.
       static const int align = 4;
 
-      text_buffer[0] = 0;
       sprintf (buf, ".pushsection %s, \"\", %%note", section_name);
       add_line_to_note (text_buffer, buf);
       sprintf (buf, ".balign %d", align);
       add_line_to_note (text_buffer, buf);
 
-      if (name == NULL)
+      if (name == nullptr)
 	{
 	  if (namesz)
 	    ice ("null name with non-zero size");
@@ -223,7 +231,7 @@ private:
 	}
       else if (name_is_string)
 	{
-	  char buf2[128];
+	  char buf2[128];  // FIXME: This should be dynamic and extendable.
 
 	  if (strlen ((char *) name) != namesz - 1)
 	    ice ("name string does not match name size");
@@ -265,12 +273,9 @@ private:
 	    {
 	      sprintf (buf, ".dc.b");
 
-	      int i;
-	      for (i = 0; i < namesz; i++)
-		{
-		  sprintf (buf + strlen (buf), " %#x%c", ((unsigned char *) name)[i],
-			   i < (namesz - 1) ? ',' : ' ');
-		}
+	      for (unsigned i = 0; i < namesz; i++)
+		sprintf (buf + strlen (buf), " %#x%c", ((unsigned char *) name)[i],
+			 i < (namesz - 1) ? ',' : ' ');
 
 	      add_line_to_note (text_buffer, buf, name_description);
 	    }
@@ -311,7 +316,7 @@ private:
 
       add_line_to_note (text_buffer, "\t.popsection\n\n");
 
-      AddAsmText (Context, text_buffer);
+      AddAsmText (Context, text_buffer.str());
     }
 
     void
@@ -369,7 +374,7 @@ private:
 		  OPEN, annobin_current_file_start, annobin_current_file_end,
 		  GNU_BUILD_ATTRS_SECTION_NAME);
     }
-    
+
     void
     CheckOptions (CompilerInstance & CI, ASTContext & Context)
     {
@@ -414,7 +419,6 @@ private:
       char stack_prot[2] = {GNU_BUILD_ATTRIBUTE_STACK_PROT, 0};
       OutputNumericNote (Context, stack_prot, val, "Stack Protection");
 
-
       val = lang_opts.Sanitize.has (clang::SanitizerKind::SafeStack);
       OutputNumericNote (Context, "sanitize_safe_stack", val, "Sanitize Safe Stack");
 
@@ -436,6 +440,7 @@ private:
       char pic[2] = {GNU_BUILD_ATTRIBUTE_PIC, 0};
       OutputNumericNote (Context, pic, val, "PIE");
             
+#if 0 // Placeholder code for when we need to record preprocessor options
       const PreprocessorOptions & pre_opts = CI.getPreprocessorOpts ();
       if (pre_opts.Macros.empty ())
 	{
@@ -452,7 +457,9 @@ private:
 		verbose ("Define: %s", i->first.c_str());
 	    }
 	}
+#endif
 
+#if 0 // Placeholder code for when we need to record target specific options.
       const clang::TargetOptions & targ_opts = CI.getTargetOpts ();
       if (targ_opts.FeaturesAsWritten.empty ())
 	{
@@ -463,6 +470,7 @@ private:
 	  for (unsigned i = targ_opts.FeaturesAsWritten.size(); i -- > 0;)
 	    verbose ("Target feature: %s", targ_opts.FeaturesAsWritten[i].c_str());
 	}
+#endif
     }    
   };
 
@@ -475,7 +483,7 @@ private:
     {}
 
     void
-    HandleTranslationUnit (ASTContext & Context) override
+    HandleTranslationUnit (ASTContext & ) override
     {
     }
   };
@@ -511,7 +519,7 @@ private:
 
     // Handle any options passed to the plugin.
     bool
-    ParseArgs (const CompilerInstance & CI, const std::vector<std::string>& args) override
+    ParseArgs (const CompilerInstance & , const std::vector<std::string>& args) override
     {
       for (unsigned i = 0, e = args.size(); i < e; ++i)
 	{
