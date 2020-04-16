@@ -107,6 +107,7 @@ parse_tool (const char * tool, const char ** program, const char ** version, con
      { STR_AND_LEN ("GNU C99 "), "gcc" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("GNU C11 "), "gcc" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("GNU C17 "), "gcc" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("GNU Fortran2008 "), "gfortran" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("rustc version "), "rust" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("Go cmd/compile "), "go" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("GNU AS "), "as" }, /* DW_AT_producer.  */
@@ -132,7 +133,11 @@ parse_tool (const char * tool, const char ** program, const char ** version, con
 
   einfo (VERBOSE, "UNEXPECTED TOOL STRING: %s (source %s)", tool, source);
   * program = tool;
-  * version = strchr (tool, ' ') + 1;
+  char * space = strchr (tool, ' ');
+  if (space)
+    * version = space + 1;
+  else
+    * version = "";
 }
 
 static void
@@ -152,10 +157,25 @@ found (const char * source, const char * filename, const char * tool)
 
   bool is_new = add_tool (program, version);
 
+  if (!all && !is_new)
+    return;
+
+  const	char * close_paren = strchr (version, ')');
+  int len = 0;
+  if (close_paren)
+    len	= (close_paren - version) + 1;  
+
+  einfo (PARTIAL, "%s was built by %s (version ", filename, program);
+
+  if (len)
+    einfo (PARTIAL, "%.*s", len, version);
+  else
+    einfo (PARTIAL, "%s", version);
+
   if (all)
-    einfo (INFO, "%s was built by %s (version %s) [%s]", filename, program, version, source);
-  else if (is_new)
-    einfo (INFO, "%s was built by %s (version %s)", filename, program, version);
+    einfo (PARTIAL, ") [%s]\n", source);
+  else
+    einfo (PARTIAL, ")\n");
 }
 
 static bool
@@ -233,7 +253,10 @@ builtby_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, voi
   const char *     string;
 
   if (dwarf_attr (die, DW_AT_producer, & attr) == NULL)
-    return true;
+    {
+      einfo (VERBOSE, "%s: DW_AT_producer string not found", data->filename);
+      return true;
+    }
 
   string = dwarf_formstring (& attr);
   if (string == NULL)
@@ -252,9 +275,11 @@ builtby_finish (annocheck_data * data)
   if (disabled)
     return true;
 
-  if (! is_obj)
-    /* Object files contain unrelocated DWARF debug info, which
-       can lead to bogus DW_AT_producer strings.  */
+  if (is_obj)
+    /* Object files contain unrelocated DWARF debug info,
+       which can lead to bogus DW_AT_producer strings.  */
+    einfo (VERBOSE, "%s: ignoring unrelocated DWARF debug info", data->filename);
+  else
     (void) annocheck_walk_dwarf (data, builtby_dwarf_walker, NULL);
     
   if (first_entry == NULL)

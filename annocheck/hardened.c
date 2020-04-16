@@ -37,6 +37,7 @@ enum tool
   TOOL_GCC,
   TOOL_GAS,
   TOOL_CLANG,
+  TOOL_FORTRAN,
   TOOL_GO,
   TOOL_RUST
 };
@@ -531,6 +532,7 @@ get_producer_name (enum tool tool)
     case TOOL_GCC:     return "gcc";
     case TOOL_GAS:     return "gas";
     case TOOL_CLANG:   return "clang";
+    case TOOL_FORTRAN: return "fortran";
     case TOOL_GO:      return "go";
     case TOOL_RUST:    return "rust";
     }
@@ -580,7 +582,7 @@ set_producer (annocheck_data *     data,
     {
       if (! per_file.warned_producer)
 	{
-	  einfo (VERBOSE, "%s: WARN: This binary was built by more than one tool (%s and %s)",
+	  einfo (VERBOSE, "%s: info: This binary was built by more than one tool (%s and %s)",
 		 data->filename,
 		get_producer_name (per_file.tool),
 		get_producer_name (tool));
@@ -1274,13 +1276,13 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 
 	    case 0xff:
-	      if (built_by_compiler ())
-		report_s (VERBOSE, "%s: FAIL: (%s): -D_FORTIFY_SOURCE missing from command line",
-			  data, sec, note_data, prefer_func_name, NULL);
-	      else
-		report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE missing from command line",
-			  data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_FORTIFY].num_maybe ++;
+	      /* BZ 1824393: We	have not scanned the DWARF notes yet, so we may	                                                  
+	      	 not have the full picture as to which tool(s) built this binary.  */   
+              report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE not detected on the command line",
+                        data, sec, note_data, prefer_func_name, NULL);
+	      einfo (VERBOSE,    "%s:       This can happen if the source does not use C headers",
+		     data->filename);
+ 	      tests[TEST_FORTIFY].num_maybe ++;
 	      break;
 
 	    case 0:
@@ -2025,9 +2027,11 @@ static const tool_id tools[] =
 {
  /* { "GNU C++", TOOL_GXX }, */
   { "GNU C", TOOL_GCC },
+  { "GNU Fortran", TOOL_FORTRAN },
   { "rustc version", TOOL_RUST },
   { "clang version", TOOL_CLANG },
   { "clang LLVM", TOOL_CLANG }, /* Is this right ?  */
+  { "GNU Fortran", TOOL_FORTRAN },
   { "Go cmd/compile", TOOL_GO },
   { "GNU AS", TOOL_GAS },
   { NULL, 0 }
@@ -3039,8 +3043,10 @@ show_FORTIFY (annocheck_data * data, test * results)
 	  else
 	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2.  Run with -v to see where");
 	}
+      else if (per_file.e_type == ET_REL)
+	maybe (data, "Could not determine if -DFORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
       else
-	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
+	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");      
     }
 
   else if (! built_by_compiler ())
@@ -3059,9 +3065,9 @@ show_FORTIFY (annocheck_data * data, test * results)
 	 should also have seen -D_FORTIFY_SOURCE.  Hence its absence
 	 is a failure.  */
       else if (tests[TEST_GLIBCXX_ASSERTIONS].num_pass > 0)
-	{
-	  fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
-	}
+	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2 but with -D_GLIBCXX_ASSERTIONS");
+      else if (per_file.e_type == ET_REL)
+	maybe (data, "Could not determine if -DFORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
       else
 	maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
     }

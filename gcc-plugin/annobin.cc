@@ -30,7 +30,7 @@
 
 /* Version number.  */
 static unsigned int   annobin_version = ANNOBIN_VERSION;
-#define VER_STRING(VER) N_("Version #VER")
+#define VER_STRING(VER) N_("Version " #VER)
 static const char *   version_string = VER_STRING (ANNOBIN_VERSION);
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
@@ -968,20 +968,23 @@ record_fortify_level (int level, int type, const char * sec)
 
   buffer[++len] = level;
   buffer[++len] = 0;
-  annobin_output_note (buffer, len + 1, false, "FORTIFY SOURCE level",
+  annobin_output_note (buffer, len + 1, false, "_FORTIFY SOURCE level",
 		       NULL, NULL, 0, false, type, sec);
-  annobin_inform (INFORM_VERBOSE, "Record a FORTIFY SOURCE level of %d", level);
+  annobin_inform (INFORM_VERBOSE, "Record _FORTIFY SOURCE level of %d", level);
 }
 
 static void
-record_glibcxx_assertions (bool on, int type, const char * sec)
+record_glibcxx_assertions (signed int on, int type, const char * sec)
 {
   char buffer [128];
-  unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS", on ? BOOL_T : BOOL_F);
+  unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS", on > 0 ? BOOL_T : BOOL_F);
 
-  annobin_output_note (buffer, len + 1, false, on ? "_GLIBCXX_ASSERTIONS defined" : "_GLIBCXX_ASSERTIONS not defined",
+  annobin_output_note (buffer, len + 1, false,
+		       on > 0 ? "_GLIBCXX_ASSERTIONS defined"
+		       : on < 0 ? "_GLIBCXX_ASSERTIONS not seen"
+		       : "_GLIBCXX_ASSERTIONS not defined",
 		       NULL, NULL, 0, false, type, sec);
-  annobin_inform (INFORM_VERBOSE, "Record a _GLIBCXX_ASSERTIONS as %s", on ? "defined" : "not defined");
+  annobin_inform (INFORM_VERBOSE, "Record _GLIBCXX_ASSERTIONS as %s", on > 0 ? "defined" : "not defined");
 }
 
 /* This structure provides various names associated with the current
@@ -1821,7 +1824,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	  if (save_decoded_options[i].arg == NULL)
 	    continue;
 
-	  annobin_inform (2, "decoded arg -U%s", save_decoded_options[i].arg);
+	  annobin_inform (INFORM_VERY_VERBOSE, "decoded arg -U%s", save_decoded_options[i].arg);
 
 	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
 	    {
@@ -1839,7 +1842,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	  if (save_decoded_options[i].arg == NULL)
 	    continue;
 
-	  annobin_inform (2, "decoded arg -D%s", save_decoded_options[i].arg);
+	  annobin_inform (INFORM_VERY_VERBOSE, "decoded arg -D%s", save_decoded_options[i].arg);
 
 	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
 	    {
@@ -1948,6 +1951,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE not defined"));
 	  else
 	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
+	  annobin_inform (INFORM_VERBOSE, _("This warning is being issued now because LTO is enabled, and LTO compilation does not use preprocessor options"));
 	}
 
       if (global_glibcxx_assertions != 1)
@@ -2110,7 +2114,7 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	annobin_inform (INFORM_ALWAYS, "%s", help_string);
 
       else if (streq (key, "version"))
-	annobin_inform (INFORM_ALWAYS, "%s", version_string);
+	annobin_inform (INFORM_ALWAYS, "Version %d/%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
 
       else if (streq (key, "verbose"))
 	verbose_level ++;
@@ -2278,48 +2282,6 @@ plugin_init (struct plugin_name_args *    plugin_info,
       annobin_inform (INFORM_VERBOSE, _("nothing to be done"));
       return 0;
     }
-
-#if 0 // Now that we are accessing gcc options via the offsets stored in the cl_options array, we should be immune to changes in the size of the global_options structure.
-  
-  // Almost everything of interest to annobin is held in the global_options
-  // structure.  Make sure that this structure has not changed in size between
-  // the time that this code was compiled and the time that the plugin is run.
-  Dl_info info = { 0 };
-  if (sizeof (plugin_info) == 4)
-    {
-      // We are running on a 32-bit host.
-      Elf32_Sym * extra = NULL;
-  
-      if (dladdr1 (& global_options, & info, (void **) & extra, RTLD_DL_SYMENT) == 0)
-	annobin_inform (INFORM_VERBOSE, "Failed to run dladdr1 on global_options");
-      else if (extra == NULL)
-	annobin_inform (INFORM_VERBOSE, "Failed to obtain extra information about global_options");
-      else if (sizeof (global_options) != extra->st_size)
-	{
-	  ice ("The size of the global_options structure has changed - please rebuild annobin");
-	  annobin_inform (INFORM_ALWAYS, "Build time size: %#lx run time size: %#lx (32-bit host)",
-			  (long) sizeof (global_options), (long) extra->st_size);
-	  return 1;
-	}
-    }
-  else
-    {
-      // We are running on a 64-bit host.
-      Elf64_Sym * extra = NULL;
-  
-      if (dladdr1 (& global_options, & info, (void **) & extra, RTLD_DL_SYMENT) == 0)
-	annobin_inform (INFORM_VERBOSE, "Failed to run dladdr1 on global_options");
-      else if (extra == NULL)
-	annobin_inform (INFORM_VERBOSE, "Failed to obtain extra information about global_options");
-      else if (sizeof (global_options) != extra->st_size)
-	{
-	  ice ("The size of the global_options structure has changed - please rebuild annobin");
-	  annobin_inform (INFORM_ALWAYS, "Build time size: %#lx run time size: %#lx (64-bit host)",
-			  (long) sizeof (global_options), (long) extra->st_size);
-	  return 1;
-	}
-    }
-#endif
 
   // FIXME: Should we check the location of utility flags that we also examine ?
   // Ie: flag_verbose_asm, flag_function_sections, flag_reorder_functions,
