@@ -666,7 +666,7 @@ annobin_get_gcc_option (unsigned int cl_option_index)
       else
 	{
 	  /* Search the cl_options array for the option we are expecting.  */
-	  int j;
+	  unsigned int j;
 	  for (j = 0; j < cl_options_count; j++)
 	    {
 	      if (strncmp (cl_options[j].opt_text, cl_remap[i].option_name,
