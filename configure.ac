@@ -45,17 +45,11 @@ AC_SUBST(target_plugin)
 # We need GCC plugin support.
 GCC_PLUGIN
 
-# Check for rpmlib availability
-AC_CHECK_HEADER([rpm/rpmlib.h], ,[AC_MSG_ERROR(["Required header 'rpm/rpmlib.h' not found."])])
-AC_CHECK_LIB([rpm], [rpmReadPackageFile], [RPMLIBS="-lrpm"], [AC_MSG_ERROR(["Required library 'rpm' not found.])])
-AC_CHECK_LIB([rpmio], [rpmConfigDir], [RPMLIBS="$RPMLIBS -lrpmio"], [AC_MSG_ERROR(["Required library 'rpmio' not found.])])
-AC_SUBST(RPMLIBS)
-
 # Use an alternative GMP if requested.
 GMP
 
-# Detect the presence of libelf - or allow the user to override.
-LIBELF
+# Determine if we should build annocheck.
+ANNOCHECK
 
 AC_MSG_CHECKING([whether to enable maintainer-specific portions of Makefiles])
 AC_ARG_ENABLE(maintainer-mode,
@@ -136,8 +130,8 @@ AC_SUBST(target_noncanonical)
 AC_TYPE_INT64_T
 AC_TYPE_UINT64_T
 AC_HEADER_SYS_WAIT
-AM_CONDITIONAL([COND_TESTS], [test "$with_libelf" != no])
-AM_CONDITIONAL([COND_ANNOCHECK], [test "$with_libelf" != no])
+AM_CONDITIONAL([COND_TESTS], [test "$with_annocheck" != no])
+AM_CONDITIONAL([COND_ANNOCHECK], [test "$with_annocheck" != no])
 AM_CONDITIONAL([COND_CLANG], [test "$with_clang" == yes])
 AC_CONFIG_FILES(scripts/Makefile gcc-plugin/Makefile doc/Makefile Makefile tests/Makefile annocheck/Makefile)
 AC_CONFIG_HEADERS(gcc-plugin/config.h)

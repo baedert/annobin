@@ -1,4 +1,4 @@
-This is annobin.info, produced by makeinfo version 6.5 from
+This is annobin.info, produced by makeinfo version 6.6 from
 annobin.texi.
 
 This file documents the annobin plugin on the Fedora system.
@@ -687,7 +687,7 @@ code to support the test.
      then the check for GNU Property notes will also be disabled.
 
 'Branch protection'
-     For AARCH64 binaries.  the '-mbranch-protection' option, if
+     For AARCH64 binaries the '-mbranch-protection' option, if
      available, must have been used.  Disabled by
      '--skip-branch-protection'.
 
@@ -1805,15 +1805,15 @@ Node: The INSTRUMENT Encoding17023
 Node: Annocheck18397
 Node: Built-By20926
 Node: Hardened22456
-Node: Notes27487
-Node: Section-Size28131
-Node: Timing30285
-Node: Configure Options30932
-Node: Legacy Scripts32766
-Node: Who Built Me33541
-Node: ABI Checking36301
-Node: Hardening Checks38415
-Node: Checking Archives42501
-Node: GNU FDL44923
+Node: Notes27485
+Node: Section-Size28129
+Node: Timing30283
+Node: Configure Options30930
+Node: Legacy Scripts32764
+Node: Who Built Me33539
+Node: ABI Checking36299
+Node: Hardening Checks38413
+Node: Checking Archives42499
+Node: GNU FDL44921
 
 End Tag Table

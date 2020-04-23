@@ -609,8 +609,8 @@ annobin_get_gcc_option (unsigned int cl_option_index)
 
   if (cl_option_index >= cl_options_count)
     {
-      annobin_inform (INFORM_ALWAYS, "debugging: index = %u max = %u\n", cl_option_index, cl_options_count);
-      ice ("attempting to access an unknown gcc command line option");
+      annobin_inform (INFORM_VERBOSE, "debugging: index = %u max = %u", cl_option_index, cl_options_count);
+      annobin_inform (INFORM_VERBOSE, "ICE: attempting to access an unknown gcc command line option");
       return -1;
     }
 
@@ -620,31 +620,33 @@ annobin_get_gcc_option (unsigned int cl_option_index)
      the index. */
   static struct cl_index_remap
   {
-    bool checked;
-    const char * option_name;
-    const unsigned int original_index;
-    unsigned int real_index;
+    bool                checked;
+    const char *        option_name;
+    const unsigned int  original_index;
+    unsigned int        real_index;
+    int                 flag;
+    bool                warned;
   } cl_remap [] =
       {
        /* This is an array of the options that we know annobin wants to access.  */
 #ifdef flag_stack_clash_protection
-       { false, "-fstack-clash-protection", OPT_fstack_clash_protection, 0},
+       { false, "-fstack-clash-protection", OPT_fstack_clash_protection, 0, flag_stack_clash_protection, false},
 #endif
 #ifdef flag_cf_protection
-       { false, "-fcf-protection", OPT_fcf_protection_, 0},
+       { false, "-fcf-protection", OPT_fcf_protection_, 0, flag_cf_protection, false},
 #endif
-       { false, "-fpic", OPT_fpic, 0},
-       { false, "-fpie", OPT_fpie, 0},
-       { false, "-fstack-protector", OPT_fstack_protector, 0},
-       { false, "-fomit-frame-pointer", OPT_fomit_frame_pointer, 0},
-       { false, "-fshort-enums", OPT_fshort_enums, 0}, 
-       { false, "-fstack-usage", OPT_fstack_usage, 0}, 
-       { false, "-ffunction-sections", OPT_ffunction_sections, 0},
-       { false, "-freorder-functions", OPT_freorder_functions, 0},
-       { false, "-fprofile-values", OPT_fprofile_values, 0},
-       { false, "-finstrument-functions", OPT_finstrument_functions, 0},
-       { false, "-fprofile", OPT_fprofile, 0},
-       { false, "-fprofile-arcs", OPT_fprofile_arcs, 0}
+       { false, "-fpic", OPT_fpic, 0, flag_pic, false},
+       { false, "-fpie", OPT_fpie, 0, flag_pie, false},
+       { false, "-fstack-protector", OPT_fstack_protector, 0, flag_stack_protect, false},
+       { false, "-fomit-frame-pointer", OPT_fomit_frame_pointer, 0, flag_omit_frame_pointer, false},
+       { false, "-fshort-enums", OPT_fshort_enums, 0, flag_short_enums, false}, 
+       { false, "-fstack-usage", OPT_fstack_usage, 0, flag_stack_usage_info, false}, 
+       { false, "-ffunction-sections", OPT_ffunction_sections, 0, flag_function_sections, false},
+       { false, "-freorder-functions", OPT_freorder_functions, 0, flag_reorder_functions, false},
+       { false, "-fprofile-values", OPT_fprofile_values, 0, flag_profile_values, false},
+       { false, "-finstrument-functions", OPT_finstrument_functions, 0, flag_instrument_function_entry_exit, false},
+       { false, "-fprofile", OPT_fprofile, 0, profile_flag, false},
+       { false, "-fprofile-arcs", OPT_fprofile_arcs, 0, profile_arc_flag, false}
       };
 
   int i;
@@ -684,14 +686,9 @@ annobin_get_gcc_option (unsigned int cl_option_index)
 	  if (j == cl_options_count)
 	    {
 	      /* The option is no longer in the array!  */
-#if 0
-	      annobin_inform (INFORM_ALWAYS, "debugging: option = %s index = %u\n", cl_remap[i].option_name, cl_option_index);
-	      ice ("gcc command option missing from cl_options array");
-#else
-	      annobin_inform (INFORM_VERBOSE, "option %s (index %u) not in cl_options\n", cl_remap[i].option_name, cl_option_index);
-#endif
+	      annobin_inform (INFORM_VERBOSE, "option %s (index %u) not in cl_options", cl_remap[i].option_name, cl_option_index);
 	      cl_remap[i].checked = true;
-	      cl_remap[i].real_index = cl_option_index;
+	      cl_remap[i].real_index = cl_option_index = 0;
 	    }
 	}
       break;
@@ -705,14 +702,24 @@ annobin_get_gcc_option (unsigned int cl_option_index)
 	 FIXME: Better would be to have the name passed in.  */
       annobin_inform (INFORM_VERBOSE, "unrecorded gcc option index = %u", cl_option_index);
     }
+  else if (cl_option_index == 0)
+    return cl_remap[i].flag;
 
-  
   void * flag = option_flag_var (cl_option_index, & global_options);
   if (flag == NULL)
     {
-      annobin_inform (INFORM_ALWAYS, "debugging: index = %u max = %u\n", cl_option_index, cl_options_count);
-      ice ("attempting to access a gcc command line option that is not stored in global_options");
-      return -1;
+      if (! cl_remap[i].warned)
+	{
+	  annobin_inform (INFORM_VERBOSE, "debugging: index = %u (%s) max = %u",
+			  cl_option_index,
+			  cl_remap[i].option_name,
+			  cl_options_count);
+	  annobin_inform (INFORM_VERBOSE, "ICE: Could not find option in cl_options, using flag instead");
+	  cl_remap[i].warned = true;
+	}
+
+      /* Try using the flag directly.  */
+      return cl_remap[i].flag;
     }
 
   const struct cl_option *option = cl_options + cl_option_index;
@@ -731,10 +738,13 @@ annobin_get_gcc_option (unsigned int cl_option_index)
     case CLVC_ENUM:
       return cl_enums[option->var_enum].get (flag);
 
+    case CLVC_DEFER:
+      return cl_remap[i].flag;
+
     default:
-      annobin_inform (INFORM_ALWAYS, "type = %d, opt = %d\n", option->var_type, cl_option_index);
-      ice ("unsupport gcc command line option type");
-      return -1;
+      annobin_inform (INFORM_VERBOSE, "debugging: type = %d, opt = %d", option->var_type, cl_option_index);
+      annobin_inform (INFORM_VERBOSE, "ICE: unsupport gcc command line option type");
+      return cl_remap[i].flag;
     }
 }
 

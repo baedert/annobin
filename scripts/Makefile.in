@@ -92,6 +92,7 @@ target_triplet = @target@
 subdir = scripts
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acx.m4 \
+	$(top_srcdir)/config/annocheck.m4 \
 	$(top_srcdir)/config/debuginfod.m4 \
 	$(top_srcdir)/config/depstand.m4 \
 	$(top_srcdir)/config/disable-rpath.m4 \

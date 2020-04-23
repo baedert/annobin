@@ -794,6 +794,7 @@ with_sysroot
 enable_libtool_lock
 with_gcc_plugin_dir
 with_gmp
+with_annocheck
 with_libelf
 enable_maintainer_mode
 with_debuginfod
@@ -1463,6 +1464,7 @@ Optional Packages:
   --with-gcc-plugin-dir=DIR
                           install annobin plugin into the GCC plugin directory
   --with-gmp=PATH         specify PATH to gmp
+  --without-annocheck     do not build annocheck
   --without-libelf        remove libelf dependency
   --with-debuginfod       Enable debuginfo lookups with debuginfod
                           (auto/yes/no)
@@ -17999,8 +18001,106 @@ $as_echo "no" >&6; }
 fi
 
 
-# Check for rpmlib availability
+# Use an alternative GMP if requested.
 
+
+
+# Check whether --with-gmp was given.
+if test "${with_gmp+set}" = set; then :
+  withval=$with_gmp; :
+else
+  with_gmp=no
+fi
+
+
+if test "x$with_gmp" != xno; then
+  LDFLAGS="$LDFLAGS -L$with_gmp/lib"
+  CPPFLAGS="$CPPFLAGS -I$with_gmp/include"
+fi
+
+
+# Determine if we should build annocheck.
+
+
+
+
+# Check whether --with-annocheck was given.
+if test "${with_annocheck+set}" = set; then :
+  withval=$with_annocheck; with_annocheck=no
+else
+  :
+fi
+
+
+if test "x$with_annocheck" != xno; then :
+
+
+libelf_found=no
+
+
+# Check whether --with-libelf was given.
+if test "${with_libelf+set}" = set; then :
+  withval=$with_libelf; with_libelf=no
+else
+  :
+fi
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libelf" >&5
+$as_echo_n "checking for libelf... " >&6; }
+
+if test "x$with_libelf" != xno; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for elf_begin in -lelf" >&5
+$as_echo_n "checking for elf_begin in -lelf... " >&6; }
+if ${ac_cv_lib_elf_elf_begin+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lelf  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char elf_begin ();
+int
+main ()
+{
+return elf_begin ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_cxx_try_link "$LINENO"; then :
+  ac_cv_lib_elf_elf_begin=yes
+else
+  ac_cv_lib_elf_elf_begin=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_elf_elf_begin" >&5
+$as_echo "$ac_cv_lib_elf_elf_begin" >&6; }
+if test "x$ac_cv_lib_elf_elf_begin" = xyes; then :
+  libelf_found=yes
+else
+  { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "libelf test failed (--without-libelf to disable)
+See \`config.log' for more details" "$LINENO" 5; }
+fi
+
+else
+  :
+fi
+
+
+# Check for rpmlib availability.
 ac_fn_cxx_check_header_mongrel "$LINENO" "rpm/rpmlib.h" "ac_cv_header_rpm_rpmlib_h" "$ac_includes_default"
 if test "x$ac_cv_header_rpm_rpmlib_h" = xyes; then :
 
@@ -18095,89 +18195,11 @@ fi
 
 
 
-# Use an alternative GMP if requested.
-
-
-
-# Check whether --with-gmp was given.
-if test "${with_gmp+set}" = set; then :
-  withval=$with_gmp; :
-else
-  with_gmp=no
-fi
-
-
-if test "x$with_gmp" != xno; then
-  LDFLAGS="$LDFLAGS -L$with_gmp/lib"
-  CPPFLAGS="$CPPFLAGS -I$with_gmp/include"
-fi
-
-
-# Detect the presence of libelf - or allow the user to override.
-
-libelf_found=no
-
-
-# Check whether --with-libelf was given.
-if test "${with_libelf+set}" = set; then :
-  withval=$with_libelf; with_libelf=no
-else
-  :
-fi
-
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for libelf" >&5
-$as_echo_n "checking for libelf... " >&6; }
-
-if test "x$with_libelf" != xno; then :
-  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for elf_begin in -lelf" >&5
-$as_echo_n "checking for elf_begin in -lelf... " >&6; }
-if ${ac_cv_lib_elf_elf_begin+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lelf  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char elf_begin ();
-int
-main ()
-{
-return elf_begin ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_elf_elf_begin=yes
-else
-  ac_cv_lib_elf_elf_begin=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_elf_elf_begin" >&5
-$as_echo "$ac_cv_lib_elf_elf_begin" >&6; }
-if test "x$ac_cv_lib_elf_elf_begin" = xyes; then :
-  libelf_found=yes
-else
-  { { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "libelf test failed (--without-libelf to disable)
-See \`config.log' for more details" "$LINENO" 5; }
-fi
 
 else
   :
 fi
+
 
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable maintainer-specific portions of Makefiles" >&5
@@ -18481,7 +18503,7 @@ $as_echo "#define HAVE_SYS_WAIT_H 1" >>confdefs.h
 
 fi
 
- if test "$with_libelf" != no; then
+ if test "$with_annocheck" != no; then
   COND_TESTS_TRUE=
   COND_TESTS_FALSE='#'
 else
@@ -18489,7 +18511,7 @@ else
   COND_TESTS_FALSE=
 fi
 
- if test "$with_libelf" != no; then
+ if test "$with_annocheck" != no; then
   COND_ANNOCHECK_TRUE=
   COND_ANNOCHECK_FALSE='#'
 else

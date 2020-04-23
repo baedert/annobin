@@ -796,7 +796,7 @@ Disabled by @option{--skip-cf-protection}.  If this option is disabled
 then the check for GNU Property notes will also be disabled.
 
 @item Branch protection
-For @var{AArch64} binaries. the @option{-mbranch-protection} option,
+For @var{AArch64} binaries the @option{-mbranch-protection} option,
 if available, must have been used.
 Disabled by @option{--skip-branch-protection}.
 

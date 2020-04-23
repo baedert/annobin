@@ -1,4 +1,4 @@
-dnl file      : m4/libelf.m4
+dnl file      : config/libelf.m4
 dnl copyright : Copyright (c) 2020 Theobroma Systems Design und Consulting GmbH
 dnl license   : MIT; see accompanying LICENSE file
 dnl
