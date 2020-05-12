@@ -40,8 +40,6 @@ run-test: annobin.so
    -fstack-protector-strong \
    -fcf-protection \
    -fsanitize=cfi-cast-strict \
-   -Xclang -plugin-arg-annobin -Xclang verbose \
-   -Xclang -plugin-arg-annobin -Xclang version \
    hello.c \
    -save-temps
 	$(STRIP) --merge-notes a.out
