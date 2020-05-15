@@ -12,7 +12,6 @@
 using namespace llvm;
 namespace
 {
-  static const unsigned int   annobin_version = ANNOBIN_VERSION;
   static bool                 be_verbose = false;
   static bool                 target_start_sym_bias = false;
 
@@ -73,8 +72,10 @@ namespace
   class AnnobinModulePass : public ModulePass
   {
   private:
-    char const *  annobin_current_file_start = nullptr;
-    char const *  annobin_current_file_end = nullptr;
+    const unsigned int  version = ANNOBIN_VERSION;
+    char const *        fileStart = nullptr;
+    char const *        fileEnd = nullptr;
+    unsigned int        optLevel;
 
   public:
     static char ID;
@@ -85,16 +86,22 @@ namespace
 	be_verbose = true;
     }
 
+    void
+    setOptLevel (unsigned int val)
+    {
+      optLevel = val;
+    }
+
     virtual bool
     runOnModule (Module & module)
     {
       static char buf [6400]; // FIXME: Use a dynamic string.
-      std::string filename = module.getModuleIdentifier ();
+      std::string filename = module.getSourceFileName ();
 
       convert_to_valid_symbol_name (filename);
       verbose ("Generate start and end symbols based on: %s", filename.c_str ());
-      annobin_current_file_start = concat ("_annobin_", filename, "_start");
-      annobin_current_file_end   = concat ("_annobin_", filename, "_end");
+      fileStart = concat ("_annobin_", filename, "_start");
+      fileEnd   = concat ("_annobin_", filename, "_end");
 
       static const char START_TEXT[] = "\
 \t.pushsection .text\n\
@@ -109,10 +116,24 @@ namespace
 \t.size   %s, 0\n\
 \t.popsection\n";
       sprintf (buf, START_TEXT,
-	       annobin_current_file_start, annobin_current_file_start, annobin_current_file_start, annobin_current_file_start,
-	       annobin_current_file_end, annobin_current_file_end, annobin_current_file_end, annobin_current_file_end);
+	       fileStart, fileStart, fileStart, fileStart,
+	       fileEnd, fileEnd, fileEnd, fileEnd);
 
       module.appendModuleInlineAsm (buf);
+
+      sprintf (buf, "%d%c%d", SPEC_VERSION, ANNOBIN_TOOL_ID_LLVM, version);
+      OutputStringNote (module,
+			GNU_BUILD_ATTRIBUTE_VERSION, buf,
+			"version note");
+
+      sprintf (buf, "annobin built by llvm version %s", LLVM_VERSION_STRING);
+      OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
+			buf, "tool note (plugin built by)");
+#if 0
+      sprintf (buf, "running on %s", getClangFullVersion ().c_str ());
+      OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
+			buf, "tool note (running on)");
+#endif			
 
 
       unsigned int val;
@@ -125,6 +146,31 @@ namespace
 
       char pic[2] = {GNU_BUILD_ATTRIBUTE_PIC, 0};
       OutputNumericNote (module, pic, val, "PIE");
+
+      val = optLevel;
+      if (val > 3)
+	val = 3;
+      // The optimization level occupies bits 9..11 of the GOW value.
+      val <<= 9;
+      verbose ("optimization level is %u", optLevel);
+      OutputNumericNote (module, "GOW", val, "Optimization Level");
+
+      if (module.getModuleFlag("cf-protection-branch"))
+	val += 1;
+      if (module.getModuleFlag("cf-protection-return"))
+	val += 2;
+      // We bias the value by 1 so that we do not get confused by a zero value.
+      val += 1;
+      OutputNumericNote (module, "cf_protection", val, "Control Flow protection");
+      
+      if (be_verbose)
+	{
+	  verbose ("Available module flags:");
+	  SmallVector<Module::ModuleFlagEntry, 8> ModuleFlags;
+	  module.getModuleFlagsMetadata(ModuleFlags);
+	  for (const llvm::Module::ModuleFlagEntry &MFE : ModuleFlags)
+	    inform ("  %s", MFE.Key->getString());
+	}
       
       return true; // Module has been modified.
     }
@@ -250,7 +296,7 @@ namespace
 		 biased in order to avoid conflicting with the function
 		 name symbol for the first function in the file.  So reverse
 		 that bias here.  */
-	      if (start_symbol == annobin_current_file_start)
+	      if (start_symbol == fileStart)
 		sprintf (buf + strlen (buf), "- %d", target_start_sym_bias);
 	    }
 
@@ -293,16 +339,45 @@ namespace
 	buffer[++len] = 0;
 
       OutputNote (module, buffer, len + 1, false, name_description,
-		  OPEN, annobin_current_file_start, annobin_current_file_end,
+		  OPEN, fileStart, fileEnd,
 		  GNU_BUILD_ATTRS_SECTION_NAME);
     }
-  };
+
+    void
+    OutputStringNote (Module &      module,
+		      const char    string_type,
+		      const char *  string,
+		      const char *  name_description)
+    {
+      unsigned int len = strlen (string);
+      char * buffer;
+
+      buffer = (char *) malloc (len + 5);
+
+      sprintf (buffer, "GA%c%c%s", STRING, string_type, string);
+
+      verbose ("Record %s as '%s'", name_description, string);
+      /* Be kind to readers of the assembler source, and do
+	 not put control characters into ascii strings.  */
+      OutputNote (module,
+		  buffer, len + 5, isprint (string_type), name_description,
+		  OPEN, fileStart, fileEnd, GNU_BUILD_ATTRS_SECTION_NAME);
+
+      free (buffer);
+    }
+
+  }; // End of class AnnobinModulePass 
 
   Pass *
-  createAnnobinModulePass (void)
+  createAnnobinModulePass (int optLevel)
   {
+    AnnobinModulePass * p;
+
     verbose ("Creating Module Pass");
-    return new AnnobinModulePass;
+    p = new AnnobinModulePass;
+    // FIXME: There must surely be a way to access this information from with the Module class.
+    p->setOptLevel (optLevel);
+    return p;
   }
   
   class AnnobinFunctionPass : public FunctionPass
@@ -330,9 +405,7 @@ registerAnnobinPasses (const PassManagerBuilder & PMB,
   static RegisterPass<AnnobinModulePass> X("annobin", "Annobin Module Pass");
 
   PM.add (new AnnobinFunctionPass ());
-  PM.add (createAnnobinModulePass());
-  
-  verbose ("Optimization level is %u", (int) PMB.OptLevel);
+  PM.add (createAnnobinModulePass ((int) PMB.OptLevel));
 }
 
 // NB. The choice of when to run the passes is critical.

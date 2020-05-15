@@ -37,6 +37,7 @@ enum tool
   TOOL_GCC,
   TOOL_GAS,
   TOOL_CLANG,
+  TOOL_LLVM,
   TOOL_FORTRAN,
   TOOL_GO,
   TOOL_RUST
@@ -184,7 +185,9 @@ static test tests [TEST_MAX] =
 static inline bool
 built_by_compiler (void)
 {
-  return per_file.tool == TOOL_GCC || per_file.tool == TOOL_CLANG;
+  return per_file.tool == TOOL_GCC
+    || per_file.tool == TOOL_CLANG
+    || per_file.tool == TOOL_LLVM;
 }
 
 static inline bool
@@ -532,6 +535,7 @@ get_producer_name (enum tool tool)
     case TOOL_GCC:     return "gcc";
     case TOOL_GAS:     return "gas";
     case TOOL_CLANG:   return "clang";
+    case TOOL_LLVM:    return "llvm";
     case TOOL_FORTRAN: return "fortran";
     case TOOL_GO:      return "go";
     case TOOL_RUST:    return "rust";
@@ -593,6 +597,13 @@ set_producer (annocheck_data *     data,
       per_file.version = 0;
     }
 }
+
+struct tool_string
+{
+  const char * lead_in;
+  const char * tool_name;
+  enum tool    tool_id;
+};
 
 static bool
 walk_build_notes (annocheck_data *     data,
@@ -814,6 +825,7 @@ walk_build_notes (annocheck_data *     data,
 	     version number.  */
 	  per_file.compiled_code_seen = true;
 	  break;
+	case ANNOBIN_TOOL_ID_LLVM:
 	case ANNOBIN_TOOL_ID_CLANG:
 	  per_file.compiled_code_seen = true;
 	  break;
@@ -825,199 +837,163 @@ walk_build_notes (annocheck_data *     data,
 
     case GNU_BUILD_ATTRIBUTE_TOOL:
       if (value != -1)
-	einfo (VERBOSE, "ICE:  The tool note should have a string attribute");
-      else
 	{
-	  /* Parse the tool attribute looking for the version of gcc used to build the component.  */
-	  unsigned major, minor, rel;
-
-	  /* As of version 8.80 there are two BUILT_ATTRIBUTE_TOOL version strings,
-	     one for the compiler that built the annobin plugin and one for the
-	     compiler that ran the annobin plugin.  Look for these here.  Their
-	     format is "annobin gcc X.Y.Z DATE" and "running gcc X.Y.Z DATE".  */
-	  if (sscanf (attr + 1, "running gcc %u.%u.%u", & major, & minor, & rel) == 3)
-	    {
-	      einfo (VERBOSE2, "%s: info: Detected information created by an annobin plugin running on gcc version %u.%u.%u",
-		     data->filename, major, minor, rel);
-	      if (per_file.run_major == 0)
-		{
-		  per_file.run_major = major;
-		  set_producer (data, TOOL_GCC, major, "GNU Build Attribute Tool");
-		}
-	      else if (per_file.run_major != major)
-		{
-		  einfo (INFO, "%s: WARN: this file was built by more than one version of gcc (%u and %u)",
-			 data->filename, per_file.run_major, major);
-		  if (per_file.run_major < major)
-		    per_file.run_major = major;
-		}
-
-	      if (per_file.anno_major != 0 && per_file.anno_major != per_file.run_major)
-		{
-		  if (! per_file.warned_version_mismatch)
-		    {
-		      einfo (INFO, "%s: ICE:  Annobin plugin was built by gcc version %u but run on gcc version %u",
-			     data->filename, per_file.anno_major, per_file.run_major);
-		      per_file.warned_version_mismatch = true;
-		    }
-		}
-
-	      per_file.run_minor = minor;
-	      per_file.run_rel = rel;
-	      if ((per_file.anno_minor != 0 && per_file.anno_minor != minor)
-		  || (per_file.anno_rel != 0 && per_file.anno_rel != rel))
-		{
-		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
-			 data->filename, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
-			 per_file.run_major, per_file.run_minor, per_file.run_rel);
-		  einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
-			 data->filename);
-		}
-	      break;
-	    }
-
-	  if (sscanf (attr + 1, "annobin gcc %u.%u.%u", & major, & minor, & rel) == 3)
-	    {
-	      einfo (VERBOSE2, "%s: info: Detected information stored by an annobin plugin built by gcc version %u.%u.%u",
-		     data->filename, major, minor, rel);
-
-	      if (per_file.anno_major == 0)
-		{
-		  per_file.anno_major = major;
-		}
-	      else if (per_file.anno_major != major)
-		{
-		  einfo (INFO, "%s: WARN: notes produced by annobins compiled for more than one version of gcc (%u vs %u)",
-			 data->filename, per_file.anno_major, major);
-		  if (per_file.anno_major < major)
-		    per_file.anno_major = major;
-		}
-
-	      if (per_file.run_major != 0 && per_file.run_major != per_file.anno_major)
-		{
-		  if (! per_file.warned_version_mismatch)
-		    {
-		      einfo (INFO, "%s: ICE:  Annobin plugin was built by gcc version %u but run on gcc version %u",
-			     data->filename, per_file.anno_major, per_file.run_major);
-		      per_file.warned_version_mismatch = true;
-		    }
-		}
-
-	      per_file.anno_minor = minor;
-	      per_file.anno_rel = rel;
-	      if ((per_file.run_minor != 0 && per_file.run_minor != minor)
-		  || (per_file.run_rel != 0 && per_file.run_rel != rel))
-		{
-		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by gcc %u.%u.%u but run on gcc version %u.%u.%u",
-			 data->filename, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
-			 per_file.run_major, per_file.run_minor, per_file.run_rel);
-		  einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
-			 data->filename);
-		}
-
-	      break;
-	    }
-
-	  if (sscanf (attr + 1, "annobin built by clang version %u.%u.%u", & major, & minor, & rel) == 3)
-	    {
-	      einfo (VERBOSE2, "%s: info: Detected information stored by an annobin plugin built by clang version %u.%u.%u",
-		     data->filename, major, minor, rel);
-
-	      if (per_file.anno_major == 0)
-		{
-		  per_file.anno_major = major;
-		}
-	      else if (per_file.anno_major != major)
-		{
-		  einfo (INFO, "%s: warn: notes produced by annobins compiled for more than one version of clang (%u vs %u)",
-			 data->filename, per_file.anno_major, major);
-		  if (per_file.anno_major < major)
-		    per_file.anno_major = major;
-		}
-
-	      if (per_file.run_major != 0 && per_file.run_major != per_file.anno_major)
-		{
-		  if (! per_file.warned_version_mismatch)
-		    {
-		      einfo (INFO, "%s: warn: Annobin plugin was built by clang version %u but run on clang version %u",
-			     data->filename, per_file.anno_major, per_file.run_major);
-		      per_file.warned_version_mismatch = true;
-		    }
-		}
-
-	      per_file.anno_minor = minor;
-	      per_file.anno_rel = rel;
-	      if ((per_file.run_minor != 0 && per_file.run_minor != minor)
-		  || (per_file.run_rel != 0 && per_file.run_rel != rel))
-		{
-		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by clang version %u.%u.%u but run on clang version %u.%u.%u",
-			 data->filename, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
-			 per_file.run_major, per_file.run_minor, per_file.run_rel);
-		  einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
-			 data->filename);
-		}
-
-	      break;
-	    }
-	  
-	  if (sscanf (attr + 1, "running on clang version %u.%u.%u", & major, & minor, & rel) == 3)
-	    {
-	      einfo (VERBOSE2, "%s: info: Detected information stored by an annobin plugin running on clang version %u.%u.%u",
-		     data->filename, major, minor, rel);
-	      if (per_file.run_major == 0)
-		{
-		  per_file.run_major = major;
-		  set_producer (data, TOOL_CLANG, major, "GNU Build Attribute Tool");
-		}
-	      else if (per_file.run_major != major)
-		{
-		  einfo (INFO, "%s: warn: this file was built by more than one version of clang (%u and %u)",
-			 data->filename, per_file.run_major, major);
-		  if (per_file.run_major < major)
-		    per_file.run_major = major;
-		}
-
-	      if (per_file.anno_major != 0 && per_file.anno_major != per_file.run_major)
-		{
-		  if (! per_file.warned_version_mismatch)
-		    {
-		      einfo (INFO, "%s: warn: Annobin plugin was built by clang version %u but run on clang version %u",
-			     data->filename, per_file.anno_major, per_file.run_major);
-		      per_file.warned_version_mismatch = true;
-		    }
-		}
-
-	      per_file.run_minor = minor;
-	      per_file.run_rel = rel;
-	      if ((per_file.anno_minor != 0 && per_file.anno_minor != minor)
-		  || (per_file.anno_rel != 0 && per_file.anno_rel != rel))
-		{
-		  einfo (VERBOSE, "%s: warn: Annobin plugin was built by clang %u.%u.%u but run on clang version %u.%u.%u",
-			 data->filename, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
-			 per_file.run_major, per_file.run_minor, per_file.run_rel);
-		  einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
-			 data->filename);
-		}
-	      break;
-	    }
-	  
-	  /* Otherwise look for the normal BUILD_ATTRIBUTE_TOOL string.  */
-	  const char * gcc = strstr (attr + 1, "gcc");
-
-	  if (gcc != NULL)
-	    {
-	      /* FIXME: This assumes that the tool string looks like: "gcc 7.x.x......"  */
-	      unsigned int version = (unsigned int) strtoul (gcc + 4, NULL, 10);
-
-	      report_i (VERBOSE2, "%s: (%s) built-by gcc version %u",
-			data, sec, note_data, prefer_func_name, version);
-
-	      set_producer (data, TOOL_GCC, version, "GNU Build Attribute");
-	    }
-	  else
-	    report_s (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
-		      data, sec, note_data, prefer_func_name, attr);
+	  einfo (VERBOSE, "ICE:  The tool note should have a string attribute");
+	  break;
 	}
+
+      /* Parse the tool attribute looking for the version of gcc used to build the component.  */
+      unsigned major, minor, rel;
+      
+      /* As of version 8.80 there are two BUILT_ATTRIBUTE_TOOL version strings,
+	 one for the compiler that built the annobin plugin and one for the
+	 compiler that ran the annobin plugin.  Look for these here.  Their
+	 format is "annobin gcc X.Y.Z DATE" and "running gcc X.Y.Z DATE".  */
+      static struct tool_string run_tool_strings [] =
+	{
+	 { "running gcc ", "gcc", TOOL_GCC },
+	 { "running on clang version ", "clang", TOOL_CLANG },
+	 { "running on llvm version ", "llvm", TOOL_LLVM }
+	};
+
+      int i;
+      for (i = ARRAY_SIZE (run_tool_strings); i--;)
+	{
+	  struct tool_string * t = run_tool_strings + i;
+
+	  if (strncmp (attr + 1, t->lead_in, strlen (t->lead_in)) != 0)
+	    continue;
+	    
+	  if (sscanf (attr + 1 + strlen (t->lead_in), "%u.%u.%u", & major, & minor, & rel) != 3)
+	    {
+	      einfo (VERBOSE2, "lead in '%s' matched, but conversion failed.  Full string: '%s'", t->lead_in, attr + 1);
+	      continue;
+	    }
+
+	  einfo (VERBOSE2, "%s: info: Detected information created by an annobin plugin running on %s version %u.%u.%u",
+		 data->filename, t->tool_name, major, minor, rel);
+
+	  if (per_file.run_major == 0)
+	    {
+	      per_file.run_major = major;
+	      set_producer (data, t->tool_id, major, "GNU Build Attribute Tool");
+	    }
+	  else if (per_file.run_major != major)
+	    {
+	      einfo (INFO, "%s: WARN: this file was built by more than one version of %s (%u and %u)",
+		     data->filename, t->tool_name, per_file.run_major, major);
+	      if (per_file.run_major < major)
+		per_file.run_major = major;
+	    }
+
+	  if (per_file.anno_major != 0 && per_file.anno_major != per_file.run_major)
+	    {
+	      if (! per_file.warned_version_mismatch)
+		{
+		  einfo (INFO, "%s: ICE:  Annobin plugin was built by %s version %u but run on %s version %u",
+			 data->filename, t->tool_name, per_file.anno_major,
+			 t->tool_name, per_file.run_major);
+		  per_file.warned_version_mismatch = true;
+		}
+	    }
+
+	  per_file.run_minor = minor;
+	  per_file.run_rel = rel;
+	  if ((per_file.anno_minor != 0 && per_file.anno_minor != minor)
+	      || (per_file.anno_rel != 0 && per_file.anno_rel != rel))
+	    {
+	      einfo (VERBOSE, "%s: warn: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
+		     data->filename, t->tool_name,
+		     per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
+		     t->tool_name,
+		     per_file.run_major, per_file.run_minor, per_file.run_rel);
+	      einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
+		     data->filename);
+	    }
+	  break;
+	}
+
+      if (i >= 0)
+	break;
+
+      static struct tool_string build_tool_strings [] =
+	{
+	 { "annobin gcc ", "gcc", TOOL_GCC },
+	 { "annobin built by clang version ", "clang", TOOL_CLANG },
+	 { "annobin built by llvm version ", "llvm", TOOL_LLVM }
+	};
+
+      for (i = ARRAY_SIZE (build_tool_strings); i--;)
+	{
+	  struct tool_string * t = build_tool_strings + i;
+
+	  if (strncmp (attr + 1, t->lead_in, strlen (t->lead_in)) != 0)
+	    continue;
+	    
+	  if (sscanf (attr + 1 + strlen (t->lead_in), "%u.%u.%u", & major, & minor, & rel) != 3)
+	    {
+	      einfo (VERBOSE2, "lead in '%s' matched, but conversion failed.  Full string: '%s'", t->lead_in, attr + 1);
+	      continue;
+	    }
+
+	  einfo (VERBOSE2, "%s: info: Detected information stored by an annobin plugin built by %s version %u.%u.%u",
+		 data->filename, t->tool_name, major, minor, rel);
+
+	  if (per_file.anno_major == 0)
+	    {
+	      per_file.anno_major = major;
+	    }
+	  else if (per_file.anno_major != major)
+	    {
+	      einfo (INFO, "%s: WARN: notes produced by annobins compiled for more than one version of %s (%u vs %u)",
+		     data->filename, t->tool_name, per_file.anno_major, major);
+	      if (per_file.anno_major < major)
+		per_file.anno_major = major;
+	    }
+
+	  if (per_file.run_major != 0 && per_file.run_major != per_file.anno_major)
+	    {
+	      if (! per_file.warned_version_mismatch)
+		{
+		  einfo (INFO, "%s: ICE:  Annobin plugin was built by %s version %u but run on %s version %u",
+			 data->filename, t->tool_name, per_file.anno_major, t->tool_name, per_file.run_major);
+		  per_file.warned_version_mismatch = true;
+		}
+	    }
+
+	  per_file.anno_minor = minor;
+	  per_file.anno_rel = rel;
+	  if ((per_file.run_minor != 0 && per_file.run_minor != minor)
+	      || (per_file.run_rel != 0 && per_file.run_rel != rel))
+	    {
+	      einfo (VERBOSE, "%s: warn: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
+		     data->filename, t->tool_name, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
+		     t->tool_name, per_file.run_major, per_file.run_minor, per_file.run_rel);
+	      einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
+		     data->filename);
+	    }
+
+	  break;
+	}
+      if (i >= 0)
+	break;
+
+      /* Otherwise look for the normal BUILD_ATTRIBUTE_TOOL string.  */
+      const char * gcc = strstr (attr + 1, "gcc");
+
+      if (gcc != NULL)
+	{
+	  /* FIXME: This assumes that the tool string looks like: "gcc 7.x.x......"  */
+	  unsigned int version = (unsigned int) strtoul (gcc + 4, NULL, 10);
+
+	  report_i (VERBOSE2, "%s: (%s) built-by gcc version %u",
+		    data, sec, note_data, prefer_func_name, version);
+
+	  set_producer (data, TOOL_GCC, version, "GNU Build Attribute");
+	}
+      else
+	report_s (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
+		  data, sec, note_data, prefer_func_name, attr);
       break;
 
     case GNU_BUILD_ATTRIBUTE_PIC:

@@ -60,6 +60,7 @@ extern "C" {
 
 /* Characters used in the GNU_BUILD_ATTRIBUTE_VERSION note to identify the code producer.  */
 #define ANNOBIN_TOOL_ID_CLANG       'L'
+#define ANNOBIN_TOOL_ID_LLVM        'V'
 #define ANNOBIN_TOOL_ID_ASSEMBLER   'a'
 #define ANNOBIN_TOOL_ID_LINKER      'l'
 #define ANNOBIN_TOOL_ID_GCC         'p'

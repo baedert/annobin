@@ -36,7 +36,7 @@ test-clang:
    -D_FORTIFY_SOURCE=2 \
    -O2 \
    -g -grecord-gcc-switches \
-   -fPIE \
+   -fpic \
     -Wall \
    -fsanitize=safe-stack \
    -fstack-protector-strong \
