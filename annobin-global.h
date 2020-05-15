@@ -12,6 +12,10 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* The version of the package.
    NB/ This number is expected to be in the form "Nnn" where
    "N" is major version number and "nn" is the minor version number.  */
@@ -73,3 +77,8 @@
 #define streq(a,b)	  (strcmp ((a), (b)) == 0)
 #define strneq(a,b,n)	  (strncmp ((a), (b), (n)) == 0)
 #define const_strneq(a,b) (strncmp ((a), (b), sizeof (b) - 1) == 0)
+
+#ifdef __cplusplus
+}
+#endif
+

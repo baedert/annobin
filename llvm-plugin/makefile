@@ -28,8 +28,10 @@ CC=clang
 #   /bin/ld: error: hello.o: <corrupt x86 feature size: 0x8>
 # At least for Clang-7 on Fedora 29.
 
-run-test: annobin.so
-	$(CC) \
+run-test: annobin.so test-clang test-go test-rust
+
+test-clang:
+	ANNOBIN_VERBOSE=true $(CC) \
    -Xclang -load -Xclang `pwd`/annobin.so \
    -D_FORTIFY_SOURCE=2 \
    -O2 \
@@ -45,6 +47,12 @@ run-test: annobin.so
 	$(STRIP) --merge-notes a.out
 	$(READELF) --wide --notes hello.o
 
+test-go:
+	 go build hello.go
+
+test-rust:
+	rustc hello.rs
+
 clean:
-	rm -f annobin.so annobin.o hello.bc hello.i hello.o hello.s a.out
+	rm -f annobin.so annobin.o hello.bc hello.i hello.o hello.s a.out hello
 
