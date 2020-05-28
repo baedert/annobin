@@ -853,7 +853,7 @@ walk_build_notes (annocheck_data *     data,
 	{
 	 { "running gcc ", "gcc", TOOL_GCC },
 	 { "running on clang version ", "clang", TOOL_CLANG },
-	 { "running on llvm version ", "llvm", TOOL_LLVM }
+	 { "running on LLVM version ", "llvm", TOOL_LLVM }
 	};
 
       int i;

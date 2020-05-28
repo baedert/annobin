@@ -3,6 +3,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/LTO/legacy/LTOCodeGenerator.h"
 #include "annobin-global.h"
 #include <cstring>
 #include <cctype>
@@ -92,6 +93,12 @@ namespace
       optLevel = val;
     }
 
+    virtual StringRef
+    getPassName (void) const
+    {
+      return "Annobin Module Pass";
+    }
+    
     virtual bool
     runOnModule (Module & module)
     {
@@ -129,12 +136,10 @@ namespace
       sprintf (buf, "annobin built by llvm version %s", LLVM_VERSION_STRING);
       OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
 			buf, "tool note (plugin built by)");
-#if 0
-      sprintf (buf, "running on %s", getClangFullVersion ().c_str ());
+
+      sprintf (buf, "running on %s", LTOCodeGenerator::getVersionString ());
       OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
 			buf, "tool note (running on)");
-#endif			
-
 
       unsigned int val;
       if (module.getPIELevel () > 0)
@@ -392,6 +397,12 @@ namespace
       verbose ("Checking function %s", F.getName ());
       return false;
     }
+
+    virtual StringRef
+    getPassName (void) const
+    {
+      return "Annobin Function Pass";
+    }
   };
 }
 
@@ -399,17 +410,29 @@ char AnnobinModulePass::ID = 0;
 char AnnobinFunctionPass::ID = 0;
 
 static void
-registerAnnobinPasses (const PassManagerBuilder & PMB,
-		       legacy::PassManagerBase & PM)
+registerAnnobinFunctionPass (const PassManagerBuilder & PMB,
+			     legacy::PassManagerBase & PM)
+{
+  PM.add (new AnnobinFunctionPass ());
+}
+
+static void
+registerAnnobinModulePass (const PassManagerBuilder & PMB,
+			   legacy::PassManagerBase & PM)
 {
   static RegisterPass<AnnobinModulePass> X("annobin", "Annobin Module Pass");
-
-  PM.add (new AnnobinFunctionPass ());
   PM.add (createAnnobinModulePass ((int) PMB.OptLevel));
 }
 
-// NB. The choice of when to run the passes is critical.
-// Using EP_EarlyAsPossible for example will run all the
-// passes as Function passes, even if they are Module passes.
+// NB. The choice of when to run the passes is critical.  Using
+// EP_EarlyAsPossible for example will run all the passes as Function passes,
+// even if they are Module passes.  Whist using EP_ModuleOptimizerEarly will
+// not run the pass at -O0.  Hence we use three different pass levels.
 static RegisterStandardPasses
-RegisterMyPass (PassManagerBuilder::EP_ModuleOptimizerEarly, registerAnnobinPasses);
+RegisterMyPass1 (PassManagerBuilder::EP_EarlyAsPossible, registerAnnobinFunctionPass);
+
+static RegisterStandardPasses
+RegisterMyPass2 (PassManagerBuilder::EP_EnabledOnOptLevel0, registerAnnobinModulePass);
+
+static RegisterStandardPasses
+RegisterMyPass3 (PassManagerBuilder::EP_ModuleOptimizerEarly, registerAnnobinModulePass);
