@@ -113,7 +113,7 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 }
 
 static unsigned int
-convert_gcc_isa_to_gnu_property_isa (unsigned int isa)
+convert_gcc_isa_to_gnu_property_isa (unsigned long isa)
 {
   unsigned int result = 0;
 

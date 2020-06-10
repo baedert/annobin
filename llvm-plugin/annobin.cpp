@@ -78,155 +78,6 @@ namespace
     char const *        fileEnd = nullptr;
     unsigned int        optLevel;
 
-  public:
-    static char ID;
-    AnnobinModulePass() : ModulePass (ID)
-    {
-      if (getenv ("ANNOBIN_VERBOSE") != NULL
-	  && ! streq (getenv ("ANNOBIN_VERBOSE"), "false"))
-	be_verbose = true;
-    }
-
-    void
-    setOptLevel (unsigned int val)
-    {
-      optLevel = val;
-    }
-
-    virtual StringRef
-    getPassName (void) const
-    {
-      return "Annobin Module Pass";
-    }
-    
-    virtual bool
-    runOnModule (Module & module)
-    {
-      static char buf [6400]; // FIXME: Use a dynamic string.
-      std::string filename = module.getSourceFileName ();
-
-      // Generate start and end symbols.
-      convert_to_valid_symbol_name (filename);
-      verbose ("Generate start and end symbols based on: %s", filename.c_str ());
-      fileStart = concat ("_annobin_", filename, "_start");
-      fileEnd   = concat ("_annobin_", filename, "_end");
-
-      static const char START_TEXT[] = "\
-\t.pushsection .text\n\
-\t.hidden %s\n\
-\t.type   %s, STT_NOTYPE\n\
-\t.equiv  %s, .text\n\
-\t.size   %s, 0\n\
-\t.pushsection .text.zzz\n\
-\t.hidden %s\n\
-\t.type   %s, STT_NOTYPE\n\
-\t.equiv  %s, .text.zzz\n\
-\t.size   %s, 0\n\
-\t.popsection\n";
-      sprintf (buf, START_TEXT,
-	       fileStart, fileStart, fileStart, fileStart,
-	       fileEnd, fileEnd, fileEnd, fileEnd);
-
-      module.appendModuleInlineAsm (buf);
-
-      
-      // Generate version notes.
-      sprintf (buf, "%d%c%d", SPEC_VERSION, ANNOBIN_TOOL_ID_LLVM, version);
-      OutputStringNote (module,
-			GNU_BUILD_ATTRIBUTE_VERSION, buf,
-			"version note");
-
-      sprintf (buf, "annobin built by llvm version %s", LLVM_VERSION_STRING);
-      OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
-			buf, "tool note (plugin built by)");
-
-      sprintf (buf, "running on %s", LTOCodeGenerator::getVersionString ());
-      OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
-			buf, "tool note (running on)");
-
-      
-      // Generate a PIE note.
-      unsigned int val;
-      if (module.getPIELevel () > 0)
-	val = 4;
-      else if (module.getPICLevel () > 0)
-	val = 2;
-      else
-	val = 0;
-
-      char pic[2] = {GNU_BUILD_ATTRIBUTE_PIC, 0};
-      OutputNumericNote (module, pic, val, "PIE");
-
-
-      // Generate a FORTIFY note.
-      //
-      // Unfortunately, since we are looking at the IR we have no access
-      // to any preprocessor defines.  Instead we look for references to
-      // functions that end in *_chk.  This is not a perfect heuristic by
-      // any means, but it is the best that I can think of for now.
-      for (auto GI = module.begin(), GE = module.end(); GI != GE; ++GI)
-	{
-	  StringRef Name = GI->getName();
-	  if (Name.take_back(4) == "_chk")
-	    {
-	      OutputNumericNote (module, "FORTIFY", 1, "_FORTITFY_SOURCE used (probably)");
-	      break;
-	    }
-	}
-      // Do nothing if no matching function was found.
-
-      
-      // Generate a GOW note.
-      val = optLevel;
-      if (val > 3)
-	val = 3;
-      // The optimization level occupies bits 9..11 of the GOW value.
-      val <<= 9;
-      verbose ("optimization level is %u", optLevel);
-      OutputNumericNote (module, "GOW", val, "Optimization Level");
-
-      
-      // Generate a cf-protection note.
-      if (module.getModuleFlag("cf-protection-branch"))
-	val += 1;
-      if (module.getModuleFlag("cf-protection-return"))
-	val += 2;
-      // We bias the value by 1 so that we do not get confused by a zero value.
-      val += 1;
-      OutputNumericNote (module, "cf_protection", val, "Control Flow protection");
-
-#if 0      
-      if (be_verbose)
-	{
-	  verbose ("Available module flags:");
-	  SmallVector<Module::ModuleFlagEntry, 8> ModuleFlags;
-	  module.getModuleFlagsMetadata(ModuleFlags);
-	  for (const llvm::Module::ModuleFlagEntry &MFE : ModuleFlags)
-	    inform ("  %s", MFE.Key->getString());
-	}
-#endif 
-      return true; // Module has been modified.
-    }
-
-  private:
-
-    static void
-    convert_to_valid_symbol_name (std::string& name)
-    {
-      for( auto & c : name)
-	if (!isalnum (c))
-	  c = '_';
-    }
-
-    static void
-    add_line_to_note (std::ostringstream & buffer, const char * text, const char * comment = nullptr)
-    {
-      buffer << '\t' << text;
-      if (comment)
-        buffer << " \t/* " << comment << " */";
-      buffer << '\n';
-    }
-
     void
     OutputNote (Module &      module,
 		const char *  name,
@@ -399,6 +250,186 @@ namespace
       free (buffer);
     }
 
+  public:
+    static char ID;
+    AnnobinModulePass() : ModulePass (ID)
+    {
+      if (getenv ("ANNOBIN_VERBOSE") != NULL
+	  && ! streq (getenv ("ANNOBIN_VERBOSE"), "false"))
+	be_verbose = true;
+    }
+
+    void
+    setOptLevel (unsigned int val)
+    {
+      optLevel = val;
+    }
+
+    virtual StringRef
+    getPassName (void) const
+    {
+      return "Annobin Module Pass";
+    }
+    
+    virtual bool
+    runOnModule (Module & module)
+    {
+      static char buf [6400]; // FIXME: Use a dynamic string.
+      std::string filename = module.getSourceFileName ();
+
+      // Generate start and end symbols.
+      convert_to_valid_symbol_name (filename);
+      verbose ("Generate start and end symbols based on: %s", filename.c_str ());
+      fileStart = concat ("_annobin_", filename, "_start");
+      fileEnd   = concat ("_annobin_", filename, "_end");
+
+      static const char START_TEXT[] = "\
+\t.pushsection .text\n\
+\t.hidden %s\n\
+\t.type   %s, STT_NOTYPE\n\
+\t.equiv  %s, .text\n\
+\t.size   %s, 0\n\
+\t.pushsection .text.zzz\n\
+\t.hidden %s\n\
+\t.type   %s, STT_NOTYPE\n\
+\t.equiv  %s, .text.zzz\n\
+\t.size   %s, 0\n\
+\t.popsection\n";
+      sprintf (buf, START_TEXT,
+	       fileStart, fileStart, fileStart, fileStart,
+	       fileEnd, fileEnd, fileEnd, fileEnd);
+
+      module.appendModuleInlineAsm (buf);
+
+      
+      // Generate version notes.
+      sprintf (buf, "%d%c%d", SPEC_VERSION, ANNOBIN_TOOL_ID_LLVM, version);
+      OutputStringNote (module,
+			GNU_BUILD_ATTRIBUTE_VERSION, buf,
+			"version note");
+
+      sprintf (buf, "annobin built by llvm version %s", LLVM_VERSION_STRING);
+      OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
+			buf, "tool note (plugin built by)");
+
+      sprintf (buf, "running on %s", LTOCodeGenerator::getVersionString ());
+      OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
+			buf, "tool note (running on)");
+
+      
+      // Generate a PIE note.
+      unsigned int val;
+      if (module.getPIELevel () > 0)
+	val = 4;
+      else if (module.getPICLevel () > 0)
+	val = 2;
+      else
+	val = 0;
+
+      char pic[2] = {GNU_BUILD_ATTRIBUTE_PIC, 0};
+      OutputNumericNote (module, pic, val, "PIE");
+
+
+      // Generate FORTIFY, SAFE STACK anf STACK PROT STRONG notes.
+      //
+      // Unfortunately, since we are looking at the IR we have no access
+      // to any preprocessor defines.  Instead we look for references to
+      // functions that end in *_chk.  This is not a perfect heuristic by
+      // any means, but it is the best that I can think of for now.
+      bool stack_prot_strong_found = false;
+      bool safe_stack_found = false;
+      bool fortify_found = false;
+      for (auto GI = module.begin(), GE = module.end(); GI != GE; ++GI)
+	{
+	  StringRef Name = GI->getName();
+	  // FIXME: Surely there is a better way to do this.
+	  Function * func = module.getFunction (Name);
+
+	  if (func)
+	    {
+	      if (! stack_prot_strong_found
+		  && func->hasFnAttribute (Attribute::StackProtectStrong))
+		{
+		  OutputNumericNote (module, "StackProtStrong", 1, "Stack Proctector Strong");
+		  stack_prot_strong_found = true;
+		}
+
+	      if (! safe_stack_found
+		  && func->hasFnAttribute(Attribute::SafeStack))
+		{
+		  OutputNumericNote (module, "SafeStack", 1, "SafeStack attribute");
+		  safe_stack_found = true;
+		}
+	    }
+	  
+	  if (fortify_found == false
+	      && Name.take_back(4) == "_chk")
+	    {
+	      OutputNumericNote (module, "FORTIFY", 1, "_FORTITFY_SOURCE used (probably)");
+	      fortify_found = true;
+	    }
+
+	  if (safe_stack_found && fortify_found && stack_prot_strong_found)
+	    break;
+	}
+
+      if (! stack_prot_strong_found)
+	OutputNumericNote (module, "StackProtStrong", 0, "Stack Proctector Strong");
+      if (! safe_stack_found)
+	OutputNumericNote (module, "SafeStack", 0, "SafeStack attribute");
+      // Do not worry about missing FORTIFY functions.
+      
+      // Generate a GOW note.
+      val = optLevel;
+      if (val > 3)
+	val = 3;
+      // The optimization level occupies bits 9..11 of the GOW value.
+      val <<= 9;
+      verbose ("optimization level is %u", optLevel);
+      OutputNumericNote (module, "GOW", val, "Optimization Level");
+
+      
+      // Generate a cf-protection note.
+      if (module.getModuleFlag("cf-protection-branch"))
+	val += 1;
+      if (module.getModuleFlag("cf-protection-return"))
+	val += 2;
+      // We bias the value by 1 so that we do not get confused by a zero value.
+      val += 1;
+      OutputNumericNote (module, "cf_protection", val, "Control Flow protection");
+
+#if 0      
+      if (be_verbose)
+	{
+	  verbose ("Available module flags:");
+	  SmallVector<Module::ModuleFlagEntry, 8> ModuleFlags;
+	  module.getModuleFlagsMetadata(ModuleFlags);
+	  for (const llvm::Module::ModuleFlagEntry &MFE : ModuleFlags)
+	    inform ("  %s", MFE.Key->getString());
+	}
+#endif 
+      return true; // Module has been modified.
+    }
+
+  private:
+
+    static void
+    convert_to_valid_symbol_name (std::string& name)
+    {
+      for( auto & c : name)
+	if (!isalnum (c))
+	  c = '_';
+    }
+
+    static void
+    add_line_to_note (std::ostringstream & buffer, const char * text, const char * comment = nullptr)
+    {
+      buffer << '\t' << text;
+      if (comment)
+        buffer << " \t/* " << comment << " */";
+      buffer << '\n';
+    }
+
   }; // End of class AnnobinModulePass 
 
   Pass *
@@ -449,7 +480,9 @@ namespace
     virtual bool
     runOnFunction (Function & F)
     {
-      verbose ("Checking function %s", F.getName ());
+      // FIXME: Need to figure out how to get to the Module class from here.
+      Module * M = F.getParent();
+      verbose ("Checking function %s in Module %p", F.getName(), M);
       return false;
     }
 

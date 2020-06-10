@@ -346,8 +346,6 @@ annobin_output_note (const char * name,
 	case 4:
 	  if (annobin_is_64bit || desc2 != NULL)
 	    ice ("descz too small");
-	  if (desc1 == NULL)
-	    ice ("descz too big");
 	  break;
 	case 8:
 	  if (annobin_is_64bit)
@@ -2254,7 +2252,7 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	  else
 	    {
 	      plugin_target = "native";
-	      plugin_target_end = gcc_target + 6; /* strlen ("native")  */
+	      plugin_target_end = plugin_target + 6; /* strlen ("native")  */
 	    }
 	  if (gcc_target)
 	    {
