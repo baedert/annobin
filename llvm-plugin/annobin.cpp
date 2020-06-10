@@ -350,14 +350,16 @@ namespace
 	      if (! stack_prot_strong_found
 		  && func->hasFnAttribute (Attribute::StackProtectStrong))
 		{
-		  OutputNumericNote (module, "StackProtStrong", 1, "Stack Proctector Strong");
+		  char prot[2] = {GNU_BUILD_ATTRIBUTE_STACK_PROT, 0};
+		  OutputNumericNote (module, prot, 3, "Stack Proctector Strong");
 		  stack_prot_strong_found = true;
 		}
 
 	      if (! safe_stack_found
 		  && func->hasFnAttribute(Attribute::SafeStack))
 		{
-		  OutputNumericNote (module, "SafeStack", 1, "SafeStack attribute");
+		  // FIXME: Using the stack_clash note is not quite correct, but will do for now.
+		  OutputNumericNote (module, "stack_clash", 1, "SafeStack attribute");
 		  safe_stack_found = true;
 		}
 	    }
@@ -365,7 +367,7 @@ namespace
 	  if (fortify_found == false
 	      && Name.take_back(4) == "_chk")
 	    {
-	      OutputNumericNote (module, "FORTIFY", 1, "_FORTITFY_SOURCE used (probably)");
+	      OutputNumericNote (module, "FORTIFY", 2, "_FORTITFY_SOURCE used (probably)");
 	      fortify_found = true;
 	    }
 
@@ -385,11 +387,14 @@ namespace
 	val = 3;
       // The optimization level occupies bits 9..11 of the GOW value.
       val <<= 9;
+      // FIXME: For now we lie and say that -Wall was used.
+      val |= 1 << 14;
       verbose ("optimization level is %u", optLevel);
       OutputNumericNote (module, "GOW", val, "Optimization Level");
 
       
       // Generate a cf-protection note.
+      val = 0;
       if (module.getModuleFlag("cf-protection-branch"))
 	val += 1;
       if (module.getModuleFlag("cf-protection-return"))
