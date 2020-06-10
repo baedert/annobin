@@ -37,10 +37,9 @@ test-clang:
    -O2 \
    -g -grecord-gcc-switches \
    -fpic \
-    -Wall \
-   -fsanitize=safe-stack \
-   -fstack-protector-strong \
    -fcf-protection \
+   -fstack-protector-strong \
+   -fsanitize=safe-stack \
    -fsanitize=cfi-cast-strict \
    hello.c \
    -save-temps

@@ -105,6 +105,7 @@ namespace
       static char buf [6400]; // FIXME: Use a dynamic string.
       std::string filename = module.getSourceFileName ();
 
+      // Generate start and end symbols.
       convert_to_valid_symbol_name (filename);
       verbose ("Generate start and end symbols based on: %s", filename.c_str ());
       fileStart = concat ("_annobin_", filename, "_start");
@@ -128,6 +129,8 @@ namespace
 
       module.appendModuleInlineAsm (buf);
 
+      
+      // Generate version notes.
       sprintf (buf, "%d%c%d", SPEC_VERSION, ANNOBIN_TOOL_ID_LLVM, version);
       OutputStringNote (module,
 			GNU_BUILD_ATTRIBUTE_VERSION, buf,
@@ -141,6 +144,8 @@ namespace
       OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
 			buf, "tool note (running on)");
 
+      
+      // Generate a PIE note.
       unsigned int val;
       if (module.getPIELevel () > 0)
 	val = 4;
@@ -152,6 +157,26 @@ namespace
       char pic[2] = {GNU_BUILD_ATTRIBUTE_PIC, 0};
       OutputNumericNote (module, pic, val, "PIE");
 
+
+      // Generate a FORTIFY note.
+      //
+      // Unfortunately, since we are looking at the IR we have no access
+      // to any preprocessor defines.  Instead we look for references to
+      // functions that end in *_chk.  This is not a perfect heuristic by
+      // any means, but it is the best that I can think of for now.
+      for (auto GI = module.begin(), GE = module.end(); GI != GE; ++GI)
+	{
+	  StringRef Name = GI->getName();
+	  if (Name.take_back(4) == "_chk")
+	    {
+	      OutputNumericNote (module, "FORTIFY", 1, "_FORTITFY_SOURCE used (probably)");
+	      break;
+	    }
+	}
+      // Do nothing if no matching function was found.
+
+      
+      // Generate a GOW note.
       val = optLevel;
       if (val > 3)
 	val = 3;
@@ -160,6 +185,8 @@ namespace
       verbose ("optimization level is %u", optLevel);
       OutputNumericNote (module, "GOW", val, "Optimization Level");
 
+      
+      // Generate a cf-protection note.
       if (module.getModuleFlag("cf-protection-branch"))
 	val += 1;
       if (module.getModuleFlag("cf-protection-return"))
@@ -167,7 +194,8 @@ namespace
       // We bias the value by 1 so that we do not get confused by a zero value.
       val += 1;
       OutputNumericNote (module, "cf_protection", val, "Control Flow protection");
-      
+
+#if 0      
       if (be_verbose)
 	{
 	  verbose ("Available module flags:");
@@ -176,7 +204,7 @@ namespace
 	  for (const llvm::Module::ModuleFlagEntry &MFE : ModuleFlags)
 	    inform ("  %s", MFE.Key->getString());
 	}
-      
+#endif 
       return true; // Module has been modified.
     }
 
@@ -384,7 +412,34 @@ namespace
     p->setOptLevel (optLevel);
     return p;
   }
-  
+}
+
+char AnnobinModulePass::ID = 0;
+
+static void
+registerAnnobinModulePass (const PassManagerBuilder & PMB,
+			   legacy::PassManagerBase & PM)
+{
+  static RegisterPass<AnnobinModulePass> X("annobin", "Annobin Module Pass");
+  PM.add (createAnnobinModulePass ((int) PMB.OptLevel));
+}
+
+// NB. The choice of when to run the passes is critical.  Using
+// EP_EarlyAsPossible for example will run all the passes as Function passes,
+// even if they are Module passes.  Whist using EP_ModuleOptimizerEarly will
+// not run the pass at -O0.  Hence we use three different pass levels.
+static RegisterStandardPasses
+RegisterMyPass2 (PassManagerBuilder::EP_EnabledOnOptLevel0, registerAnnobinModulePass);
+
+static RegisterStandardPasses
+RegisterMyPass3 (PassManagerBuilder::EP_ModuleOptimizerEarly, registerAnnobinModulePass);
+
+// -------------------------------------------------------------------------------------
+// Function Pass
+
+using namespace llvm;
+namespace
+{
   class AnnobinFunctionPass : public FunctionPass
   {
     static char ID;
@@ -406,7 +461,6 @@ namespace
   };
 }
 
-char AnnobinModulePass::ID = 0;
 char AnnobinFunctionPass::ID = 0;
 
 static void
@@ -416,23 +470,5 @@ registerAnnobinFunctionPass (const PassManagerBuilder & PMB,
   PM.add (new AnnobinFunctionPass ());
 }
 
-static void
-registerAnnobinModulePass (const PassManagerBuilder & PMB,
-			   legacy::PassManagerBase & PM)
-{
-  static RegisterPass<AnnobinModulePass> X("annobin", "Annobin Module Pass");
-  PM.add (createAnnobinModulePass ((int) PMB.OptLevel));
-}
-
-// NB. The choice of when to run the passes is critical.  Using
-// EP_EarlyAsPossible for example will run all the passes as Function passes,
-// even if they are Module passes.  Whist using EP_ModuleOptimizerEarly will
-// not run the pass at -O0.  Hence we use three different pass levels.
 static RegisterStandardPasses
 RegisterMyPass1 (PassManagerBuilder::EP_EarlyAsPossible, registerAnnobinFunctionPass);
-
-static RegisterStandardPasses
-RegisterMyPass2 (PassManagerBuilder::EP_EnabledOnOptLevel0, registerAnnobinModulePass);
-
-static RegisterStandardPasses
-RegisterMyPass3 (PassManagerBuilder::EP_ModuleOptimizerEarly, registerAnnobinModulePass);

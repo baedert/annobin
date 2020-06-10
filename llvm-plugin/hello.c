@@ -1,7 +1,11 @@
-extern int printf (const char *, ...);
+#include <stdio.h>
+#include <string.h>
+
+char buf[128];
 
 int 
-main (void)
+main (int argc, char ** argv)
 {
-  return printf ("hello world\n");
+  strcpy (buf, argv[0]);
+  return printf (buf);
 }
