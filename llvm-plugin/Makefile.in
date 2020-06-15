@@ -23,7 +23,7 @@ $(PLUGIN_NAME): annobin.cpp
 	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) -I$(INCDIR) $< -o $@
 
 install: $(PLUGIN_NAME)
-	cp $< $(PLUGIN_INSTALL_DIR)
+	install -Dpm0755 -t ${PLUGIN_INSTALL_DIR} $<
 
 clean:
 	rm -f $(PLUGIN_NAME) hello.o llvm-plugin-test.out
