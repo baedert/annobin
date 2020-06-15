@@ -1,0 +1,53 @@
+
+VPATH = @srcdir@
+
+LLVM_OPTIONS = \
+  -D_GNU_SOURCE \
+  -D__STDC_CONSTANT_MACROS \
+  -D__STDC_FORMAT_MACROS \
+  -D__STDC_LIMIT_MACROS \
+
+PLUGIN_OPTIONS = \
+  -shared \
+  -fPIC
+
+INCDIR = @srcdir@/..
+
+PLUGIN_INSTALL_DIR = /usr/lib64/clang/`clang -dumpversion`/lib
+
+PLUGIN_NAME = annobin-for-clang.so
+
+all: $(PLUGIN_NAME)
+
+$(PLUGIN_NAME): annobin.cpp
+	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) -I$(INCDIR) $< -o $@
+
+install: $(PLUGIN_NAME)
+	cp $< $(PLUGIN_INSTALL_DIR)
+
+clean:
+	rm -f $(PLUGIN_NAME) clang-plugin-test.out hello.o
+
+CLANG=clang
+READELF=readelf
+PLUGIN = @abs_builddir@/$(PLUGIN_NAME)
+
+PLUGIN_TEST_OPTIONS = \
+   -D_FORTIFY_SOURCE=2 \
+   -O2 \
+   -g -grecord-gcc-switches \
+   -fPIE \
+    -Wall \
+   -fsanitize=safe-stack \
+   -fstack-protector-strong \
+   -fcf-protection \
+   -fsanitize=cfi-cast-strict 
+
+check: @srcdir@/hello.c
+	@ $(CLANG) -fplugin=$(PLUGIN) $(PLUGIN_TEST_OPTIONS) -c @srcdir@/hello.c
+	@ $(READELF) --wide --notes hello.o > clang-plugin-test.out
+	@ grep --silent -e "annobin built by clang version" clang-plugin-test.out
+	@ grep --silent -e "running on clang version" clang-plugin-test.out
+	@ grep --silent -e "sanitize_cfi" clang-plugin-test.out
+	@ grep --silent -e "SpecLoadHarden" clang-plugin-test.out
+	@ echo "PASS Clang plugin test"

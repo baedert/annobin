@@ -42,7 +42,7 @@ test-clang:
    -fsanitize=safe-stack \
    -fsanitize=cfi-cast-strict \
    hello.c \
-   -save-temps
+   -save-temps 
 	$(STRIP) --merge-notes a.out
 	$(READELF) --wide --notes hello.o
 

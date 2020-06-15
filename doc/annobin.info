@@ -857,6 +857,17 @@ configure options available to customise the build:
      '--without-libelf' option which forces the build to assume that
      libelf is absent even if it would normally be detected.
 
+'--without-tests'
+     Disable running the testsuite after building the various binaries.
+
+'--with-clang'
+     Enable the building of the annobin plugin for the Clang compiler.
+
+'--with-llvm'
+     Enable the building of the annobin plugin for the LLVM compiler
+     backend.  This is separate from the Clang plugin and can be used
+     with any language that uses LLVM as a backend compiler.
+
 '--enable-maintainer-mode'
      This enables the regeneration of the 'Makefile' and 'configure'
      files when building the 'annobin' sources.
@@ -1809,11 +1820,11 @@ Node: Notes27485
 Node: Section-Size28129
 Node: Timing30283
 Node: Configure Options30930
-Node: Legacy Scripts32764
-Node: Who Built Me33539
-Node: ABI Checking36299
-Node: Hardening Checks38413
-Node: Checking Archives42499
-Node: GNU FDL44921
+Node: Legacy Scripts33157
+Node: Who Built Me33932
+Node: ABI Checking36692
+Node: Hardening Checks38806
+Node: Checking Archives42892
+Node: GNU FDL45314
 
 End Tag Table

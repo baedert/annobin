@@ -997,6 +997,17 @@ This behaviour can be overrridden by the @option{--without-libelf}
 option which forces the build to assume that libelf is absent even if
 it would normally be detected.
 
+@item --without-tests
+Disable running the testsuite after building the various binaries.
+
+@item --with-clang
+Enable the building of the annobin plugin for the Clang compiler.
+
+@item --with-llvm
+Enable the building of the annobin plugin for the LLVM compiler
+backend.  This is separate from the Clang plugin and can be used with
+any language that uses LLVM as a backend compiler.
+
 @item --enable-maintainer-mode
 This enables the regeneration of the @file{Makefile} and
 @file{configure} files when building the @command{annobin} sources.

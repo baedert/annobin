@@ -15,9 +15,7 @@ AC_ARG_WITH([debuginfod],
 AC_MSG_CHECKING([whether to use debuginfod])
 AC_MSG_RESULT([$with_debuginfod])
 
-if test "${with_debuginfod}" = no; then
-  AC_MSG_WARN([debuginfod support disabled; some features may be unavailable.])
-else
+if test "${with_debuginfod}" != no; then
   AC_CHECK_LIB([debuginfod], [debuginfod_begin], [have_debuginfod_lib=yes])
   AC_CHECK_DECL([debuginfod_begin], [have_debuginfod_h=yes], [],
                 [#include <elfutils/debuginfod.h>])
@@ -29,9 +27,9 @@ else
   else
     AC_SUBST([LIBDEBUGINFOD], [])
     if test "$with_debuginfod" = yes; then
-      AC_MSG_ERROR([debuginfod is missing or unusable])
+      AC_MSG_ERROR([debuginfod is missing or unusable.])
     else
-      AC_MSG_WARN([debuginfod is missing or unusable; some features may be unavailable.])
+      AC_MSG_WARN([debuginfod is missing or unusable.])
     fi
   fi
 fi

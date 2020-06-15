@@ -5,6 +5,7 @@ dnl
 dnl ANNOCHECK
 dnl
 dnl
+
 AC_DEFUN([ANNOCHECK], [
 
 AC_ARG_WITH(
@@ -27,4 +28,29 @@ AC_SUBST(RPMLIBS)
 ],
 [:])
 
+])
+
+AC_DEFUN([CLANG_PLUGIN], [
+
+AC_ARG_WITH(
+  [clang],
+  [AC_HELP_STRING([--with-clang],[build the clang plugin])],
+  [with_clang_plugin=yes],
+  [:])
+])
+
+AC_DEFUN([LLVM_PLUGIN], [
+
+AC_ARG_WITH(
+  [llvm],
+  [AC_HELP_STRING([--with-llvm],[build the llvm plugin])],
+  [with_llvm_plugin=yes],
+  [:])
+])
+
+AC_ARG_WITH(
+  [tests],
+  [AC_HELP_STRING([--without-tests],[do not run the tests])],
+  [with_tests=no],
+  [:])
 ])
