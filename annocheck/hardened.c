@@ -1112,9 +1112,10 @@ walk_build_notes (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_SHORT_ENUM:
+#if 0 /* There is no valid reason to skip this test.  */
       if (skip_check (TEST_SHORT_ENUM, get_component_name (data, sec, note_data, prefer_func_name)))
 	break;
-
+#endif
       if (value == 1)
 	{
 	  tests[TEST_SHORT_ENUM].num_fail ++;
@@ -2655,7 +2656,8 @@ show_SHORT_ENUM (annocheck_data * data, test * results)
   else if (! built_by_gcc ())
     skip (data, "Test of enum size.  (Not built by gcc)");
   else
-    maybe (data, "No data about the use of -fshort-enum available");
+    /* Use SKIP rather than MAYBE here as this is not critical.  */
+    skip (data, "No data about the use of -fshort-enum available");
 }
 
 static void

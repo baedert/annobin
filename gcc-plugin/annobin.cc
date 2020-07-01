@@ -1688,11 +1688,13 @@ emit_global_notes (const char * suffix)
   /* Record the PIC status.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
 			       "numeric: PIC", NULL, NULL, OPEN, sec);
+  annobin_inform (INFORM_VERBOSE, "Record global PIC setting of %d", global_pic_option);
 
   /* Record enum size.  */
   annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums != 0,
 			    global_short_enums != 0 ? "bool: short-enums: on" : "bool: short-enums: off",
 			    NULL, NULL, OPEN, sec);
+  annobin_inform (INFORM_VERBOSE, "Record global SHORT ENUM setting of %d", global_short_enums);
 
   record_frame_pointer_note (NULL, NULL, OPEN, sec);
 
