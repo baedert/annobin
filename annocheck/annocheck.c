@@ -1723,6 +1723,8 @@ main (int argc, const char ** argv)
   bool          self_made_tmpdir = false;
 
 
+  component_names[0] = (argv != NULL && argv[0] != NULL) ? lbasename (argv[0]) : "annocheck";
+
   if (elf_version (EV_CURRENT) == EV_NONE)
     {
       einfo (FAIL, "Could not initialise libelf");

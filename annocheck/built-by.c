@@ -203,7 +203,10 @@ builtby_note_walker (annocheck_data *     data,
   if (namedata[pos - 1] != GNU_BUILD_ATTRIBUTE_TYPE_STRING)
     return false;
 
-  if (strncmp ((const char *) namedata + pos + 1, STR_AND_LEN ("annobin built")) != 0)
+  /* Note - we cannot use the STR_AND_LEN macro here as some
+     headers defined strncmp as a macro, and macros are not
+     expanded inside other macros.  */
+  if (strncmp ((const char *) namedata + pos + 1, "annobin built", sizeof ("annobin built") - 1) != 0)
     found ("annobin note", (const char *) ptr, namedata + pos + 1);
 
   return true;
