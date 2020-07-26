@@ -51,7 +51,8 @@ annobin_target_start_symbol_bias (void)
 unsigned int
 annobin_get_target_pointer_size (void)
 {
-  return 64;
+  // FIXME: Testing POINTER_SIZE may not be reliable.
+  return POINTER_SIZE;
 }
 
 int

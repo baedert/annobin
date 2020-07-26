@@ -35,7 +35,7 @@ unsigned int
 annobin_get_target_pointer_size (void)
 {
   // FIXME: Testing POINTER_SIZE may not be reliable.
-  return POINTER_SIZE == 32 ? 32 : 64;
+  return POINTER_SIZE;
 }
 
 int
