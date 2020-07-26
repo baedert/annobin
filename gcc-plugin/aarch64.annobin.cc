@@ -38,10 +38,12 @@ annobin_save_target_specific_information (void)
 void
 annobin_record_global_target_notes (const char * sec)
 {
+#if 0 // FIXME: For some reason this is being triggered in Fedora Rawhide, even after a rebuild against the latest gcc.
   // annobin_is_64bit is computed from a flag bit inside aarch64_abi.
   if (!annobin_is_64bit)
     annobin_inform (INFORM_ALWAYS, "AArch64: The annobin plugin is out of date with respect to gcc");
-
+#endif
+  
   saved_tls_dialect = aarch64_tls_dialect;
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
