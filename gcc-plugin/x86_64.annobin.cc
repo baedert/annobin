@@ -48,6 +48,12 @@ annobin_target_start_symbol_bias (void)
   return 0;
 }
 
+unsigned int
+annobin_get_target_pointer_size (void)
+{
+  return 64;
+}
+
 int
 annobin_save_target_specific_information (void)
 {

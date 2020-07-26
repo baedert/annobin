@@ -209,13 +209,13 @@ private:
 		bool          name_is_string,
 		const char *  name_description,
 		unsigned int  type,
-		const char * start_symbol,
-		const char * end_symbol,
+		const char *  start_symbol,
+		const char *  end_symbol,
 		const char *  section_name)
     {
       std::ostringstream text_buffer;
       static char buf[1280];  // FIXME: We should be using a dynamically alloctaed buffer.
-      static const int align = 4;
+      static const int align = 4;  // FIXME: 8-byte align for 64-bit notes ?
 
       sprintf (buf, ".pushsection %s, \"\", %%note", section_name);
       add_line_to_note (text_buffer, buf);
@@ -297,6 +297,7 @@ private:
 
       if (start_symbol)
 	{
+	  // FIXME we should be using .dc.l for 32-bit targets.
 	  sprintf (buf, ".quad %s", (char *) start_symbol);
 	  if (target_start_sym_bias)
 	    {
@@ -310,6 +311,7 @@ private:
 
 	  add_line_to_note (text_buffer, buf, "start symbol");
 
+	  // FIXME we should be using .dc.l for 32-bit targets.
 	  sprintf (buf, ".quad %s", (char *) end_symbol);
 	  add_line_to_note (text_buffer, buf, "end symbol");
 	}

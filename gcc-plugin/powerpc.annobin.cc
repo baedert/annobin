@@ -1,5 +1,5 @@
 /* powerpc64le.annobin - PowerPC64 specific parts of the annobin plugin.
-   Copyright (c) 2017 - 2019 Red Hat.
+   Copyright (c) 2017 - 2020 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -21,6 +21,12 @@ int
 annobin_save_target_specific_information (void)
 {
   return 0;
+}
+
+unsigned int
+annobin_get_target_pointer_size (void)
+{
+  return 64;
 }
 
 signed int

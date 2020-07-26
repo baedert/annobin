@@ -47,6 +47,11 @@ extern int annobin_save_target_specific_information (void);
    notes in the SECNAME section.  */
 extern void annobin_record_global_target_notes (const char * SECNAME);
 
+/* Called during PLUGIN_START_UNIT.
+   Return the size of the target pointer in bits.
+   Expected return values are either 32 or 64.  */
+extern unsigned int annobin_get_target_pointer_size (void);
+
 /* Called during PLUGIN_ALL_PASSES_START.
    Should produce notes specific to the function just compiled.
    Should only produce notes for the static tools, ie

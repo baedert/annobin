@@ -1771,8 +1771,10 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      until after the target backend has had a chance to process its
      command line options, and this happens *after* plugin_init.  */
 
-  /* Compute the default data size.  */
-  switch (POINTER_SIZE)
+  /* Compute the default data size.
+     Note - we used to examine POINTER_SIZE, but that has turned
+     out to be unreliable.  */
+  switch (annobin_get_target_pointer_size ())
     {
     case 16:
     case 32:

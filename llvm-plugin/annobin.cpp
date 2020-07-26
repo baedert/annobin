@@ -173,6 +173,7 @@ namespace
 
       if (start_symbol)
 	{
+	  // FIXME we should be using .dc.l for 32-bit targets.
 	  sprintf (buf, ".quad %s", (char *) start_symbol);
 	  if (target_start_sym_bias)
 	    {
@@ -186,6 +187,7 @@ namespace
 
 	  add_line_to_note (text_buffer, buf, "start symbol");
 
+	  // FIXME we should be using .dc.l for 32-bit targets.
 	  sprintf (buf, ".quad %s", (char *) end_symbol);
 	  add_line_to_note (text_buffer, buf, "end symbol");
 	}
