@@ -1147,9 +1147,10 @@ walk_build_notes (annocheck_data *     data,
     case 'b':
       if (const_strneq (attr, "branch_protection:"))
 	{
+#ifdef EM_AARCH64 /* RHEL-6 does not define EM_AARCh64.  */
 	  if (per_file.e_machine != EM_AARCH64)
 	    break;
-
+#endif
 	  attr += strlen ("branch_protection:");
 	  if (* attr == 0
 	      || streq (attr, "(null)")
@@ -2573,11 +2574,13 @@ check_for_gaps (annocheck_data * data)
 static void
 show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
 {
+#ifdef EM_AARCH64 /* RHEL-6 does not define EM_AARCh64.  */
   if (per_file.e_machine != EM_AARCH64)
     skip (data, "Branch protection.  (Not an AArch64 binary)");
-
-  else if (! built_by_gcc ())
-    skip (data, "Branch protection.  (Not built by gcc)");
+  else
+#endif
+    if (! built_by_gcc ())
+      skip (data, "Branch protection.  (Not built by gcc)");
 
   else if (per_file.version < 9)
     skip (data, "Branch protection.  (Needs gcc 9+)");

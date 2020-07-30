@@ -109,7 +109,8 @@ extern void annobin_output_static_note (const char *, unsigned, bool, const char
 extern void annobin_output_bool_note (const char, const bool, const char *, const char *, const char *, unsigned, const char *);
 extern void annobin_output_string_note (const char, const char *, const char *, const char *, const char *, unsigned, const char *);
 extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, const char *, unsigned, const char *);
-extern int  annobin_get_gcc_option (unsigned int);
+extern int            annobin_get_gcc_int_option (unsigned int);
+extern const char *   annobin_get_gcc_str_option (unsigned int);
 
 extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;
