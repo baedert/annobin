@@ -183,11 +183,15 @@ static test tests [TEST_MAX] =
 
 
 static inline bool
+is_compiler (enum tool tool)
+{
+  return tool == TOOL_GCC || tool == TOOL_CLANG || tool == TOOL_LLVM;
+}
+
+static inline bool
 built_by_compiler (void)
 {
-  return per_file.tool == TOOL_GCC
-    || per_file.tool == TOOL_CLANG
-    || per_file.tool == TOOL_LLVM;
+  return is_compiler (per_file.tool);
 }
 
 static inline bool
@@ -571,8 +575,8 @@ set_producer (annocheck_data *     data,
 	    per_file.version = version;
 	}
     }
-  else if ((per_file.tool == TOOL_GAS && tool == TOOL_GCC)
-	   || (per_file.tool == TOOL_GCC && tool == TOOL_GAS))
+  else if ((per_file.tool == TOOL_GAS && is_compiler (tool))
+	   || (built_by_compiler () && tool == TOOL_GAS))
     {
       if (! per_file.warned_producer)
 	{
