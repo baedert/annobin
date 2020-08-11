@@ -1795,6 +1795,76 @@ emit_global_notes (const char * suffix)
   free ((void *) sec);
 }
 
+#define FORTIFY_OPTION "_FORTIFY_SOURCE"
+#define GLIBCXX_OPTION "_GLIBCXX_ASSERTIONS"
+
+static void
+annobin_record_define (const char * arg)
+{
+  if (arg == NULL)
+    return;
+
+  annobin_inform (INFORM_VERY_VERBOSE, "decoded arg -D%s", arg);
+
+  if (strncmp (arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
+    {
+      int level = atoi (arg + strlen (FORTIFY_OPTION) + 1);
+
+      if (level < 0 || level > 3)
+	{
+	  annobin_inform (INFORM_ALWAYS, "Unexpected value in -D" FORTIFY_OPTION "%s", arg);
+	  level = 0;
+	}
+
+      if (global_fortify_level == -1)
+	global_fortify_level = level;
+    }
+
+  else if (strncmp (arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
+    {
+      if (global_glibcxx_assertions == -1)
+	global_glibcxx_assertions = true;
+    }
+}
+
+static void
+annobin_record_undefine (const char * arg)
+{
+  if (arg == NULL)
+    return;
+
+  annobin_inform (INFORM_VERY_VERBOSE, "decoded arg -U%s", arg);
+
+  if (strncmp (arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
+    {
+      if (global_fortify_level == -1)
+	global_fortify_level = 0;
+    }
+  else if (strncmp (arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
+    {
+      if (global_glibcxx_assertions == -1)
+	global_glibcxx_assertions = false;
+    }
+}
+
+/* Returns true if STRING ends with TERMINATOR.  */
+
+static bool
+ends_with (const char * string, const char * terminator)
+{
+  if (string == NULL || terminator == NULL)
+    return false;
+
+  size_t tlen = strlen (terminator);
+  size_t slen = strlen (string);
+
+  if (tlen > slen)
+    return false;
+
+  string += slen - tlen;
+  return strcmp (string, terminator) == 0;
+}
+
 static void
 annobin_create_global_notes (void * gcc_data, void * user_data)
 {
@@ -1871,58 +1941,42 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      original gcc command line.  Scan backwards so that we record the
      last version of the option, should multiple versions be set.  */
 
-#define FORTIFY_OPTION "_FORTIFY_SOURCE"
-#define GLIBCXX_OPTION "_GLIBCXX_ASSERTIONS"
-
   int i;
 
   for (i = save_decoded_options_count; i--;)
     {
-      if (save_decoded_options[i].opt_index == OPT_U)
+      const char * arg = save_decoded_options[i].arg;
+
+      annobin_inform (INFORM_VERY_VERBOSE, "Examining saved option: %d %s", save_decoded_options[i].opt_index,
+		      arg ? arg : "<none>");
+      switch (save_decoded_options[i].opt_index)
 	{
-	  if (save_decoded_options[i].arg == NULL)
-	    continue;
-
-	  annobin_inform (INFORM_VERY_VERBOSE, "decoded arg -U%s", save_decoded_options[i].arg);
-
-	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
+	case OPT_Wp_:
+	  /* Note - not sure if this option will ever appear here,
+	     but there is no harm in supporting it.  */
+	  if (arg != NULL)
 	    {
-	      if (global_fortify_level == -1)
-		global_fortify_level = 0;
-	    }
-	  else if (strncmp (save_decoded_options[i].arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
-	    {
-	      if (global_glibcxx_assertions == -1)
-		global_glibcxx_assertions = false;
-	    }
-	}
-      else if (save_decoded_options[i].opt_index == OPT_D)
-	{
-	  if (save_decoded_options[i].arg == NULL)
-	    continue;
-
-	  annobin_inform (INFORM_VERY_VERBOSE, "decoded arg -D%s", save_decoded_options[i].arg);
-
-	  if (strncmp (save_decoded_options[i].arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
-	    {
-	      int level = atoi (save_decoded_options[i].arg + strlen (FORTIFY_OPTION) + 1);
-
-	      if (level < 0 || level > 3)
+	      switch (arg[0])
 		{
-		  annobin_inform (INFORM_ALWAYS, "Unexpected value in -D" FORTIFY_OPTION "%s",
-				  save_decoded_options[i].arg);
-		  level = 0;
+		case 'D':
+		  annobin_record_define (arg + 1);
+		  break;
+		case 'U':
+		  annobin_record_undefine (arg + 1);
+		  break;
+		default:
+		  break;
 		}
-
-	      if (global_fortify_level == -1)
-		global_fortify_level = level;
 	    }
-
-	  else if (strncmp (save_decoded_options[i].arg, GLIBCXX_OPTION, strlen (GLIBCXX_OPTION)) == 0)
-	    {
-	      if (global_glibcxx_assertions == -1)
-		global_glibcxx_assertions = true;
-	    }
+	  break;
+	case OPT_U:
+	  annobin_record_undefine (arg);
+	  break;
+	case OPT_D:
+	  annobin_record_define (arg);
+	  break;
+	default:
+	  break;
 	}
     }
 
@@ -1985,36 +2039,89 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	}
     }
 
-  if (in_lto_p)
+  /* Work out the name of the input file for use in the tests below.
+     Unfortunately we cannot rely upon 'main_input_filename' since
+     if the input is preprocessed, this will have been set to the
+     original un-preprocessed filename (foo.c) based upon the
+     "# <line> <file>" comments in the preprocessed input (foo.i).  */
+  const char * input_filename = num_in_fnames ? in_fnames[0] : main_input_filename;
+
+  if (global_fortify_level == -1)
     {
-      /* In LTO mode the preprocessed options are not passed on.
-	 For now, assume that they were present when the original object files
-	 were compiled.
+      if (in_lto_p)
+	{
+	  /* In LTO mode the preprocessed options are not passed on.
+	     For now, assume that they were present when the original object
+	     files were compiled.
 	 
-	 FIXME: What we should do is examine the input object files and
-	 extract the fortify and glibcxx notes from them.  But I do not know
-	 if one plugin can access the data in another one...  */
-      if (global_fortify_level == -1)
-	global_fortify_level = 2;
-      if (global_glibcxx_assertions == -1)
-	global_glibcxx_assertions = 1;
+	     FIXME: What we should do is examine the input object files and
+	     extract the fortify and glibcxx notes from them.  But I do not
+	     know if one plugin can access the data in another one...  */
+	  global_fortify_level = 2;
+	  annobin_inform (INFORM_VERY_VERBOSE, "Assuming -D_FORTIFY_SOURCE=2 for LTO compilation");
+	}
+      /* BZ 1862718: We have no reliable way to determine if the input file
+	 was preprocessed before being passed to gcc.  Plus we do not have
+	 access to the original input text, we cannot examine that.  So for
+	 now we assume that if the input filename ends in .i or .ii then
+	 it is preprocessed.
+	 
+	 Since preprocessed inputs ignore any -D, -U or -Wp options on
+	 the command line, we just have to assume that they were created
+	 with the necessry defines enabled.  */
+      else if (ends_with (input_filename, ".i")
+	       || ends_with (input_filename, ".ii"))
+	{
+	  annobin_inform (INFORM_VERY_VERBOSE, "Assuming -D_FORTIFY_SOURCE=2 for preprocessed input");
+	  global_fortify_level = 2;
+	}      
     }
-  else if (annobin_get_gcc_int_option (OPT_flto))
+
+  /* A simplified version of the above if() statement, but for GLIBCXX_ASSERTIONS.  */
+  if (global_glibcxx_assertions == -1
+      && (in_lto_p
+	  || ends_with (input_filename, ".i")
+	  || ends_with (input_filename, ".ii")))
     {
-      /* Because of the hack above, if we know that we are generating a
-	 lto object file and the preprocessor values are insufficient,
-	 then we generate a warning message for the user.  */
+      global_glibcxx_assertions = 1;
+      annobin_inform (INFORM_VERY_VERBOSE, "Assuming -D_GLIBCXX_ASSERTIONS for LTO/preprocessed input");
+    }
+  
+  if (!in_lto_p
+      && annobin_get_gcc_int_option (OPT_flto))
+    {
+      bool warned = false;
+
+      /* Because of the hack above, if we know that we are generating a lto
+	 object file and the preprocessor values are insufficient, then we
+	 generate a warning message for the user.  We do not do this for all
+	 input however as there is no way for a plugin to distinguish between
+	 preprocessed input and non-preprocessed input.*/
       if (global_fortify_level != 2)
 	{
 	  if (global_fortify_level == -1)
 	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE not defined"));
 	  else
 	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
-	  annobin_inform (INFORM_VERBOSE, _("This warning is being issued now because LTO is enabled, and LTO compilation does not use preprocessor options"));
+	  warned = true;
 	}
 
       if (global_glibcxx_assertions != 1)
-	annobin_inform (INFORM_ALWAYS, _("Warning: -D_GLIBCXX_ASSERTIONS not defined"));
+	{
+	  if (ends_with (main_input_filename, ".c"))
+	    {
+	      global_glibcxx_assertions = 1;
+	      annobin_inform (INFORM_VERY_VERBOSE, "Ignoring lack of -D_GLIBCXX_ASSERTIONS for LTO processing of C source file");
+	    }
+	  else
+	    {
+	      annobin_inform (INFORM_ALWAYS, _("Warning: -D_GLIBCXX_ASSERTIONS not defined"));
+	      warned = true;
+	    }
+	}
+
+      if (warned)
+	annobin_inform (INFORM_VERBOSE, _("This warning is being issued now because LTO is enabled, and LTO compilation does not use preprocessor options"));
     }
 
   /* It is possible that no code will end up in the .text section.
@@ -2173,7 +2280,7 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	annobin_inform (INFORM_ALWAYS, "%s", help_string);
 
       else if (streq (key, "version"))
-	annobin_inform (INFORM_ALWAYS, "Version %d/%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
+	annobin_inform (INFORM_ALWAYS, "Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
 
       else if (streq (key, "verbose"))
 	verbose_level ++;
