@@ -47,7 +47,7 @@ annobin_record_global_target_notes (const char * sec)
   if (!annobin_is_64bit)
     ice ("PowerPC: The annobin plugin thinks that it is compiling for a 32-bit target");
 
-  saved_tls_size = rs6000_tls_size;
+  saved_tls_size = GET_INT_OPTION (rs6000_tls_size);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
 			       "numeric: ABI: TLS size", NULL, NULL, OPEN, sec);
@@ -57,13 +57,13 @@ annobin_record_global_target_notes (const char * sec)
 void
 annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
 {
-  if (!force && saved_tls_size == rs6000_tls_size)
+  int val = GET_INT_OPTION (rs6000_tls_size);
+  if (!force && saved_tls_size == val)
     return;
 
-  annobin_inform (INFORM_VERBOSE, "PowerPC: Record TLS size of %d for %s",
-		  rs6000_tls_size, aname);
+  annobin_inform (INFORM_VERBOSE, "PowerPC: Record TLS size of %d for %s", val, aname);
 
-  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, rs6000_tls_size,
+  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val,
 			       "numeric: ABI: TLS size", aname, aname_end, FUNC, sec_name);
 }
 

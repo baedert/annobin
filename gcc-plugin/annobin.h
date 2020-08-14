@@ -38,6 +38,15 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 #include <tree.h>
 #include <elf.h>
 
+/* Needed to access some of GCC's internal structures.  */
+#include "cgraph.h"
+#include "target.h"
+#if GCCPLUGIN_VERSION_MAJOR >= 5
+#include "errors.h"
+#else
+#include "diagnostic-core.h"
+#endif
+
 /* Called during plugin_init().
    Returns 0 upon success and 1 if there is a failure.  */
 extern int annobin_save_target_specific_information (void);
@@ -109,10 +118,38 @@ extern void annobin_output_static_note (const char *, unsigned, bool, const char
 extern void annobin_output_bool_note (const char, const bool, const char *, const char *, const char *, unsigned, const char *);
 extern void annobin_output_string_note (const char, const char *, const char *, const char *, const char *, unsigned, const char *);
 extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, const char *, unsigned, const char *);
-extern int            annobin_get_gcc_int_option (unsigned int);
-extern const char *   annobin_get_gcc_str_option (unsigned int);
+extern int            annobin_get_gcc_int_option (int);
+extern const char *   annobin_get_gcc_str_option (int);
 
 extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;
 extern unsigned long  annobin_total_static_stack_usage;
 extern unsigned long  annobin_max_stack_size;
+
+/* GCC stores lots of information in the global_options array.  But
+   unfortunately the location of this information can change between
+   different versions of gcc, even for minor revisions.  Therefore accessing
+   the information via a fixed offset is unreliable.  Instead code in the
+   annobin plugin must use the annobin_get_gcc_int_option () or
+   annobin_get_gcc_str_option() functions to get the desired information.
+
+   The definition of global_options below is intended to force this
+   restriction by changing the array name into an illegal value that will
+   generate a compile time error if it is referenced.  */
+#define ANNOBIN_ILLEGAL_GLOBAL_OPTIONS 999_illegal_reference_to_global_options
+#define global_options                 ANNOBIN_ILLEGAL_GLOBAL_OPTIONS       
+
+/* There are times however when it is necessary to access the global
+   option array.  The functions and macros below can be used to do this.  */
+extern struct gcc_options * annobin_global_options;
+
+extern int          annobin_access_int_global_option (size_t, int *, const char *);
+extern const char * annobin_access_str_global_option (size_t, const char **, const char *);
+
+#define GET_STR_OPTION(NAME) \
+  annobin_access_str_global_option (offsetof (struct gcc_options, x_##NAME), \
+				    & annobin_global_options->x_##NAME, #NAME)
+
+#define GET_INT_OPTION(NAME) \
+  annobin_access_int_global_option (offsetof (struct gcc_options, x_##NAME), \
+				    (int *) (& annobin_global_options->x_##NAME), #NAME)

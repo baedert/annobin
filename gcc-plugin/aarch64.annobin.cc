@@ -70,21 +70,23 @@ annobin_record_global_target_notes (const char * sec)
 void
 annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
 {
-  if (force || saved_tls_dialect != annobin_get_gcc_int_option (OPT_mtls_dialect_))
+  signed int val = annobin_get_gcc_int_option (OPT_mtls_dialect_);
+  if (force || saved_tls_dialect != val)
     {
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, annobin_get_gcc_int_option (OPT_mtls_dialect_),
+      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val,
 				   "numeric: ABI: TLS dialect", aname, aname_end,
 				   FUNC, sec_name);
       annobin_inform (INFORM_VERBOSE, "AArch64: Recording TLS dialect of %d for %s",
-		      aarch64_tls_dialect, current_function_name ());
+		      val, current_function_name ());
 
     }
 
 #ifdef aarch64_branch_protection_string
-  if (force || saved_branch_protection_string != annobin_get_gcc_str_option (OPT_mbranch_protection_))
+  const char * abps = annobin_get_gcc_str_option (OPT_mbranch_protection_);
+  
+  if (force || saved_branch_protection_string != abps)
     {
       char buffer [128];
-      const char * abps = annobin_get_gcc_str_option (OPT_mbranch_protection_);
       if (abps == NULL)
 	abps = "default";
 

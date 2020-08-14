@@ -12,21 +12,16 @@
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.  */
 
-#include "annobin-global.h"
-#include "annobin.h"
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <intl.h>
 
-/* Needed to access some of GCC's internal structures.  */
-#include "cgraph.h"
-#include "target.h"
-#if GCCPLUGIN_VERSION_MAJOR >= 5
-#include "errors.h"
-#else
-#include "diagnostic-core.h"
-#endif
+#include "annobin-global.h"
+#include "annobin.h"
+
+#undef global_options
+struct gcc_options * annobin_global_options = & global_options;
+#define global_options ANNOBIN_ILLEGAL_GLOBAL_OPTIONS       
 
 /* Version number.  */
 static unsigned int   annobin_version = ANNOBIN_VERSION;
@@ -117,7 +112,8 @@ static char *         run_version = NULL;
 static unsigned       verbose_level = 0;
 #define BE_VERBOSE   (verbose_level > 0)
 static const char *   annobin_extra_prefix = "";
-static char *         annobin_current_filename = NULL;
+static char *         annobin_output_filesym = NULL;
+static const char *   annobin_input_filename = NULL;
 static char *         annobin_current_endname  = NULL;
 static const char *   help_string =  N_("Supported options:\n\
    disable                Disable this plugin\n\
@@ -155,9 +151,9 @@ annobin_inform (unsigned level, const char * format, ...)
     fprintf (stderr, "%s: ", plugin_name);
   else
     fprintf (stderr, "annobin: ");
-    
-  if (main_input_filename)
-    fprintf (stderr, "%s: ", main_input_filename);
+
+  if (annobin_input_filename)
+    fprintf (stderr, "%s: ", annobin_input_filename);
 
   va_start (args, format);
   vfprintf (stderr, format, args);
@@ -173,23 +169,81 @@ ice (const char * text)
   annobin_inform (INFORM_ALWAYS, "ICE: Please contact the annobin maintainer with details of this problem");
 }
 
+const char *
+annobin_access_str_global_option (size_t offset, const char ** location, const char * name)
+{
+  if ((size_t)((char *) location - (char *) annobin_global_options) == offset)
+    return * location;
+
+  /* If we reach here then the offset of LOCATION in global_options
+     has changed between the time that annobin was built and the time
+     that annobin was run.  */
+  annobin_inform (INFORM_VERBOSE, "COULD NOT ACCESS STR VAR '%s' AT OFFSET %lx as compile time offset was %p - %p = %lx",
+		  name, (long) offset, location, annobin_global_options,
+		  (long)((char *) location - (char *) annobin_global_options));
+  return NULL;
+}
+
+int
+annobin_access_int_global_option (size_t offset, int * location, const char * name)
+{
+  if ((size_t)((char *) location - (char *) annobin_global_options) == offset)
+    return * location;
+
+  /* If we reach here then the offset of LOCATION in global_options
+     has changed between the time that annobin was built and the time
+     that annobin was run.  */
+  annobin_inform (INFORM_VERBOSE, "COULD NOT ACCESS INT VAR '%s' AT OFFSET %lx as compile time offset was %p - %p = %lx",
+		  name, (long) offset,
+		  location, annobin_global_options,
+		  (long)((char *) location - (char *) annobin_global_options));
+  return -1;
+}
+
+/* Determine the (main) input file name.  */
+
+static bool
+init_annobin_input_filename (void)
+{
+  /* Unfortunately we cannot rely upon 'main_input_filename' since
+     if the input is preprocessed, this will have been set to the
+     original un-preprocessed filename (foo.c) based upon the
+     "# <line> <file>" comments in the preprocessed input (foo.i).
+     Also main_input_filename is stored in the global_options array,
+     where its offset cannot be safely determined.  */
+  if (num_in_fnames)
+    {
+      if ((annobin_input_filename = in_fnames[0]) != NULL)
+	return true;
+    }
+
+  annobin_input_filename = GET_STR_OPTION (main_input_filename);
+
+  return annobin_input_filename != NULL;
+}
+
 /* Create a symbol name to represent the sources we are annotating.
    Since there can be multiple input files, we choose the main output
    filename (stripped of any path prefixes).  Since filenames can
    contain characters that symbol names do not (eg '-') we have to
    allocate our own name.  */
 
-static void
-init_annobin_current_filename (void)
+static bool
+init_annobin_output_filesym (void)
 {
   char * name;
   unsigned i;
 
-  if (annobin_current_filename != NULL
-      || main_input_filename == NULL)
-    return;
+  if (annobin_output_filesym != NULL)
+    return true;
 
-  name = (char *) lbasename (main_input_filename);
+  if (annobin_input_filename == NULL)
+    {
+      if (! init_annobin_input_filename ())
+	return false;
+    }
+
+  name = (char *) lbasename (annobin_input_filename);
 
   if (strlen (name) == 0)
     {
@@ -235,8 +289,9 @@ init_annobin_current_filename (void)
 	       "_%8.8lx_%8.8lx", (long) tv.tv_sec, (long) tv.tv_usec);
     }
 
-  annobin_current_filename = concat (ANNOBIN_SYMBOL_PREFIX, annobin_extra_prefix, name, NULL);
-  annobin_current_endname = concat (annobin_current_filename, "_end", NULL);
+  annobin_output_filesym = concat (ANNOBIN_SYMBOL_PREFIX, annobin_extra_prefix, name, NULL);
+  annobin_current_endname = concat (annobin_output_filesym, "_end", NULL);
+  return true;
 }
 
 static void
@@ -250,7 +305,7 @@ annobin_emit_asm (const char * text, const char * comment)
       len = fprintf (asm_out_file, "%s", text);
     }
 
-  if (flag_verbose_asm && comment)
+  if (annobin_get_gcc_int_option (OPT_fverbose_asm) && comment)
     {
       if (len == 0)
 	;
@@ -426,11 +481,11 @@ annobin_output_note (const char * name,
 
 	  if (target_start_sym_bias)
 	    {
-	      /* We know that the annobin_current_filename symbol has been
+	      /* We know that the annobin_output_filesym symbol has been
 		 biased in order to avoid conflicting with the function
 		 name symbol for the first function in the file.  So reverse
 		 that bias here.  */
-	      if (desc1 == annobin_current_filename)
+	      if (desc1 == annobin_output_filesym)
 		fprintf (asm_out_file, "- %d", target_start_sym_bias);
 	    }
 
@@ -615,30 +670,39 @@ annobin_remap (unsigned int cl_option_index)
     const char *        option_name;
     const unsigned int  original_index;
     unsigned int        real_index;
-    int                 flag;
+    union
+    {
+      int                 iflag;
+      void *              pflag;
+    };
     bool                warned;
   }
   cl_remap [] =
   {
-    /* This is an array of the options that we know annobin wants to access.  */
+    /* This is an array of the options that we know annobin wants to
+       access.  */
+#define MAKE_ENTRY(opt_name, opt_num, flag_name) \
+    { false, opt_name, opt_num, 0, annobin_global_options->x_##flag_name, false}
+   
 #ifdef flag_stack_clash_protection
-    { false, "-fstack-clash-protection", OPT_fstack_clash_protection, 0, flag_stack_clash_protection, false},
+    MAKE_ENTRY ("-fstack-clash-protection", OPT_fstack_clash_protection, flag_stack_clash_protection),
 #endif
 #ifdef flag_cf_protection
-    { false, "-fcf-protection", OPT_fcf_protection_, 0, flag_cf_protection, false},
+    MAKE_ENTRY ("-fcf-protection", OPT_fcf_protection_, flag_cf_protection),
 #endif
-    { false, "-fpic", OPT_fpic, 0, flag_pic, false},
-    { false, "-fpie", OPT_fpie, 0, flag_pie, false},
-    { false, "-fstack-protector", OPT_fstack_protector, 0, flag_stack_protect, false},
-    { false, "-fomit-frame-pointer", OPT_fomit_frame_pointer, 0, flag_omit_frame_pointer, false},
-    { false, "-fshort-enums", OPT_fshort_enums, 0, flag_short_enums, false}, 
-    { false, "-fstack-usage", OPT_fstack_usage, 0, flag_stack_usage_info, false}, 
-    { false, "-ffunction-sections", OPT_ffunction_sections, 0, flag_function_sections, false},
-    { false, "-freorder-functions", OPT_freorder_functions, 0, flag_reorder_functions, false},
-    { false, "-fprofile-values", OPT_fprofile_values, 0, flag_profile_values, false},
-    { false, "-finstrument-functions", OPT_finstrument_functions, 0, flag_instrument_function_entry_exit, false},
-    { false, "-fprofile", OPT_fprofile, 0, profile_flag, false},
-    { false, "-fprofile-arcs", OPT_fprofile_arcs, 0, profile_arc_flag, false}
+    MAKE_ENTRY ("-fverbose-asm", OPT_fverbose_asm, flag_verbose_asm),
+    MAKE_ENTRY ("-fpic", OPT_fpic, flag_pic),
+    MAKE_ENTRY ("-fpie", OPT_fpie, flag_pie),
+    MAKE_ENTRY ("-fstack-protector", OPT_fstack_protector, flag_stack_protect),
+    MAKE_ENTRY ("-fomit-frame-pointer", OPT_fomit_frame_pointer, flag_omit_frame_pointer),
+    MAKE_ENTRY ("-fshort-enums", OPT_fshort_enums, flag_short_enums),
+    MAKE_ENTRY ("-fstack-usage", OPT_fstack_usage, flag_stack_usage_info),
+    MAKE_ENTRY ("-ffunction-sections", OPT_ffunction_sections, flag_function_sections),
+    MAKE_ENTRY ("-freorder-functions", OPT_freorder_functions, flag_reorder_functions),
+    MAKE_ENTRY ("-fprofile-values", OPT_fprofile_values, flag_profile_values),
+    MAKE_ENTRY ("-finstrument-functions", OPT_finstrument_functions, flag_instrument_function_entry_exit),
+    MAKE_ENTRY ("-fprofile", OPT_fprofile, profile_flag),
+    MAKE_ENTRY ("-fprofile-arcs", OPT_fprofile_arcs, profile_arc_flag)
   };
 
   int i;
@@ -696,9 +760,10 @@ annobin_remap (unsigned int cl_option_index)
       annobin_inform (INFORM_VERBOSE, "unrecorded gcc option index = %u", cl_option_index);
     }
   else if (cl_option_index == 0)
-    return cl_remap[i].flag;
+    return cl_remap[i].iflag;
 
-  void * flag = option_flag_var (cl_option_index, & global_options);
+  void * flag = option_flag_var (cl_option_index, annobin_global_options);
+
   if (flag == NULL)
     {
       if (! cl_remap[i].warned)
@@ -712,7 +777,7 @@ annobin_remap (unsigned int cl_option_index)
 	}
 
       /* Try using the flag directly.  */
-      return cl_remap[i].flag;
+      return cl_remap[i].iflag;
     }
 
   return cl_option_index;
@@ -722,22 +787,21 @@ annobin_remap (unsigned int cl_option_index)
    Returns -1 if the option could not be found.  */
 
 int
-annobin_get_gcc_int_option (unsigned int cl_option_index)
+annobin_get_gcc_int_option (int cl_option_index)
 {
-  /* Some flags are not stored in the global_options structure so we
-     just have to return the flg var and hope that it is still valid.  */
-  if (cl_option_index == OPT_flto)
-    return flag_lto != NULL;
+  /* Some flags are not indexed in the cl_options structure so we
+     just have to return the flag var and hope that it is still valid.  */
 #ifdef flag_sanitize
   if (cl_option_index == OPT_fsanitize_)
-    return flag_sanitize;
+    return GET_INT_OPTION (flag_sanitize);
 #endif
 
   cl_option_index = annobin_remap (cl_option_index);
   if (cl_option_index == -1)
     return -1;
 
-  void * flag = option_flag_var (cl_option_index, & global_options);
+  void * flag = option_flag_var (cl_option_index, annobin_global_options);
+
   const struct cl_option * option = cl_options + cl_option_index;
 
   switch (option->var_type)
@@ -747,6 +811,8 @@ annobin_get_gcc_int_option (unsigned int cl_option_index)
     case CLVC_SIZE:
 #endif
     case CLVC_BOOLEAN:
+      if (flag == NULL)
+	return 0;
       if (option->cl_host_wide_int)
 	return * ((HOST_WIDE_INT *) flag);
       else
@@ -770,13 +836,17 @@ annobin_get_gcc_int_option (unsigned int cl_option_index)
    Returns NULL if the option could not be found.  */
 
 const char *
-annobin_get_gcc_str_option (unsigned int cl_option_index)
+annobin_get_gcc_str_option (int cl_option_index)
 {
+  if (cl_option_index == OPT_flto)
+    return GET_STR_OPTION (flag_lto);
+
   cl_option_index = annobin_remap (cl_option_index);
   if (cl_option_index == -1)
     return NULL;
 
-  void * flag = option_flag_var (cl_option_index, & global_options);
+  void * flag = option_flag_var (cl_option_index, annobin_global_options);
+
   enum cl_var_type var_type = cl_options[cl_option_index].var_type;
 
   switch (var_type)
@@ -810,6 +880,18 @@ compute_pic_option (void)
   return 0;
 }
 
+static inline int
+annobin_get_optimize (void)
+{
+  return GET_INT_OPTION (optimize);
+}
+
+static inline int
+annobin_get_optimize_debug (void)
+{
+  return GET_INT_OPTION (optimize_debug);
+}
+
 /* Compute a numeric value representing the settings/levels of
    the -O and -g options, and some -W options.  This is to help
    verify the recommended hardening options for binaries.
@@ -832,55 +914,57 @@ compute_GOWall_options (void)
   unsigned int val, i;
 
   /* FIXME: Keep in sync with changes to gcc/flag-types.h:enum debug_info_type.  */
-  if (write_symbols > VMS_AND_DWARF2_DEBUG)
+  val = GET_INT_OPTION (write_symbols);
+  if (val > VMS_AND_DWARF2_DEBUG)
     {
-      annobin_inform (INFORM_VERBOSE, "write_symbols = %d", write_symbols);
+      annobin_inform (INFORM_VERBOSE, "write_symbols = %d", val);
       ice ("unknown debug info type");
       val = 0;
     }
-  else
-    val = write_symbols;
 
-  if (use_gnu_debug_info_extensions)
+  if (GET_INT_OPTION (use_gnu_debug_info_extensions))
     val |= (1 << 3);
 
-  if (debug_info_level > DINFO_LEVEL_VERBOSE)
+  i = GET_INT_OPTION (debug_info_level);
+  if (i > DINFO_LEVEL_VERBOSE)
     {
-      annobin_inform (INFORM_VERBOSE, "debug_info_level = %d", debug_info_level);
+      annobin_inform (INFORM_VERBOSE, "debug_info_level = %d", i);
       ice ("unknown debug info level");
     }
   else
-    val |= (debug_info_level << 4);
+    val |= (i << 4);
 
-  if (dwarf_version < 2)
+  i = GET_INT_OPTION (dwarf_version);
+  if (i < 2)
     {
       /* Apparently it is possible for dwarf_version to be -1.  Not sure how
 	 this can happen, but handle it anyway.  Since DWARF prior to v2 is
 	 deprecated, we use 2 as the version level.  */
       val |= (2 << 6);
-      annobin_inform (INFORM_VERBOSE, "dwarf version level %d recorded as 2", dwarf_version);
+      annobin_inform (INFORM_VERBOSE, "dwarf version level %d recorded as 2", i);
     }
-  else if (dwarf_version > 7)
+  else if (i > 7)
     {
       /* FIXME: We only have 3 bits to record the debug level...  */
       val |= (7 << 6);
-      annobin_inform (INFORM_VERBOSE, "dwarf version level %d recorded as 7", dwarf_version);
+      annobin_inform (INFORM_VERBOSE, "dwarf version level %d recorded as 7", i);
     }
   else
-    val |= (dwarf_version << 6);
+    val |= (i << 6);
 
-  if (optimize > 3)
+  i = annobin_get_optimize ();
+  if (i > 3)
     val |= (3 << 9);
   else
-    val |= (optimize << 9);
+    val |= (i << 9);
 
   /* FIXME: It should not be possible to enable more than one of -Os/-Of/-Og,
      so the tests below could be simplified.  */
-  if (optimize_size)
+  if (GET_INT_OPTION (optimize_size))
     val |= (1 << 11);
-  if (optimize_fast)
+  if (GET_INT_OPTION (optimize_fast))
     val |= (1 << 12);
-  if (optimize_debug)
+  if (annobin_get_optimize_debug ())
     val |= (1 << 13);
 
   /* Unfortunately -Wall is not recorded by gcc.  So we have to scan the
@@ -897,7 +981,7 @@ compute_GOWall_options (void)
   /* -Wformat-security is enabled via -Wall, but we record it here because
      it is important, and because LTO compilation does not pass on the -Wall
      flag.  FIXME: Add other important warnings.  */
-  if (warn_format_security)
+  if (GET_INT_OPTION (warn_format_security))
     val|= (1 << 15);
 
   return val;
@@ -914,6 +998,12 @@ record_GOW_settings (unsigned int gow,
   char buffer [128];
   unsigned i;
 
+  annobin_inform (INFORM_VERBOSE, "Record status of -g (%d), -O (%d) and -Wall (%s) for %s",
+		  (gow >> 4) & 3,
+		  (gow >> 9) & 3,
+		  gow & (3 << 14) ? "enabled" : "disabled",
+		  local ? cname : "<global>");
+  
   (void) sprintf (buffer, "GA%cGOW", NUMERIC);
 
   for (i = 7; i < sizeof buffer; i++)
@@ -928,17 +1018,11 @@ record_GOW_settings (unsigned int gow,
     }
 
   if (local)
-    {
-      annobin_inform (INFORM_VERBOSE, "Record -g/-O/-Wall status for %s", cname);
-      annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			   DESC_PARAMETERS (aname, aname_end), true, FUNC, sec_name);
-    }
+    annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
+			 DESC_PARAMETERS (aname, aname_end), true, FUNC, sec_name);
   else
-    {
-      annobin_inform (INFORM_VERBOSE, "Record status of -g/-O/-Wall");
-      annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			   NULL, NULL, 0, false, OPEN, sec_name);
-    }
+    annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
+			 NULL, NULL, 0, false, OPEN, sec_name);
 }
 
 #ifdef flag_stack_clash_protection
@@ -1234,8 +1318,15 @@ annobin_emit_symbol (const char * name)
   fprintf (asm_out_file, "\t.type %s, STT_NOTYPE\n", name);
   fprintf (asm_out_file, "\t.hidden %s\n", name);
   fprintf (asm_out_file, "%s:\n", name);
+  annobin_inform (INFORM_VERBOSE, "Create symbol %s", name);
 }
 
+static inline bool
+annobin_in_lto_p (void)
+{
+  return GET_INT_OPTION (in_lto_p) != 0;
+}
+    
 /* Create any notes specific to the current function.  */
 
 static void
@@ -1339,7 +1430,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	}
       else if (startup)
 	{
-	  if (!in_lto_p && ! annobin_get_gcc_int_option (OPT_fprofile_values))
+	  if (! annobin_in_lto_p () && ! annobin_get_gcc_int_option (OPT_fprofile_values))
 	    current_func.section_name = concat (STARTUP_SECTION, NULL);
 	}
       else if (exit)
@@ -1349,7 +1440,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       else if (likely)
 	{
 	  /* FIXME: Never seen this one, either.  */
-	  if (!in_lto_p && ! annobin_get_gcc_int_option (OPT_fprofile_values))
+	  if (! annobin_in_lto_p () && ! annobin_get_gcc_int_option (OPT_fprofile_values))
 	    current_func.section_name = concat (HOT_SECTION, NULL);
 	}
     }
@@ -1495,7 +1586,7 @@ emit_queued_attachments (void)
 
       fprintf (asm_out_file, "\t.pushsection %s\n", name);
       fprintf (asm_out_file, "\t.attach_to_group %s", item->group_name);
-      if (flag_verbose_asm)
+      if (annobin_get_gcc_int_option (OPT_fverbose_asm))
 	fprintf (asm_out_file, " %s Add the %s section to the %s group",
 		 ASM_COMMENT_START, name, item->group_name);
       fprintf (asm_out_file, "\n");
@@ -1634,7 +1725,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
     fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
 
   fprintf (asm_out_file, "\t%s %s%s\n", global_file_name_symbols ? ".global" : ".hidden",
-	   annobin_current_filename, suffix);
+	   annobin_output_filesym, suffix);
 
   /* Note - we used to set the type of the symbol to STT_OBJECT, but that is
      incorrect because that type is for:
@@ -1645,7 +1736,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
      instead we use STT_NOTYPE.  (Ideally we could use STT_LOOS+n, but there
      is a problem with the GAS assembler, which does not allow such values to
      be set on symbols).  */
-  fprintf (asm_out_file, "\t.type %s%s, STT_NOTYPE\n", annobin_current_filename, suffix);
+  fprintf (asm_out_file, "\t.type %s%s, STT_NOTYPE\n", annobin_output_filesym, suffix);
 
   if (target_start_sym_bias)
     {
@@ -1656,19 +1747,19 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 	 There is special code in annobin_output_note() that undoes this bias
 	 when the symbol's address is being used to compute a range for the
 	 notes.  */
-      fprintf (asm_out_file, "\t.set %s%s, . + %d\n", annobin_current_filename, suffix, target_start_sym_bias);
+      fprintf (asm_out_file, "\t.set %s%s, . + %d\n", annobin_output_filesym, suffix, target_start_sym_bias);
     }
   else
-    fprintf (asm_out_file, "\t.equiv %s%s, .\n", annobin_current_filename, suffix);
+    fprintf (asm_out_file, "\t.equiv %s%s, .\n", annobin_output_filesym, suffix);
 
   /* We explicitly set the size of the symbol to 0 so that it will not
      confuse other tools (eg GDB, elfutils) which look for symbols that
      cover an address range.  */
-  fprintf (asm_out_file, "\t.size %s%s, 0\n", annobin_current_filename, suffix);
+  fprintf (asm_out_file, "\t.size %s%s, 0\n", annobin_output_filesym, suffix);
 
   fprintf (asm_out_file, "\t.popsection\n");
 
-  const char * start = concat (annobin_current_filename, suffix, NULL);
+  const char * start = concat (annobin_output_filesym, suffix, NULL);
   const char * end = concat (annobin_current_endname, suffix, NULL);
   const char * sec;
 
@@ -1694,10 +1785,9 @@ emit_global_notes (const char * suffix)
 {
   const char * sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix, NULL);
 
-  annobin_inform (INFORM_VERBOSE, "Emit global notes for section .text%s...", suffix);
+  annobin_inform (INFORM_VERBOSE, "Emit global notes for section .text%s", suffix);
 
   /* Record the version of the compiler.  */
-  annobin_inform (INFORM_VERBOSE, "Annobin compiler versions: %s, %s", build_version, run_version);
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, run_version,
 			      "string: build-tool", NULL, NULL, OPEN, sec);
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, build_version,
@@ -1891,7 +1981,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   /* Compute the default data size.
      Note - we used to examine POINTER_SIZE, but that has turned
      out to be unreliable.  */
-  switch (annobin_get_target_pointer_size ())
+  unsigned psize = annobin_get_target_pointer_size ();
+  annobin_inform (INFORM_VERBOSE, "Target's pointer size: %d bits", psize);
+  switch (psize)
     {
     case 16:
     case 32:
@@ -1899,14 +1991,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     case 64:
       annobin_is_64bit = true; break;
     default:
-      annobin_inform (INFORM_VERBOSE, "Pointer size: %d", POINTER_SIZE);
-      ice ("Unknown target pointer size");
+      ice ("Illegal target pointer size");
       return;
     }
 
   if (annobin_enable_stack_size_notes)
     /* We must set this flag in order to obtain per-function stack usage info.  */
-    flag_stack_usage_info = 1;
+    annobin_global_options->x_flag_stack_usage_info = 1;
 
 #ifdef flag_stack_clash_protection
   global_stack_clash_option = annobin_get_gcc_int_option (OPT_fstack_clash_protection);
@@ -1924,19 +2015,11 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   global_GOWall_options = compute_GOWall_options ();
   global_omit_frame_pointer = annobin_get_gcc_int_option (OPT_fomit_frame_pointer);
 
-  if (annobin_active_checks && optimize < 2 && ! optimize_debug)
+  if (annobin_active_checks
+      && annobin_get_optimize () < 2
+      && ! annobin_get_optimize_debug ())
     error ("optimization level is too low!");
   
-  /* Output a file name symbol to be referenced by the notes...  */
-  if (annobin_current_filename == NULL)
-    init_annobin_current_filename ();
-  if (annobin_current_filename == NULL)
-    {
-      ice ("Could not find output filename");
-      /* We need a filename, so invent one.  */
-      annobin_current_filename = (char *) "unknown_source";
-    }
-
   /* Look for -D _FORTIFY_SOURCE=<n> and -D_GLIBCXX_ASSERTIONS on the
      original gcc command line.  Scan backwards so that we record the
      last version of the option, should multiple versions be set.  */
@@ -1947,8 +2030,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     {
       const char * arg = save_decoded_options[i].arg;
 
-      annobin_inform (INFORM_VERY_VERBOSE, "Examining saved option: %d %s", save_decoded_options[i].opt_index,
-		      arg ? arg : "<none>");
+      annobin_inform (INFORM_VERY_VERBOSE, "Examining saved option: %ld %s",
+		      (long) save_decoded_options[i].opt_index, arg ? arg : "<none>");
       switch (save_decoded_options[i].opt_index)
 	{
 	case OPT_Wp_:
@@ -2039,16 +2122,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	}
     }
 
-  /* Work out the name of the input file for use in the tests below.
-     Unfortunately we cannot rely upon 'main_input_filename' since
-     if the input is preprocessed, this will have been set to the
-     original un-preprocessed filename (foo.c) based upon the
-     "# <line> <file>" comments in the preprocessed input (foo.i).  */
-  const char * input_filename = num_in_fnames ? in_fnames[0] : main_input_filename;
-
   if (global_fortify_level == -1)
     {
-      if (in_lto_p)
+      if (annobin_in_lto_p ())
 	{
 	  /* In LTO mode the preprocessed options are not passed on.
 	     For now, assume that they were present when the original object
@@ -2069,8 +2145,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	 Since preprocessed inputs ignore any -D, -U or -Wp options on
 	 the command line, we just have to assume that they were created
 	 with the necessry defines enabled.  */
-      else if (ends_with (input_filename, ".i")
-	       || ends_with (input_filename, ".ii"))
+      else if (ends_with (annobin_input_filename, ".i")
+	       || ends_with (annobin_input_filename, ".ii"))
 	{
 	  annobin_inform (INFORM_VERY_VERBOSE, "Assuming -D_FORTIFY_SOURCE=2 for preprocessed input");
 	  global_fortify_level = 2;
@@ -2079,16 +2155,16 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   /* A simplified version of the above if() statement, but for GLIBCXX_ASSERTIONS.  */
   if (global_glibcxx_assertions == -1
-      && (in_lto_p
-	  || ends_with (input_filename, ".i")
-	  || ends_with (input_filename, ".ii")))
+      && (annobin_in_lto_p ()
+	  || ends_with (annobin_input_filename, ".i")
+	  || ends_with (annobin_input_filename, ".ii")))
     {
       global_glibcxx_assertions = 1;
       annobin_inform (INFORM_VERY_VERBOSE, "Assuming -D_GLIBCXX_ASSERTIONS for LTO/preprocessed input");
     }
   
-  if (!in_lto_p
-      && annobin_get_gcc_int_option (OPT_flto))
+  if (!annobin_in_lto_p ()
+      && annobin_get_gcc_str_option (OPT_flto) != NULL)
     {
       bool warned = false;
 
@@ -2108,7 +2184,8 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
       if (global_glibcxx_assertions != 1)
 	{
-	  if (ends_with (main_input_filename, ".c"))
+	  if (ends_with (annobin_input_filename, ".c")
+	      || ends_with (annobin_input_filename, ".i"))
 	    {
 	      global_glibcxx_assertions = 1;
 	      annobin_inform (INFORM_VERY_VERBOSE, "Ignoring lack of -D_GLIBCXX_ASSERTIONS for LTO processing of C source file");
@@ -2194,6 +2271,7 @@ annobin_emit_end_symbol (const char * suffix)
   fprintf (asm_out_file, "%s%s:\n", annobin_current_endname, suffix);
   fprintf (asm_out_file, "\t.type %s%s, STT_NOTYPE\n", annobin_current_endname, suffix);
   fprintf (asm_out_file, "\t.size %s%s, 0\n", annobin_current_endname, suffix);
+  annobin_inform (INFORM_VERBOSE, "Create symbol %s%s", annobin_current_endname, suffix);
 
   /* If there is a bias to the start symbol, we can end up with the case where
      the start symbol is after the end symbol.  (If the section is empty).
@@ -2206,9 +2284,9 @@ annobin_emit_end_symbol (const char * suffix)
 	 yet, (due to the possibility of linker relaxation).  But we are allowed to
 	 test for symbol equality.  So we fudge things a little....  */
      
-      fprintf (asm_out_file, "\t.if %s%s == %s%s + 2\n", annobin_current_filename, suffix,
+      fprintf (asm_out_file, "\t.if %s%s == %s%s + 2\n", annobin_output_filesym, suffix,
 	       annobin_current_endname, suffix);
-      fprintf (asm_out_file, "\t  .set %s%s, %s%s\n", annobin_current_filename, suffix,
+      fprintf (asm_out_file, "\t  .set %s%s, %s%s\n", annobin_output_filesym, suffix,
 	       annobin_current_endname, suffix);
       fprintf (asm_out_file, "\t.endif\n");
     }
@@ -2252,6 +2330,12 @@ annobin_create_loader_notes (void * gcc_data, void * user_data)
   annobin_target_specific_loader_notes ();
 }
 
+static void
+annobin_display_version (void)
+{
+  annobin_inform (INFORM_ALWAYS, "Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
+}
+
 static bool
 parse_args (unsigned argc, struct plugin_argument * argv)
 {
@@ -2280,7 +2364,7 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	annobin_inform (INFORM_ALWAYS, "%s", help_string);
 
       else if (streq (key, "version"))
-	annobin_inform (INFORM_ALWAYS, "Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
+	annobin_display_version ();
 
       else if (streq (key, "verbose"))
 	verbose_level ++;
@@ -2351,8 +2435,20 @@ plugin_init (struct plugin_name_args *    plugin_info,
       return 1;
     }
 
+  /* Create a file name symbol to be referenced by the notes.
+     Note - do not call annobin_inform before this operation has completed.  */
+  if (! init_annobin_output_filesym ())
+    {
+      ice ("Could not find output filename");
+      /* We need a filesym, so invent one.  */
+      annobin_output_filesym = (char *) "unknown_source";
+    }
+
   if (! enabled)
     return 0;
+
+  if (BE_VERBOSE)
+    annobin_display_version ();
 
   if (!plugin_default_version_check (version, & gcc_version))
     {
@@ -2460,6 +2556,8 @@ plugin_init (struct plugin_name_args *    plugin_info,
      of their layout is embedded into hardended.c.  */
   run_version   = concat ("running gcc ", version->basever, " ", version->datestamp, NULL);
   build_version = concat ("annobin gcc ", gcc_version.basever, " ", gcc_version.datestamp, NULL);
+
+  annobin_inform (INFORM_VERBOSE, "Annobin built by %s, running on %s", build_version + 8, run_version + 8);
 
   if (annobin_save_target_specific_information () == 1)
     return 1;

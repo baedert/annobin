@@ -1,5 +1,5 @@
 # file      : configure.ac
-# copyright : Copyright (c) 2017-2019 Red Hat
+# copyright : Copyright (c) 2017-2020 Red Hat
 # license   : GNU GPL v3; see accompanying LICENSE file.
 
 AC_PREREQ(2.64)
@@ -65,6 +65,12 @@ case ${target} in
     ;;
   x86_64-*-*)
     target_plugin="x86_64.annobin.lo"
+    ;;
+  i*86*-*-*)
+    target_plugin="i686.annobin.lo"
+    ;;
+  s390*-*-*)
+    target_plugin="s390.annobin.lo"
     ;;
   *)
     target_plugin="dummy.annobin.lo"

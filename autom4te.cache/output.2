@@ -17794,8 +17794,14 @@ case ${target} in
   powerpc*-*-*)
     target_plugin="powerpc.annobin.lo"
     ;;
-  *86-*-* | x86_64-*-*)
+  *86-*-*)
+    target_plugin="i686.annobin.lo"
+    ;;
+  x86_64-*-*)
     target_plugin="x86_64.annobin.lo"
+    ;;
+  s390*-*-*)
+    target_plugin="s390.annobin.lo"
     ;;
   *)
     target_plugin="dummy.annobin.lo"

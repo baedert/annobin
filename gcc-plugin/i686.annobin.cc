@@ -52,7 +52,7 @@ unsigned int
 annobin_get_target_pointer_size (void)
 {
   // Note: testing POINTER_SIZE is unreliable reliable as it ultimately uses information in global_options.
-  return 64;
+  return 32;
 }
 
 int
