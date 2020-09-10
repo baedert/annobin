@@ -51,8 +51,9 @@ annobin_target_start_symbol_bias (void)
 unsigned int
 annobin_get_target_pointer_size (void)
 {
-  // Note: testing POINTER_SIZE is unreliable reliable as it ultimately uses information in global_options.
-  return 64;
+  // Note: testing TARGET_64BIT directly is unreliable as it ultimately uses information in global_options.
+  // So instead we perform our own equivalent version of that macro.
+  return GET_INT_OPTION (ix86_isa_flags) & OPTION_MASK_ISA_64BIT ? 64 : 32;
 }
 
 int
@@ -69,7 +70,6 @@ annobin_record_global_target_notes (const char * sec)
      bother to filter out any bits however, as we prefer to leave
      it to the consumer to decide what is significant.  */
   min_x86_isa = max_x86_isa = global_x86_isa = GET_INT_OPTION (ix86_isa_flags);
-
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
 			       "numeric: ABI", NULL, NULL, OPEN, sec);
   annobin_inform (INFORM_VERBOSE, "x86_64: Record global isa of %lx", global_x86_isa);

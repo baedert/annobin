@@ -148,7 +148,6 @@ extern struct gcc_options * annobin_global_options;
 
 #define GET_STR_OPTION(NAME)	annobin_global_options->x_##NAME
 #define GET_INT_OPTION(NAME) 	annobin_global_options->x_##NAME
-#define GET_HWINT_OPTION(NAME) 	annobin_global_options->x_##NAME
 
 /* They are still prone to failure however, for the reasons described
    above.  For the moment thereofre these macros are placeholders.

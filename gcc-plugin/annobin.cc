@@ -19,6 +19,7 @@
 #include "annobin-global.h"
 #include "annobin.h"
 
+/* Accessing the global_options structure is only permitted via annobin's version.  */
 #undef global_options
 struct gcc_options * annobin_global_options = & global_options;
 #define global_options ANNOBIN_ILLEGAL_GLOBAL_OPTIONS       
@@ -128,7 +129,7 @@ static const char *   help_string =  N_("Supported options:\n\
    [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
    [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
    [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n\
-   rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n \
+   rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n\
    stack-threshold=N      Only create function specific stack size notes when the size is > N.");
 
 static struct plugin_info annobin_info =
@@ -169,37 +170,6 @@ ice (const char * text)
   annobin_inform (INFORM_ALWAYS, "ICE: Please contact the annobin maintainer with details of this problem");
 }
 
-const char *
-annobin_access_str_global_option (size_t offset, const char ** location, const char * name)
-{
-  if ((size_t)((char *) location - (char *) annobin_global_options) == offset)
-    return * location;
-
-  /* If we reach here then the offset of LOCATION in global_options
-     has changed between the time that annobin was built and the time
-     that annobin was run.  */
-  annobin_inform (INFORM_VERBOSE, "COULD NOT ACCESS STR VAR '%s' AT OFFSET %lx as compile time offset was %p - %p = %lx",
-		  name, (long) offset, location, annobin_global_options,
-		  (long)((char *) location - (char *) annobin_global_options));
-  return NULL;
-}
-
-int
-annobin_access_int_global_option (size_t offset, int * location, const char * name)
-{
-  if ((size_t)((char *) location - (char *) annobin_global_options) == offset)
-    return * location;
-
-  /* If we reach here then the offset of LOCATION in global_options
-     has changed between the time that annobin was built and the time
-     that annobin was run.  */
-  annobin_inform (INFORM_VERBOSE, "COULD NOT ACCESS INT VAR '%s' AT OFFSET %lx as compile time offset was %p - %p = %lx",
-		  name, (long) offset,
-		  location, annobin_global_options,
-		  (long)((char *) location - (char *) annobin_global_options));
-  return -1;
-}
-
 /* Determine the (main) input file name.  */
 
 static bool
@@ -217,6 +187,7 @@ init_annobin_input_filename (void)
 	return true;
     }
 
+  /* This might fail, if annobin is out of sync with gcc.  */
   annobin_input_filename = GET_STR_OPTION (main_input_filename);
 
   return annobin_input_filename != NULL;
@@ -789,16 +760,17 @@ annobin_remap (unsigned int cl_option_index)
 int
 annobin_get_gcc_int_option (int cl_option_index)
 {
-  /* Some flags are not indexed in the cl_options structure so we
-     just have to return the flag var and hope that it is still valid.  */
-#ifdef flag_sanitize
-  if (cl_option_index == OPT_fsanitize_)
-    return GET_INT_OPTION (flag_sanitize);
-#endif
-
   cl_option_index = annobin_remap (cl_option_index);
   if (cl_option_index == -1)
     return -1;
+
+  /* This is just paranoia....  */
+  if (cl_option_index >= cl_options_count)
+    {
+      annobin_inform (INFORM_VERBOSE, "ICE: integer gcc command line option index (%d) too big",
+		      cl_option_index);
+      return -1;
+    }
 
   void * flag = option_flag_var (cl_option_index, annobin_global_options);
 
@@ -826,7 +798,7 @@ annobin_get_gcc_int_option (int cl_option_index)
       return -1;
 
     default:
-      annobin_inform (INFORM_VERBOSE, "debugging: type = %d, opt = %d", option->var_type, cl_option_index);
+      annobin_inform (INFORM_VERBOSE, "debugging: type = %d, index = %d", option->var_type, cl_option_index);
       annobin_inform (INFORM_VERBOSE, "ICE: unsupported integer gcc command line option type");
       return -1;
     }
@@ -838,12 +810,17 @@ annobin_get_gcc_int_option (int cl_option_index)
 const char *
 annobin_get_gcc_str_option (int cl_option_index)
 {
-  if (cl_option_index == OPT_flto)
-    return GET_STR_OPTION (flag_lto);
-
   cl_option_index = annobin_remap (cl_option_index);
   if (cl_option_index == -1)
     return NULL;
+
+  /* This is just paranoia....  */
+  if (cl_option_index >= cl_options_count)
+    {
+      annobin_inform (INFORM_VERBOSE, "ICE: string gcc command line option index (%d) too big",
+		      cl_option_index);
+      return NULL;
+    }
 
   void * flag = option_flag_var (cl_option_index, annobin_global_options);
 
@@ -857,7 +834,7 @@ annobin_get_gcc_str_option (int cl_option_index)
       return * (const char **) flag;
 
     default:
-      annobin_inform (INFORM_VERBOSE, "debugging: type = %d, opt = %d", var_type, cl_option_index);
+      annobin_inform (INFORM_VERBOSE, "debugging: type = %d, index = %d", var_type, cl_option_index);
       annobin_inform (INFORM_VERBOSE, "ICE: unsupported string gcc command line option type");
       return NULL;
     }
@@ -1848,7 +1825,7 @@ emit_global_notes (const char * suffix)
      on a per-function basis.  */
   if (annobin_get_gcc_int_option (OPT_finstrument_functions)
 #ifdef flag_sanitize
-      || annobin_get_gcc_int_option (OPT_fsanitize_)
+      || GET_INT_OPTION (flag_sanitize)
 #endif
       || annobin_get_gcc_int_option (OPT_fprofile)
       || annobin_get_gcc_int_option (OPT_fprofile_arcs))
@@ -1857,7 +1834,7 @@ emit_global_notes (const char * suffix)
       unsigned int len = sprintf (buffer, "GA%cINSTRUMENT:%u/%u/%u/%u",
 				  GNU_BUILD_ATTRIBUTE_TYPE_STRING,
 #ifdef flag_sanitize
-				  annobin_get_gcc_int_option (OPT_fsanitize_) ? 1 : 0,
+				  GET_INT_OPTION (flag_sanitize) ? 1 : 0,
 #else
 				  0,
 #endif
@@ -1867,7 +1844,7 @@ emit_global_notes (const char * suffix)
       annobin_inform (INFORM_VERBOSE,
 		      "Instrumentation options enabled: sanitize: %u, function entry/exit: %u, profiling: %u, profile arcs: %u",
 #ifdef flag_sanitize
-		      annobin_get_gcc_int_option (OPT_fsanitize_) ? 1 : 0,
+		      GET_INT_OPTION (flag_sanitize) ? 1 : 0,
 #else
 		      0,
 #endif
@@ -2164,7 +2141,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     }
   
   if (!annobin_in_lto_p ()
-      && annobin_get_gcc_str_option (OPT_flto) != NULL)
+      && GET_STR_OPTION (flag_lto) != NULL)
     {
       bool warned = false;
 
