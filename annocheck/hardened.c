@@ -711,8 +711,8 @@ walk_build_notes (annocheck_data *     data,
 
       if (start > end)
 	{
-	  if (per_file.e_machine == EM_PPC64 && (start - end) <= 2)
-	    /* On the PPC64, start symbols are biased by 2, but end symbols are not...  */
+	  if (per_file.e_machine == EM_PPC64 && (start - end) <= 4)
+	    /* On the PPC64, start symbols are biased by 4, but end symbols are not...  */
 	    start = end;
 	  else
 	    {

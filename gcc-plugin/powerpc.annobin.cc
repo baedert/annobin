@@ -32,13 +32,15 @@ annobin_get_target_pointer_size (void)
 signed int
 annobin_target_start_symbol_bias (void)
 {
-  /* We set the address of the start symbol to be the current address plus two.
+  /* We set the address of the start symbol to be the current address plus four.
      That way this symbol will not be confused for a file start/function start
      symbol.  This is especially important on the PowerPC target as that
      generates synthetic symbols for function entry points, but only if there
-     is no real symbol for that address.  */
+     is no real symbol for that address.  The value of four is used so that
+     the annobin symbol will not appear in the middle of an instruction, which
+     can confuse the disassembler.  */
 
-  return 2;
+  return 4;
 }
 
 void
