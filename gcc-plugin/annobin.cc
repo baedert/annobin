@@ -765,7 +765,7 @@ annobin_get_gcc_int_option (int cl_option_index)
     return -1;
 
   /* This is just paranoia....  */
-  if (cl_option_index >= cl_options_count)
+  if (cl_option_index >= (int) cl_options_count)
     {
       annobin_inform (INFORM_VERBOSE, "ICE: integer gcc command line option index (%d) too big",
 		      cl_option_index);
@@ -815,7 +815,7 @@ annobin_get_gcc_str_option (int cl_option_index)
     return NULL;
 
   /* This is just paranoia....  */
-  if (cl_option_index >= cl_options_count)
+  if (cl_option_index >= (int) cl_options_count)
     {
       annobin_inform (INFORM_VERBOSE, "ICE: string gcc command line option index (%d) too big",
 		      cl_option_index);

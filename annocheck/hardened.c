@@ -102,6 +102,7 @@ enum test_index
   TEST_BRANCH_PROTECTION,
   TEST_CF_PROTECTION,
   TEST_DYNAMIC,
+  TEST_DYNAMIC_TAGS,
   TEST_ENTRY,
   TEST_FORTIFY,
   TEST_GLIBCXX_ASSERTIONS,
@@ -129,6 +130,7 @@ static void show_BIND_NOW           (annocheck_data *, test *);
 static void show_BRANCH_PROTECTION  (annocheck_data *, test *);
 static void show_CF_PROTECTION      (annocheck_data *, test *);
 static void show_DYNAMIC            (annocheck_data *, test *);
+static void show_DYNAMIC_TAGS       (annocheck_data *, test *);
 static void show_ENTRY              (annocheck_data *, test *);
 static void show_FORTIFY            (annocheck_data *, test *);
 static void show_GLIBCXX_ASSERTIONS (annocheck_data *, test *);
@@ -160,6 +162,7 @@ static test tests [TEST_MAX] =
   TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8+ only)"),
   TEST (dynamic,            DYNAMIC,            "There is at most one dynamic segment/section"),
+  TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI present (AArch64 only)"),
   TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
@@ -168,7 +171,7 @@ static test tests [TEST_MAX] =
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
   TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
-  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64)"),
+  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, aarch64)"),
   TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
   TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
   TEST (short-enum,         SHORT_ENUM,         "Compiled with consistent use of -fshort-enum"),
@@ -609,6 +612,21 @@ struct tool_string
   enum tool    tool_id;
 };
 
+static ulong
+get_4byte_value (const unsigned char * data)
+{
+  if (per_file.is_little_endian)
+    return  data[0]
+      | (((ulong) data[1]) << 8)
+      | (((ulong) data[2]) << 16)
+      | (((ulong) data[3]) << 24);
+  else
+    return data[3]
+      | (((ulong) data[2]) << 8)
+      | (((ulong) data[1]) << 16)
+      | (((ulong) data[0]) << 24);
+}
+
 static bool
 walk_build_notes (annocheck_data *     data,
 		  annocheck_section *  sec,
@@ -679,28 +697,8 @@ walk_build_notes (annocheck_data *     data,
 	}
       else if (note->n_descsz == 8)
 	{
-	  if (per_file.is_little_endian)
-	    {
-	      start = descdata[0]
-		| (((ulong) descdata[1]) << 8)
-		| (((ulong) descdata[2]) << 16)
-		| (((ulong) descdata[3]) << 24);
-	      end   = descdata[4]
-		| (((ulong) descdata[5]) << 8)
-		| (((ulong) descdata[6]) << 16)
-		| (((ulong) descdata[7]) << 24);
-	    }
-	  else
-	    {
-	      start = descdata[3]
-		| (((ulong) descdata[2]) << 8)
-		| (((ulong) descdata[1]) << 16)
-		| (((ulong) descdata[0]) << 24);
-	      end   = descdata[7]
-		| (((ulong) descdata[6]) << 8)
-		| (((ulong) descdata[5]) << 16)
-		| (((ulong) descdata[4]) << 24);
-	    }
+	  start = get_4byte_value (descdata);
+	  end   = get_4byte_value (descdata + 4);
 	}
       else
 	{
@@ -1165,13 +1163,20 @@ walk_build_notes (annocheck_data *     data,
 	      /* tests[TEST_BRANCH_PROTECTION].num_fail ++; */
 	      break;
 	    }
-	  else if (streq (attr, "bti")
+	  else if (streq (attr, "bti+pac-ret")
 		   || (streq (attr, "standard"))
-		   || const_strneq (attr, "pac-ret"))
+		   || const_strneq (attr, "pac-ret+bti"))
 	    {
 	      report_s (VERBOSE2, "%s: PASS: (%s): branch-protection enabled (%s)",
 			data, sec, note_data, prefer_func_name, attr);
 	      tests[TEST_BRANCH_PROTECTION].num_pass ++;
+	    }
+	  else if (streq (attr, "bti")
+		   || const_strneq (attr, "pac-ret"))
+	    {
+	      report_s (VERBOSE2, "%s: FAIL: (%s): Only partial branch-protection is enabled (%s)",
+			data, sec, note_data, prefer_func_name, attr);
+	      tests[TEST_BRANCH_PROTECTION].num_fail ++;
 	    }
 	  else if (streq (attr, "none"))
 	    {
@@ -1594,6 +1599,26 @@ walk_build_notes (annocheck_data *     data,
   return true;
 }
 
+static void
+ffail (annocheck_data * data, const char * message, int level)
+{
+  einfo (level, "%s: check: %s", data->filename, message);
+  einfo (level, "%s: note:  This test is not yet enabled, but if it was enabled, it would fail...",
+	 data->filename);
+}
+
+static void
+future_fail (annocheck_data * data, const char * message)
+{
+  ffail (data, message, INFO);
+}
+
+static void
+vfuture_fail (annocheck_data * data, const char * message)
+{
+  ffail (data, message, VERBOSE);
+}
+
 static bool
 walk_property_notes (annocheck_data *     data,
 		     annocheck_section *  sec,
@@ -1607,29 +1632,144 @@ walk_property_notes (annocheck_data *     data,
 
   if (note->n_type != NT_GNU_PROPERTY_TYPE_0)
     {
-      einfo (VERBOSE, "%s: FAIL: Unexpected GNU Property note type (%x)", data->filename, note->n_type);
-      tests[TEST_PROPERTY_NOTE].num_fail ++;
-      return false;
+      einfo (VERBOSE, "%s: FAIL: Unexpected GNU Property note type", data->filename);
+      einfo (VERBOSE2, "debugging: note type is %x, expected %x", note->n_type, NT_GNU_PROPERTY_TYPE_0);
+      goto fail;
     }
-  else
+
+  if (per_file.e_type == ET_EXEC || per_file.e_type == ET_DYN)
     {
-      if (per_file.e_type == ET_EXEC || per_file.e_type == ET_DYN)
+      /* More than one note in an executable is an error.  */
+      if (tests[TEST_PROPERTY_NOTE].num_pass)
 	{
-	  /* More than one note in an executable is an error.  */
-	  if (tests[TEST_PROPERTY_NOTE].num_pass)
+	  /* The loader will only process the first note, so having more than one is an error.  */
+	  einfo (VERBOSE, "%s: FAIL: More than one GNU Property note", data->filename);
+	  goto fail;
+	}
+    }
+
+  if (note->n_namesz != sizeof ELF_NOTE_GNU
+      || strncmp ((char *) sec->data->d_buf + name_offset, ELF_NOTE_GNU, strlen (ELF_NOTE_GNU)) != 0)
+    {
+      einfo (VERBOSE, "%s: FAIL: Property note does not have expected name", data->filename);
+      einfo (VERBOSE2, "debugging: Expected name %s, got %.*s", ELF_NOTE_GNU,
+	     (int) strlen (ELF_NOTE_GNU), (char *) sec->data->d_buf + name_offset);
+      goto fail;
+    }
+
+  unsigned int expected_quanta = data->is_32bit ? 4 : 8;
+  if (note->n_descsz < 8 || (note->n_descsz % expected_quanta) != 0)
+    {
+      einfo (VERBOSE, "%s: FAIL: Property note data has the wrong size", data->filename);
+      einfo (VERBOSE2, "debugging: Expected data size to be a multiple of %d but the size is 0x%x",
+	     expected_quanta, note->n_descsz);
+      goto fail;
+    }
+
+  unsigned int remaining = note->n_descsz;
+  const unsigned char * notedata = sec->data->d_buf + data_offset;
+  while (remaining)
+    {
+      ulong type = get_4byte_value (notedata);
+      ulong size = get_4byte_value (notedata + 4);
+
+      remaining -= 8;
+      notedata  += 8;
+      if (size > remaining)
+	{
+	  einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
+	  einfo (VERBOSE2, "debugging: data size for note at offset %lx is %lu but remaining data is only %u",
+		 (long)(notedata - (const unsigned char *) sec->data->d_buf), size, remaining);
+	  goto fail;
+	}
+
+      if (per_file.e_machine == EM_X86_64 || per_file.e_machine == EM_386)
+	{
+	  switch (type)
 	    {
-	      einfo (VERBOSE, "%s: FAIL: More than one GNU Property note.  (Loader will not enable CET)", data->filename);
-	      tests[TEST_PROPERTY_NOTE].num_fail ++;
-	      return false;
+	    case GNU_PROPERTY_X86_FEATURE_1_AND:
+	      if (size != 4)
+		{
+		  einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
+		  einfo (VERBOSE2, "debugging: data note at offset %lx has size %lu, expected 4",
+			 (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
+		  goto fail;
+		}
+
+	      ulong property = get_4byte_value (notedata);
+	      if ((property & GNU_PROPERTY_X86_FEATURE_1_IBT) == 0)
+		{
+		  einfo (VERBOSE, "%s: FAIL: The IBT property is not enabled", data->filename);
+		  einfo (VERBOSE2, "debugging: property bits = %lx", property);
+		  goto fail;
+		}
+	      else if ((property & GNU_PROPERTY_X86_FEATURE_1_SHSTK) == 0)
+		{
+		  einfo (VERBOSE, "%s: FAIL: The SHSTK property is not enabled", data->filename);
+		  einfo (VERBOSE2, "debugging: property bits = %lx", property);
+		  goto fail;
+		}
+	      else
+		{
+		  einfo (VERBOSE2, "%s: PASS: Both the IBT and SHSTK properties are present in the GNU Property note", data->filename);
+		}
+	      break;
+
+	    default:
+	      einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
+	      break;
+	    }
+	}
+      else /* (per_file.e_machine == EM_AARCH64)  */
+	{
+	  if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
+	    einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
+	  else if (size != 4)
+	    {
+	      einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
+	      einfo (VERBOSE2, "debugging: data note at offset %lx has size %lu, expected 4",
+		     (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
+	      goto fail;
+	    }
+	  else
+	    {
+	      ulong property = get_4byte_value (notedata);
+
+	      if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_BTI) == 0)
+		{
+		  vfuture_fail (data, "The BTI property is not enabled");
+		  einfo (VERBOSE2, "debugging: property bits = %lx", property);
+		  goto fail;
+		}
+	      else if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_PAC) == 0)
+		{
+		  vfuture_fail (data, "The PAC property is not enabled");
+		  einfo (VERBOSE2, "debugging: property bits = %lx", property);
+		  goto fail;
+		}
+	      else
+		einfo (INFO, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", data->filename);
 	    }
 	}
 
-      /* FIXME: Add test for CET enablement bit ?  */
-
-      tests[TEST_PROPERTY_NOTE].num_pass ++;
+      notedata  += ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
+      remaining -= ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
     }
 
+  tests[TEST_PROPERTY_NOTE].num_pass ++;
   return true;
+
+ fail:
+  tests[TEST_PROPERTY_NOTE].num_fail ++;
+  return false;
+}
+
+static bool
+supports_property_notes (int e_machine)
+{
+  return e_machine == EM_X86_64
+    || e_machine == EM_AARCH64
+    || e_machine == EM_386;
 }
 
 static bool
@@ -1653,7 +1793,8 @@ check_note_section (annocheck_data *    data,
       return annocheck_walk_notes (data, sec, walk_build_notes, (void *) & hard_data);
     }
 
-  if (per_file.e_machine == EM_X86_64 && streq (sec->secname, ".note.gnu.property"))
+  if (supports_property_notes (per_file.e_machine)
+      && streq (sec->secname, ".note.gnu.property"))
     {
       return annocheck_walk_notes (data, sec, walk_property_notes, NULL);
     }
@@ -1764,6 +1905,16 @@ check_dynamic_section (annocheck_data *    data,
 		tests[TEST_RUN_PATH].num_fail ++;
 	      }
 	  }
+	  break;
+
+	case DT_AARCH64_BTI_PLT:
+	  if (per_file.e_machine == EM_AARCH64)
+	    tests[TEST_DYNAMIC_TAGS].num_pass |= 1;
+	  break;
+
+	case DT_AARCH64_PAC_PLT:
+	  if (per_file.e_machine == EM_AARCH64)
+	    tests[TEST_DYNAMIC_TAGS].num_pass |= 2;
 	  break;
 
 	default:
@@ -1905,8 +2056,8 @@ interesting_seg (annocheck_data *    data,
     case PT_NOTE:
       if (skip_check (TEST_PROPERTY_NOTE, NULL))
 	break;
-      /* We want to examine the note segments on x86_64 binaries.  */
-      return (per_file.e_machine == EM_X86_64);
+      /* We true if we want to examine the note segments.  */
+      return supports_property_notes (per_file.e_machine);
 
     case PT_LOAD:
       /* If we are checking the entry point instruction then we need to load
@@ -2574,7 +2725,7 @@ check_for_gaps (annocheck_data * data)
 static void
 show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
 {
-#ifdef EM_AARCH64 /* RHEL-6 does not define EM_AARCh64.  */
+#ifdef EM_AARCH64 /* RHEL-6 does not define EM_AARCH64.  */
   if (per_file.e_machine != EM_AARCH64)
     skip (data, "Branch protection.  (Not an AArch64 binary)");
   else
@@ -2590,7 +2741,7 @@ show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
       if (results->num_pass > 0 || results->num_maybe > 0)
 	{
 	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without branch protection");
+	    fail (data, "Parts of the binary were compiled without (sufficient) branch protection");
 	  else
 	    fail (data, "Parts of the binary were compiled without branch protection.  Run with -v to see where");
 	}
@@ -2602,18 +2753,18 @@ show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
       if (BE_VERBOSE)
 	maybe (data, "Unknown string used with -mbranch-protection=");
       else
-	maybe (data, "Unknown string used with -mbranch-protection=.  Run with -v to see where");
+	maybe (data, "Unknown string used with -mbranch-protection=  run with -v to see where");
     }
   else if (results->num_pass > 0)
     {
-      pass (data, "Compiled with -mbranch-protection");
+      pass (data, "Compiled with sufficient -mbranch-protection");
     }
   else
     {
       /* FIXME: Only inform the user for now.  Once -mbranch-protection has
 	 been added to the rpm macros then change this result to a maybe().  */
       /* maybe (data, "The -mbranch-protection setting was not recorded");  */
-      info (data, "The -mbranch-protection setting was not recorded");
+      future_fail (data, "The -mbranch-protection setting was not recorded");
     }
 }
 
@@ -2695,12 +2846,14 @@ show_WARNINGS (annocheck_data * data, test * results)
 static void
 show_PROPERTY_NOTE (annocheck_data * data, test * results)
 {
-  if (per_file.e_machine != EM_X86_64)
-    skip (data, "GNU Property note check.  (Only useful on x86_64 binaries)");
+  if (! supports_property_notes (per_file.e_machine))
+    skip (data, "GNU Property note check.  (Only useful on x86_64 and aarch64 binaries)");
 
   else if (results->num_fail > 0)
     {
-      if (BE_VERBOSE)
+      if (per_file.e_machine == EM_AARCH64)
+	future_fail (data, "Bad GNU Property note(s)");
+      else if (BE_VERBOSE)
 	fail (data, "Bad GNU Property note(s)");
       else
 	fail (data, "Bad GNU Property note(s).  Run with -v to see what is wrong");
@@ -2709,12 +2862,25 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
     maybe (data, "Corrupt GNU Property note");
   else if (results->num_pass > 0)
     pass (data, "Good GNU Property note");
-  else if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
+  else if (per_file.e_machine == EM_X86_64 || per_file.e_machine == EM_386)
     {
-      if (! built_by_compiler ())
-	skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
-      else
-	fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled");
+      if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
+	{
+	  if (! built_by_compiler ())
+	    skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
+	  else
+	    fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled");
+	}
+    }
+  else if (per_file.e_machine == EM_AARCH64)
+    {
+      if (tests[TEST_BRANCH_PROTECTION].enabled && tests[TEST_BRANCH_PROTECTION].num_pass > 0)
+	{
+	  if (! built_by_compiler ())
+	    skip (data, "Branch protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that the BTI/PAC protection will *not* be enabled for any part of the binary");
+	  else
+	    future_fail (data, "branch protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global BTI/PAC protection cannot be enabled");
+	}
     }
   else
     pass (data, "GNU Property note not needed");
@@ -2750,6 +2916,23 @@ show_DYNAMIC (annocheck_data * data, test * results)
     pass (data, "No dynamic sections/segments found");
   else
     pass (data, "One dynamic section/segment found");
+}
+
+static void
+show_DYNAMIC_TAGS (annocheck_data * data, test * results)
+{
+  if (per_file.e_machine != EM_AARCH64)
+    skip (data, "Test of dynamic tags.  (AArch64 specific)");
+  else if (per_file.e_type == ET_REL)
+    skip (data, "Test of dynamic tags.  (Not needed in object files)");
+  else if (results->num_pass == 3)
+    pass (data, "Both PAC and BTI dynamic tags are present");
+  else if (results->num_pass == 2)
+    future_fail (data, "The BTI dynamic tags is missing");
+  else if (results->num_pass == 1)
+    future_fail (data, "The PAC dynamic tags is missing");
+  else
+    future_fail (data, "The BTI and PAC dynamic tags are missing");
 }
 
 static void
