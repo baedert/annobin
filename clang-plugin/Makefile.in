@@ -14,7 +14,7 @@ PLUGIN_OPTIONS = \
 INCDIR = @srcdir@/..
 
 # Strictly speaking we should use clang --version | awk 'FNR==1 {print $3}' here...
-PLUGIN_INSTALL_DIR = /usr/lib64/clang/`llvm-config --version`/lib
+PLUGIN_INSTALL_DIR = "${DESTDIR}/usr/lib64/clang/`llvm-config --version`/lib"
 
 PLUGIN_NAME = annobin-for-clang.so
 
@@ -41,8 +41,9 @@ PLUGIN_TEST_OPTIONS = \
     -Wall \
    -fsanitize=safe-stack \
    -fstack-protector-strong \
-   -fcf-protection \
    -fsanitize=cfi-cast-strict 
+
+#   -fcf-protection \
 
 check: @srcdir@/hello.c
 	@ $(CLANG) -fplugin=$(PLUGIN) $(PLUGIN_TEST_OPTIONS) -c @srcdir@/hello.c

@@ -2261,8 +2261,8 @@ annobin_emit_end_symbol (const char * suffix)
 	 yet, (due to the possibility of linker relaxation).  But we are allowed to
 	 test for symbol equality.  So we fudge things a little....  */
      
-      fprintf (asm_out_file, "\t.if %s%s == %s%s + 2\n", annobin_output_filesym, suffix,
-	       annobin_current_endname, suffix);
+      fprintf (asm_out_file, "\t.if %s%s == %s%s + %d\n", annobin_output_filesym, suffix,
+	       annobin_current_endname, suffix, target_start_sym_bias);
       fprintf (asm_out_file, "\t  .set %s%s, %s%s\n", annobin_output_filesym, suffix,
 	       annobin_current_endname, suffix);
       fprintf (asm_out_file, "\t.endif\n");

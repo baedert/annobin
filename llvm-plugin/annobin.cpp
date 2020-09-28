@@ -2,6 +2,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/LTO/legacy/LTOCodeGenerator.h"
 #include "annobin-global.h"
@@ -14,7 +15,7 @@ using namespace llvm;
 namespace
 {
   static bool                 be_verbose = false;
-  static bool                 target_start_sym_bias = false;
+  static unsigned int         target_start_sym_bias = 0;
 
   // Helper functions used throughout this file.
   template<class... Tys>
@@ -77,6 +78,7 @@ namespace
     char const *        fileStart = nullptr;
     char const *        fileEnd = nullptr;
     unsigned int        optLevel;
+    bool		is_32bit = false;
 
     void
     OutputNote (Module &      module,
@@ -127,7 +129,10 @@ namespace
 	  if (end_symbol == NULL)
 	    ice ("start symbol without an end symbol");
 
-	  add_line_to_note (text_buffer, ".dc.l 16", "description size [= 2 * sizeof (address)]");
+	  if (is_32bit)
+	    add_line_to_note (text_buffer, ".dc.l 8", "description size [= 2 * sizeof (address)]");
+	  else
+	    add_line_to_note (text_buffer, ".dc.l 16", "description size [= 2 * sizeof (address)]");
 	}
       else
 	{
@@ -173,8 +178,7 @@ namespace
 
       if (start_symbol)
 	{
-	  // FIXME we should be using .dc.l for 32-bit targets.
-	  sprintf (buf, ".quad %s", (char *) start_symbol);
+	  sprintf (buf, "%s %s", is_32bit ? ".dc.l" : ".quad", (char *) start_symbol);
 	  if (target_start_sym_bias)
 	    {
 	      /* We know that the annobin_current_filename symbol has been
@@ -187,8 +191,7 @@ namespace
 
 	  add_line_to_note (text_buffer, buf, "start symbol");
 
-	  // FIXME we should be using .dc.l for 32-bit targets.
-	  sprintf (buf, ".quad %s", (char *) end_symbol);
+	  sprintf (buf, "%s %s", is_32bit ? ".dc.l" : ".quad", (char *) end_symbol);
 	  add_line_to_note (text_buffer, buf, "end symbol");
 	}
 
@@ -289,7 +292,7 @@ namespace
 \t.pushsection .text\n\
 \t.hidden %s\n\
 \t.type   %s, STT_NOTYPE\n\
-\t.equiv  %s, .text\n\
+\t.equiv  %s, .text + %d\n\
 \t.size   %s, 0\n\
 \t.pushsection .text.zzz\n\
 \t.hidden %s\n\
@@ -298,11 +301,12 @@ namespace
 \t.size   %s, 0\n\
 \t.popsection\n";
       sprintf (buf, START_TEXT,
-	       fileStart, fileStart, fileStart, fileStart,
+	       fileStart, fileStart, fileStart, target_start_sym_bias, fileStart,
 	       fileEnd, fileEnd, fileEnd, fileEnd);
 
       module.appendModuleInlineAsm (buf);
 
+      is_32bit = module.getDataLayout().getPointerSize() == 4;
       
       // Generate version notes.
       sprintf (buf, "%d%c%d", SPEC_VERSION, ANNOBIN_TOOL_ID_LLVM, version);
@@ -332,7 +336,7 @@ namespace
       OutputNumericNote (module, pic, val, "PIE");
 
 
-      // Generate FORTIFY, SAFE STACK anf STACK PROT STRONG notes.
+      // Generate FORTIFY, SAFE STACK and STACK PROT STRONG notes.
       //
       // Unfortunately, since we are looking at the IR we have no access
       // to any preprocessor defines.  Instead we look for references to

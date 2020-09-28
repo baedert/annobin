@@ -21,6 +21,7 @@
 #include "clang/Sema/SemaConsumer.h"
 #include "llvm/Support/raw_ostream.h"
 #include "clang/Basic/Version.h"
+#include "clang/Basic/TargetInfo.h"
 
 using namespace std;
 using namespace clang;
@@ -95,7 +96,8 @@ namespace
   {
 private:
     CompilerInstance& CI;
-    bool              target_start_sym_bias = false;
+    unsigned int      target_start_sym_bias = 0;
+    bool              is_32bit = false;
     char const*       annobin_current_file_start = nullptr;
     char const*       annobin_current_file_end = nullptr;
 
@@ -107,7 +109,9 @@ private:
     void
     HandleTranslationUnit (ASTContext & Context) override
     {
-      static char buf [6400];
+      static char buf [6400];  // FIXME: Use a dynmically allocated buffer.
+
+      is_32bit = Context.getTargetInfo().getPointerWidth(0) == 32;
 
       SourceManager & src = Context.getSourceManager ();
       std::string filename = src.getFilename (src.getLocForStartOfFile (src.getMainFileID ())).str ().c_str ();
@@ -121,7 +125,7 @@ private:
 \t.pushsection .text\n\
 \t.hidden %s\n\
 \t.type   %s, STT_NOTYPE\n\
-\t.equiv  %s, .text\n\
+\t.equiv  %s, .text + %d\n\
 \t.size   %s, 0\n\
 \t.pushsection .text.zzz\n\
 \t.hidden %s\n\
@@ -130,7 +134,8 @@ private:
 \t.size   %s, 0\n\
 \t.popsection\n";
       sprintf (buf, START_TEXT,
-	       annobin_current_file_start, annobin_current_file_start, annobin_current_file_start, annobin_current_file_start,
+	       annobin_current_file_start, annobin_current_file_start, annobin_current_file_start,
+	       target_start_sym_bias, annobin_current_file_start,
 	       annobin_current_file_end, annobin_current_file_end, annobin_current_file_end, annobin_current_file_end);
 
       AddAsmText (Context, buf);
@@ -151,6 +156,7 @@ private:
       // FIXME: Since we are using documented clang API functions
       // we assume that a version mistmatch bewteen the plugin builder
       // and the plugin consumer does not matter.  Check this...
+
       CheckOptions (CI, Context);
     }
 
@@ -214,7 +220,7 @@ private:
 		const char *  section_name)
     {
       std::ostringstream text_buffer;
-      static char buf[1280];  // FIXME: We should be using a dynamically alloctaed buffer.
+      static char buf[1280];  // FIXME: We should be using a dynamically allocated buffer.
       static const int align = 4;  // FIXME: 8-byte align for 64-bit notes ?
 
       sprintf (buf, ".pushsection %s, \"\", %%note", section_name);
@@ -251,7 +257,10 @@ private:
 	  if (end_symbol == NULL)
 	    ice ("start symbol without an end symbol");
 
-	  add_line_to_note (text_buffer, ".dc.l 16", "description size [= 2 * sizeof (address)]");
+	  if (is_32bit)
+	    add_line_to_note (text_buffer, ".dc.l 8", "description size [= 2 * sizeof (address)]");
+	  else
+	    add_line_to_note (text_buffer, ".dc.l 16", "description size [= 2 * sizeof (address)]");
 	}
       else
 	{
@@ -297,8 +306,7 @@ private:
 
       if (start_symbol)
 	{
-	  // FIXME we should be using .dc.l for 32-bit targets.
-	  sprintf (buf, ".quad %s", (char *) start_symbol);
+	  sprintf (buf, "%s %s", is_32bit ? ".dc.l" : ".quad", (char *) start_symbol);
 	  if (target_start_sym_bias)
 	    {
 	      /* We know that the annobin_current_filename symbol has been
@@ -311,8 +319,7 @@ private:
 
 	  add_line_to_note (text_buffer, buf, "start symbol");
 
-	  // FIXME we should be using .dc.l for 32-bit targets.
-	  sprintf (buf, ".quad %s", (char *) end_symbol);
+	  sprintf (buf, "%s %s", is_32bit ? ".dc.l" : ".quad", (char *) end_symbol);
 	  add_line_to_note (text_buffer, buf, "end symbol");
 	}
 
@@ -485,7 +492,7 @@ private:
     {}
 
     void
-    HandleTranslationUnit (ASTContext & ) override
+    HandleTranslationUnit (ASTContext &) override
     {
     }
   };
