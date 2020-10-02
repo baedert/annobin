@@ -63,7 +63,7 @@ annobin_save_target_specific_information (void)
 }
 
 void
-annobin_record_global_target_notes (const char * sec)
+annobin_record_global_target_notes (annobin_function_info * info)
 {
   /* Note - most, but not all, bits in the ix86_isa_flags variable
      are significant for purposes of ABI compatibility.  We do not
@@ -71,38 +71,39 @@ annobin_record_global_target_notes (const char * sec)
      it to the consumer to decide what is significant.  */
   min_x86_isa = max_x86_isa = global_x86_isa = GET_INT_OPTION (ix86_isa_flags);
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
-			       "numeric: ABI", NULL, NULL, OPEN, sec);
+			       "numeric: ABI", true /* is OPEN.  */, info);
   annobin_inform (INFORM_VERBOSE, "x86_64: Record global isa of %lx", global_x86_isa);
 
-  
   global_stack_realign = GET_INT_OPTION (ix86_force_align_arg_pointer);
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
-  annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
-			      NULL, NULL, OPEN, sec);
-  annobin_inform (INFORM_VERBOSE, "x86_64: Record global stack realign setting of %s", global_stack_realign ? "false" : "true");
+  annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
+		       "bool: -mstackrealign status", true /* Is OPEN.  */, info);
+  annobin_inform (INFORM_VERBOSE, "x86_64: Record global stack realign setting of %s",
+		  global_stack_realign ? "false" : "true");
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
+annobin_target_specific_function_notes (annobin_function_info * info, bool force)
 {
-  const char * func_name = aname;
   unsigned long val;
 
   val = GET_INT_OPTION (ix86_isa_flags);
   if (force || val != global_x86_isa)
     {
-      annobin_inform (INFORM_VERBOSE, "x86_64: Record ISA value of %lx for %s", val, func_name);
+      annobin_inform (INFORM_VERBOSE, "x86_64: Record ISA value of %lx for %s", val, info->func_name);
 
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val,
-				   "numeric: ABI", aname, aname_end, FUNC, sec_name);
+      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val, "numeric: ABI",
+				   false /* This is a local note.  */, info);
 
       if (val < min_x86_isa)
 	min_x86_isa = val;
       if (val > max_x86_isa)
 	max_x86_isa = val;
 
-      aname = aname_end = NULL;
+      /* We no longer need to include the start/end symbols in any
+	 further notes that we generate.  */
+      info->start_sym = info->end_sym = NULL;
     }
 
   val = GET_INT_OPTION (ix86_force_align_arg_pointer);
@@ -112,142 +113,12 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
       unsigned len = sprintf (buffer, "GA%cstack_realign", val ? BOOL_T : BOOL_F);
 
       annobin_inform (INFORM_VERBOSE, "x86_64: Record function specific stack realign setting of %s for %s",
-		      val ? "false" : "true", func_name);
-      annobin_output_static_note (buffer, len + 1, true, "bool: -mstackrealign status",
-				  aname, aname_end, FUNC, sec_name);
-      aname = aname_end = NULL;
+		      val ? "false" : "true", info->func_name);
+      annobin_output_note (buffer, len + 1, true, "bool: -mstackrealign status",
+			   false /* This is a local note.  */, info);
+
+      /* We no longer need to include the start/end symbols in any
+	 further notes that we generate.  */
+      info->start_sym = info->end_sym = NULL;
     }
-}
-
-static unsigned int
-convert_gcc_isa_to_gnu_property_isa (unsigned long isa)
-{
-  unsigned int result = 0;
-
-  if (isa & OPTION_MASK_ISA_SSE)
-    result |= GNU_PROPERTY_X86_ISA_1_SSE;
-  if (isa & OPTION_MASK_ISA_SSE2)
-    result |= GNU_PROPERTY_X86_ISA_1_SSE2;
-  if (isa & OPTION_MASK_ISA_SSE3)
-    result |= GNU_PROPERTY_X86_ISA_1_SSSE3;
-  if (isa & OPTION_MASK_ISA_SSE4_1)
-    result |= GNU_PROPERTY_X86_ISA_1_SSE4_1;
-  if (isa & OPTION_MASK_ISA_SSE4_2)
-    result |= GNU_PROPERTY_X86_ISA_1_SSE4_2;
-  if (isa & OPTION_MASK_ISA_AVX)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX;
-  if (isa & OPTION_MASK_ISA_AVX2)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX2;
-#ifdef OPTION_MASK_ISA_AVX512F
-  if (isa & OPTION_MASK_ISA_AVX512F)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX512F;
-  if (isa & OPTION_MASK_ISA_AVX512CD)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX512CD;
-  if (isa & OPTION_MASK_ISA_AVX512ER)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX512ER;
-  if (isa & OPTION_MASK_ISA_AVX512PF)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX512PF;
-  if (isa & OPTION_MASK_ISA_AVX512VL)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX512VL;
-  if (isa & OPTION_MASK_ISA_AVX512DQ)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX512DQ;
-  if (isa & OPTION_MASK_ISA_AVX512BW)
-    result |= GNU_PROPERTY_X86_ISA_1_AVX512BW;
-#endif
-  return result;
-}
-
-typedef struct
-{
-  Elf32_Word   pr_type;
-  Elf32_Word   pr_datasz;
-  Elf32_Word   pr_data;
-} Elf32_loader_note;
-
-typedef struct
-{
-  Elf32_Word    pr_type;
-  Elf32_Word    pr_datasz;
-  Elf64_Xword   pr_data;
-} Elf64_loader_note;
-
-typedef struct
-{
-  Elf32_Word   pr_type;
-  Elf32_Word   pr_datasz;
-  Elf32_Word   pr_data;
-  Elf32_Word   pr_pad;
-} Elf64_32_loader_note;
-
-void
-annobin_target_specific_loader_notes (void)
-{
-  char   buffer [1024]; /* FIXME: Is this enough ?  */
-  char * ptr;
-
-  annobin_inform (INFORM_VERBOSE, "x86_64: Creating notes for the dynamic loader");
-
-  fprintf (asm_out_file, "\t.section %s, \"a\", %%note\n", NOTE_GNU_PROPERTY_SECTION_NAME);
-  if (annobin_is_64bit)
-    fprintf (asm_out_file, "\t.balign 8\n");
-  else
-    fprintf (asm_out_file, "\t.balign 4\n");
-
-  ptr = buffer;
-
-  if (annobin_is_64bit)
-    {
-      Elf64_32_loader_note note32;
-
-      note32.pr_datasz = sizeof (note32.pr_data);
-      note32.pr_pad = 0;
-
-      if (annobin_enable_stack_size_notes)
-	{
-	  Elf64_loader_note note64;
-
-	  note64.pr_type   = GNU_PROPERTY_STACK_SIZE;
-	  note64.pr_datasz = sizeof (note64.pr_data);
-	  note64.pr_data   = annobin_max_stack_size;
-	  memcpy (ptr, & note64, sizeof note64);
-	  ptr += sizeof (note64);
-	}
-
-      note32.pr_type = GNU_PROPERTY_X86_ISA_1_USED;
-      note32.pr_data = convert_gcc_isa_to_gnu_property_isa (max_x86_isa);
-      memcpy (ptr, & note32, sizeof note32);
-      ptr += sizeof (note32);
-
-      note32.pr_type = GNU_PROPERTY_X86_ISA_1_NEEDED;
-      note32.pr_data = convert_gcc_isa_to_gnu_property_isa (min_x86_isa);
-      memcpy (ptr, & note32, sizeof note32);
-      ptr += sizeof (note32);
-    }
-  else
-    {
-      Elf32_loader_note note32;
-
-      note32.pr_datasz = sizeof (note32.pr_data);
-
-      if (annobin_enable_stack_size_notes)
-	{
-	  note32.pr_type = GNU_PROPERTY_STACK_SIZE;
-	  note32.pr_data = annobin_max_stack_size;
-	  memcpy (ptr, & note32, sizeof note32);
-	  ptr += sizeof (note32);
-	}
-
-      note32.pr_type = GNU_PROPERTY_X86_ISA_1_USED;
-      note32.pr_data = convert_gcc_isa_to_gnu_property_isa (max_x86_isa);
-      memcpy (ptr, & note32, sizeof note32);
-      ptr += sizeof (note32);
-
-      note32.pr_type = GNU_PROPERTY_X86_ISA_1_NEEDED;
-      note32.pr_data = convert_gcc_isa_to_gnu_property_isa (min_x86_isa);
-      memcpy (ptr, & note32, sizeof note32);
-      ptr += sizeof (note32);
-    }
-
-  annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
-		       false, NT_GNU_PROPERTY_TYPE_0, NOTE_GNU_PROPERTY_SECTION_NAME);
 }

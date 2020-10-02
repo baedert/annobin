@@ -46,6 +46,8 @@ static const char *   version_string = VER_STRING (ANNOBIN_VERSION);
 #define EXIT_SUFFIX      ".exit"
 #define EXIT_SECTION     CODE_SECTION EXIT_SUFFIX
 
+#define LINKONCE_SEC_PREFIX ".gnu.linkonce."
+
 /* Required by the GCC plugin API.  */
 int            plugin_is_GPL_compatible;
 
@@ -83,14 +85,19 @@ bool                  annobin_is_64bit = false;
 /* True if the creation of function specific notes should be reported.  */
 static bool           annobin_function_verbose = false;
 
-/* True if notes in the .note.gnu.property section should be produced.  */
-static bool           annobin_enable_dynamic_notes = true;
-
-/* True if notes in the .gnu.build.attributes section should be produced.  */
-static bool           annobin_enable_static_notes = true;
-
 /* True if annobin should generate gcc errors if gcc command line options are wrong.  */
 static bool           annobin_active_checks = false;
+
+enum attach_type
+{
+  none,
+  group,
+  link_order
+};
+
+/* Default to using section groups as the link-order
+   method needs a linker from binutils 2.36 or later/  */
+static enum attach_type annobin_attach_type = group;
 
 #ifdef flag_stack_clash_protection
 static int            global_stack_clash_option = -1;
@@ -99,7 +106,6 @@ static int            global_stack_clash_option = -1;
 static int            global_cf_option = -1;
 #endif
 static bool           global_omit_frame_pointer;
-static bool           annobin_enable_attach = true;
 static signed int     target_start_sym_bias = 0;
 static unsigned int   annobin_note_count = 0;
 static unsigned int   global_GOWall_options = 0;
@@ -123,11 +129,10 @@ static const char *   help_string =  N_("Supported options:\n\
    version                Print out the version of the plugin\n\
    verbose                Be talkative about what is going on\n\
    function-verbose       Report the creation of function specific notes\n\
-   [no-]dynamic-notes     Do [do not] create dynamic notes (default: do)\n\
-   [no-]static-notes      Do [do not] create static notes (default: do)\n\
    [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
    [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
    [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
+   [no-]link-order        Do [do not] attempt to join note sections to code sections using link_order attributes\n\
    [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n\
    rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n\
    stack-threshold=N      Only create function specific stack size notes when the size is > N.");
@@ -299,12 +304,8 @@ annobin_output_note (const char * name,
 		     unsigned     namesz,
 		     bool         name_is_string,
 		     const char * name_description,
-		     const char * desc1,
-		     const char * desc2,
-		     unsigned     descsz,
-		     bool         desc_is_string,
-		     unsigned     type,
-		     const char * sec_name)
+		     bool         is_open,
+		     annobin_function_info * info)
 {
   char buffer1[24];
   char buffer2[128];
@@ -313,16 +314,12 @@ annobin_output_note (const char * name,
   if (asm_out_file == NULL)
     return;
 
-  if (annobin_function_verbose && type == FUNC)
-    {
-      if (desc_is_string)
-	annobin_inform (INFORM_ALWAYS, "Create function specific note for: %s: %s", desc1, name_description);
-    }
+  if (annobin_function_verbose
+      && ! is_open)
+    annobin_inform (INFORM_ALWAYS, "Create function specific note for: %s: %s",
+		    info->start_sym, name_description);
 
-  if (strchr (sec_name, ','))
-    fprintf (asm_out_file, "\t.pushsection %s\n", sec_name);
-  else
-    fprintf (asm_out_file, "\t.pushsection %s, \"\", %%note\n", sec_name);
+  fprintf (asm_out_file, "\t.pushsection %s\n", info->note_section_declaration);
 
   /* Note we use 4-byte alignment even on 64-bit targets.  This might seem
      wrong for 64-bit systems, but the ELF standard does not specify any
@@ -353,64 +350,29 @@ annobin_output_note (const char * name,
       annobin_emit_asm (buffer1, "size of name");
     }
 
-  if (desc1 == NULL)
+  if (info->start_sym == NULL)
     {
-      if (descsz)
-	ice ("null desc1 with non-zero size");
-      if (desc2 != NULL)
-	ice ("non-null desc2 with null desc1");
+      if (info->end_sym != NULL)
+	ice ("non-null end_sym with null start_sym");
 
       annobin_emit_asm (".dc.l 0", "no description");
     }
-  else if (desc_is_string)
-    {
-      switch (descsz)
-	{
-	case 0:
-	  ice ("zero descsz with string description");
-	  break;
-	case 4:
-	  if (annobin_is_64bit || desc2 != NULL)
-	    ice ("descz too small");
-	  break;
-	case 8:
-	  if (annobin_is_64bit)
-	    {
-	      if (desc2 != NULL)
-		ice ("descz too small");
-	    }
-	  else
-	    {
-	      if (desc1 == NULL || desc2 == NULL)
-		ice ("descz too big");
-	    }
-	  break;
-	case 16:
-	  if (! annobin_is_64bit || desc1 == NULL || desc2 == NULL)
-	    ice ("descz too big");
-	  break;
-	default:
-	  ice ("description string size does not match address size");
-	  break;
-	}
-
-      sprintf (buffer1, ".dc.l %u", descsz);
-      annobin_emit_asm (buffer1, desc2 == NULL ? "descsz [= sizeof (address)]" : "descsz [= 2 * sizeof (address)]");
-    }
   else
     {
-      if (desc2 != NULL)
-	ice ("second description not empty for non-string description");
-
-      sprintf (buffer1, ".dc.l %u", descsz);
-      annobin_emit_asm (buffer1, "size of description");
+      if (info->end_sym == NULL)
+	{
+	  sprintf (buffer1, ".dc.l %u", annobin_is_64bit ? 8 : 4);
+	  annobin_emit_asm (buffer1, "descsz [= sizeof (address)]");
+	}
+      else
+	{
+	  sprintf (buffer1, ".dc.l %u", annobin_is_64bit ? 16 : 8);
+	  annobin_emit_asm (buffer1, "descsz [= 2 * sizeof (address)]");
+	}
     }
 
-  sprintf (buffer1, ".dc.l %#x", type);
-  annobin_emit_asm (buffer1,
-		    type == OPEN ? "OPEN" :
-		    type == FUNC ? "FUNC" :
-		    type == NT_GNU_PROPERTY_TYPE_0 ? "PROPERTY_TYPE_0" : "*UNKNOWN*");
+  sprintf (buffer1, ".dc.l %#x", is_open ? OPEN : FUNC);
+  annobin_emit_asm (buffer1, is_open ? "OPEN" : "FUNC");
 
   if (name)
     {
@@ -441,66 +403,32 @@ annobin_output_note (const char * name,
 	}
     }
 
-  if (desc1)
+  if (info->start_sym != NULL)
     {
-      if (desc_is_string)
+      const char * pointer_decl = annobin_is_64bit ? "\t.quad %s" : "\t.dc.l %s";
+
+      fprintf (asm_out_file, pointer_decl, (char *) info->start_sym);
+
+      if (target_start_sym_bias)
 	{
-	  if (annobin_is_64bit)
-	    fprintf (asm_out_file, "\t.quad %s", (char *) desc1);
-	  else
-	    fprintf (asm_out_file, "\t.dc.l %s", (char *) desc1);
-
-	  if (target_start_sym_bias)
-	    {
-	      /* We know that the annobin_output_filesym symbol has been
-		 biased in order to avoid conflicting with the function
-		 name symbol for the first function in the file.  So reverse
-		 that bias here.  */
-	      if (desc1 == annobin_output_filesym)
-		fprintf (asm_out_file, "- %d", target_start_sym_bias);
-	    }
-
-	  annobin_emit_asm (NULL, desc2 ? "description [symbol names]" : "description [symbol name]");
-
-	  if (desc2)
-	    {
-	      if (annobin_is_64bit)
-		fprintf (asm_out_file, "\t.quad %s\n", (char *) desc2);
-	      else
-		fprintf (asm_out_file, "\t.dc.l %s\n", (char *) desc2);
-	    }
+	  /* We know that the annobin_output_filesym symbol has been
+	     biased in order to avoid conflicting with the function
+	     name symbol for the first function in the file.  So reverse
+	     that bias here.  */
+	  if (info->start_sym == annobin_output_filesym)
+	    fprintf (asm_out_file, "- %d", target_start_sym_bias);
 	}
+
+      if (info->end_sym == NULL)
+	annobin_emit_asm (NULL, "description [symbol name]");
       else
 	{
-	  fprintf (asm_out_file, "\t.dc.b");
+	  annobin_emit_asm (NULL, "description [symbol names]");
 
-	  for (i = 0; i < descsz; i++)
-	    {
-	      fprintf (asm_out_file, " %#x", ((unsigned char *) desc1)[i]);
-
-	      if (i == (descsz - 1))
-		annobin_emit_asm (NULL, "description");
-	      else if ((i % 8) == 7)
-		{
-		  annobin_emit_asm (NULL, "description");
-		  fprintf (asm_out_file, "\t.dc.b");
-		}
-	      else
-		fprintf (asm_out_file, ",");
-	    }
-
-	  /* These notes use 4 byte alignment, even on 64-bit systems.  */
-	  if (descsz % 4)
-	    {
-	      fprintf (asm_out_file, "\t.dc.b");
-	      while (descsz % 4)
-		{
-		  descsz++;
-		  fprintf (asm_out_file, " 0%c", descsz % 4 ? ',' : ' ');
-		}
-	      annobin_emit_asm (NULL, "padding");
-	    }
+	  fprintf (asm_out_file, pointer_decl, (char *) info->end_sym);
 	}
+
+      fprintf (asm_out_file, "\n");
     }
 
   fprintf (asm_out_file, "\t.popsection\n\n");
@@ -509,32 +437,12 @@ annobin_output_note (const char * name,
   ++ annobin_note_count;
 }
 
-/* Fills in the DESC1, DESC2 and DESCSZ parameters for a call to annobin_output_note.  */
-#define DESC_PARAMETERS(DESC1, DESC2) \
-  DESC1, DESC2, (DESC1) == NULL ? 0 : (DESC2 == NULL) ? (annobin_is_64bit ? 8 : 4) : (annobin_is_64bit ? 16 : 8)
-
-void
-annobin_output_static_note (const char *  buffer,
-			    unsigned      buffer_len,
-			    bool          name_is_string,
-			    const char *  name_description,
-			    const char *  start,
-			    const char *  end,
-			    unsigned      note_type,
-			    const char *  sec_name)
-{
-  annobin_output_note (buffer, buffer_len, name_is_string, name_description,
-		       DESC_PARAMETERS (start, end), true, note_type, sec_name);
-}
-
 void
 annobin_output_bool_note (const char    bool_type,
 			  const bool    bool_value,
 			  const char *  name_description,
-			  const char *  start,
-			  const char *  end,
-			  unsigned      note_type,
-			  const char *  sec_name)
+			  bool          is_open,
+			  annobin_function_info * info)
 {
   char buffer [6];
   unsigned int len;
@@ -543,31 +451,28 @@ annobin_output_bool_note (const char    bool_type,
 
   /* Include the NUL byte at the end of the name string.
      This is required by the ELF spec.  */
-  annobin_output_static_note (buffer, len + 1, false, name_description,
-			      start, end, note_type, sec_name);
+  annobin_output_note (buffer, len + 1, false /* The name is not ASCII */,
+		       name_description, is_open, info);
 }
 
 void
-annobin_output_string_note (const char    string_type,
+annobin_output_string_note (const char    string_type_char,
 			    const char *  string,
 			    const char *  name_description,
-			    const char *  start,
-			    const char *  end,
-			    unsigned      note_type,
-			    const char *  sec_name)
+			    bool          is_open,
+			    annobin_function_info * info)
 {
-  unsigned int len = strlen (string);
+  unsigned int len = strlen (string) + 5;
   char * buffer;
 
-  buffer = (char *) xmalloc (len + 5);
+  buffer = (char *) xmalloc (len);
 
-  sprintf (buffer, "GA%c%c%s", GNU_BUILD_ATTRIBUTE_TYPE_STRING, string_type, string);
+  sprintf (buffer, "GA%c%c%s", GNU_BUILD_ATTRIBUTE_TYPE_STRING, string_type_char, string);
 
   /* Be kind to readers of the assembler source, and do
      not put control characters into ascii strings.  */
-  annobin_output_static_note (buffer, len + 5, ISPRINT (string_type), name_description,
-			      start, end, note_type, sec_name);
-
+  annobin_output_note (buffer, len, ISPRINT (string_type_char),
+		       name_description, is_open, info);
   free (buffer);
 }
 
@@ -575,10 +480,8 @@ void
 annobin_output_numeric_note (const char     numeric_type,
 			     unsigned long  value,
 			     const char *   name_description,
-			     const char *   start,
-			     const char *   end,
-			     unsigned       note_type,
-			     const char *   sec_name)
+			     bool           is_open,
+			     annobin_function_info * info)
 {
   unsigned i;
   char buffer [32];
@@ -614,8 +517,8 @@ annobin_output_numeric_note (const char     numeric_type,
   if (value)
     ice ("Unable to record numeric value");
 
-  annobin_output_static_note (buffer, i + 1, false, name_description,
-			      start, end, note_type, sec_name);
+  annobin_output_note (buffer, i + 1, false, /* The name is not ASCII */
+		       name_description, is_open, info);
 }
 
 /* Returns the value of gcc command line option CL_OPTION_INDEX.
@@ -966,11 +869,8 @@ compute_GOWall_options (void)
 
 static void
 record_GOW_settings (unsigned int gow,
-		     bool local,
-		     const char * cname,
-		     const char * aname,
-		     const char * aname_end,
-		     const char * sec_name)
+		     bool         is_open,
+		     annobin_function_info * info)
 {
   char buffer [128];
   unsigned i;
@@ -979,7 +879,7 @@ record_GOW_settings (unsigned int gow,
 		  (gow >> 4) & 3,
 		  (gow >> 9) & 3,
 		  gow & (3 << 14) ? "enabled" : "disabled",
-		  local ? cname : "<global>");
+		  is_open ? "<global>" : info->func_name);
   
   (void) sprintf (buffer, "GA%cGOW", NUMERIC);
 
@@ -994,30 +894,26 @@ record_GOW_settings (unsigned int gow,
       gow >>= 8;
     }
 
-  if (local)
-    annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			 DESC_PARAMETERS (aname, aname_end), true, FUNC, sec_name);
-  else
-    annobin_output_note (buffer, i + 1, false, "numeric: -g/-O/-Wall",
-			 NULL, NULL, 0, false, OPEN, sec_name);
+  annobin_output_note (buffer, i + 1, false, /* The name is not ASCII */
+		       "numeric: -g/-O/-Wall", is_open, info);
 }
 
 #ifdef flag_stack_clash_protection
 static void
-record_stack_clash_note (const char * start, const char * end, int type, const char * sec_name)
+record_stack_clash_note (bool is_open, annobin_function_info * info)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cstack_clash",
 			  annobin_get_gcc_int_option (OPT_fstack_clash_protection) ? BOOL_T : BOOL_F);
 
-  annobin_output_static_note (buffer, len + 1, true, "bool: -fstack-clash-protection status",
-			      start, end, type, sec_name);
+  annobin_output_note (buffer, len + 1, true, /* The name is ASCII.  */
+		       "bool: -fstack-clash-protection status", is_open, info);
 }
 #endif
 
 #ifdef flag_cf_protection
 static void
-record_cf_protection_note (const char * start, const char * end, int type, const char * sec_name)
+record_cf_protection_note (bool is_open, annobin_function_info * info)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%ccf_protection", NUMERIC);
@@ -1026,26 +922,23 @@ record_cf_protection_note (const char * start, const char * end, int type, const
   buffer[++len] = annobin_get_gcc_int_option (OPT_fcf_protection_) + 1;
   buffer[++len] = 0;
 
-  annobin_output_static_note (buffer, len + 1, false, "numeric: -fcf-protection status",
-			      start, end, type, sec_name);
+  annobin_output_note (buffer, len + 1, false, /* The name is not ASCII.  */
+		       "numeric: -fcf-protection status", is_open, info);
 }
 #endif
 
 static void
-record_frame_pointer_note (const char * start, const char * end, int type, const char * sec_name)
+record_frame_pointer_note (bool is_open, annobin_function_info * info)
 {
   char buffer [128];
   unsigned len;
   int val = annobin_get_gcc_int_option (OPT_fomit_frame_pointer);
 
-  if (val)
-    len = sprintf (buffer, "GA%comit_frame_pointer", BOOL_T);
-  else
-    len = sprintf (buffer, "GA%comit_frame_pointer", BOOL_F);
+  len = sprintf (buffer, "GA%comit_frame_pointer", val ? BOOL_T : BOOL_F);
 
   annobin_inform (INFORM_VERBOSE, "Record omit-frame-pointer status of %d", val);
-  annobin_output_static_note (buffer, len + 1, true, "bool: -fomit-frame-pointer status",
-			      start, end, type, sec_name);
+  annobin_output_note (buffer, len + 1, true, /* The name is ASCII.  */
+		       "bool: -fomit-frame-pointer status", is_open, info);
 }
 
 static const char *
@@ -1077,50 +970,33 @@ function_asm_name (void)
 }
 
 static void
-record_fortify_level (int level, int type, const char * sec)
+record_fortify_level (int level, bool is_open, annobin_function_info * info)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cFORTIFY", NUMERIC);
 
   buffer[++len] = level;
   buffer[++len] = 0;
-  annobin_output_note (buffer, len + 1, false, "_FORTIFY SOURCE level",
-		       NULL, NULL, 0, false, type, sec);
+  annobin_output_note (buffer, len + 1, false /* Name is not ASCII.  */,
+		       "_FORTIFY SOURCE level", is_open, info);
   annobin_inform (INFORM_VERBOSE, "Record _FORTIFY SOURCE level of %d", level);
 }
 
 static void
-record_glibcxx_assertions (signed int on, int type, const char * sec)
+record_glibcxx_assertions (signed int on, bool is_open, annobin_function_info * info)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cGLIBCXX_ASSERTIONS", on > 0 ? BOOL_T : BOOL_F);
 
-  annobin_output_note (buffer, len + 1, false,
+  annobin_output_note (buffer, len + 1, false /* Name is not ASCII.  */,
 		       on > 0 ? "_GLIBCXX_ASSERTIONS defined"
 		       : on < 0 ? "_GLIBCXX_ASSERTIONS not seen"
 		       : "_GLIBCXX_ASSERTIONS not defined",
-		       NULL, NULL, 0, false, type, sec);
+		       is_open, info);
   annobin_inform (INFORM_VERBOSE, "Record _GLIBCXX_ASSERTIONS as %s", on > 0 ? "defined" : "not defined");
 }
 
-/* This structure provides various names associated with the current
-   function.  The fields are computed in annobin_create_function_notes
-   and consumed in various places.  */
-typedef struct annobin_current_function
-{
-  const char * func_name;
-  const char * asm_name;
-  const char * section_name;
-  const char * group_name;
-  bool         comdat;
-  const char * attribute_section_string;
-  const char * start_sym;
-  const char * end_sym;
-  const char * unlikely_section_name;
-  const char * unlikely_end_sym;
-} annobin_current_function;
-
-static annobin_current_function current_func;
+static annobin_function_info current_func;
 
 static void
 clear_current_func (void)
@@ -1129,7 +1005,7 @@ clear_current_func (void)
   free ((void *) current_func.asm_name);
   free ((void *) current_func.section_name);
   free ((void *) current_func.group_name);
-  free ((void *) current_func.attribute_section_string);
+  free ((void *) current_func.note_section_declaration);
   free ((void *) current_func.start_sym);
   free ((void *) current_func.end_sym);
   free ((void *) current_func.unlikely_section_name);
@@ -1141,35 +1017,26 @@ clear_current_func (void)
 static void
 annobin_emit_function_notes (bool force)
 {
-  const char *  start_sym = current_func.start_sym;
-  const char *  end_sym   = current_func.end_sym;
-  const char *  sec_name  = current_func.attribute_section_string;
-  const char *  func_name = current_func.func_name;
+  /* Make a copy of the current function info, so that we can override the symbols.  */
+  annobin_function_info local_info = current_func;
   
-  unsigned int  count     = annobin_note_count;
+  annobin_target_specific_function_notes (& local_info, force);
 
-  annobin_target_specific_function_notes (start_sym, end_sym, sec_name, force);
+  int current_val;
 
-  /* If one or more notes were generated by the target specific function
-     then we no longer need to include the start/end symbols in any
-     futher notes that we gebenerate.  */
-  if (annobin_note_count > count)
-    start_sym = end_sym = NULL;
-
-  int current_val = annobin_get_gcc_int_option (OPT_fstack_protector);
+  current_val = annobin_get_gcc_int_option (OPT_fstack_protector);
   if (current_val != -1
       && (force || global_stack_prot_option != current_val))
     {
       annobin_inform (INFORM_VERBOSE, "Recording stack protection status of %d for %s",
-		      current_val, func_name);
+		      current_val, local_info.func_name);
 
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
-				   current_val,
+      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, current_val,
 				   "numeric: -fstack-protector status",
-				   start_sym, end_sym, FUNC, sec_name);
+				   false /* not OPEN.  */, & local_info);
 
       /* We no longer need to include the symbols in the notes we generate.  */
-      start_sym = end_sym = NULL;
+      local_info.start_sym = local_info.end_sym = NULL;
     }
 
 #ifdef flag_stack_clash_protection
@@ -1177,10 +1044,10 @@ annobin_emit_function_notes (bool force)
   if (force || global_stack_clash_option != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording stack clash protection status of %d for %s",
-		      current_val, func_name);
+		      current_val, local_info.func_name);
 
-      record_stack_clash_note (start_sym, end_sym, FUNC, sec_name);
-      start_sym = end_sym = NULL;
+      record_stack_clash_note (false /* not OPEN.  */, & local_info);
+      local_info.start_sym = local_info.end_sym = NULL;
     }
 #endif
 
@@ -1189,10 +1056,10 @@ annobin_emit_function_notes (bool force)
   if (force || global_cf_option != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording control flow protection status of %d for %s",
-		      current_val, func_name);
+		      current_val, local_info.func_name);
 
-      record_cf_protection_note (start_sym, end_sym, FUNC, sec_name);
-      start_sym = end_sym = NULL;
+      record_cf_protection_note (false /* not OPEN.  */, & local_info);
+      local_info.start_sym = local_info.end_sym = NULL;
     }
 #endif
 
@@ -1200,40 +1067,39 @@ annobin_emit_function_notes (bool force)
   if (force || global_omit_frame_pointer != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording omit_frame_pointer status of %d for %s",
-		      current_val, func_name);
+		      current_val, local_info.func_name);
 
-      record_frame_pointer_note (start_sym, end_sym, FUNC, sec_name);
-      start_sym = end_sym = NULL;
+      record_frame_pointer_note (false /* not OPEN.  */, & local_info);
+      local_info.start_sym = local_info.end_sym = NULL;
     }
 
   current_val = compute_pic_option ();
   if (force || global_pic_option != current_val)
     {
-      annobin_inform (INFORM_VERBOSE, "Recording PIC status of %s", func_name);
+      annobin_inform (INFORM_VERBOSE, "Recording PIC status of %s", local_info.func_name);
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, current_val,
-				   "numeric: pic type", start_sym, end_sym,
-				   FUNC, sec_name);
-      start_sym = end_sym = NULL;
+				   "numeric: pic type", false /* not OPEN.  */, & local_info);
+      local_info.start_sym = local_info.end_sym = NULL;
     }
 
   current_val = compute_GOWall_options ();
   if (force || global_GOWall_options != (unsigned) current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording debug/optimize/warning value of %x for %s",
-		      current_val, func_name);
-      record_GOW_settings (current_val, true, func_name, start_sym, end_sym, sec_name);
-      start_sym = end_sym = NULL;
+		      current_val, local_info.func_name);
+      record_GOW_settings (current_val, false /* This is a FUNC note.  */, & local_info);
+      local_info.start_sym = local_info.end_sym = NULL;
     }
 
   current_val = annobin_get_gcc_int_option (OPT_fshort_enums);
   if (current_val != -1
       && (force || global_short_enums != current_val))
     {
-      annobin_inform (INFORM_VERBOSE, "Recording short enums in use in %s", func_name);
+      annobin_inform (INFORM_VERBOSE, "Recording short enums in use in %s", local_info.func_name);
       annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, current_val,
 				current_val ? "bool: short-enums: on" : "bool: short-enums: off",
-				start_sym, end_sym, FUNC, sec_name);
-      start_sym = end_sym = NULL;
+				false /* not OPEN.  */, & local_info);
+      local_info.start_sym = local_info.end_sym = NULL;
     }
 
   current_val = annobin_get_gcc_int_option (OPT_fstack_usage);
@@ -1243,13 +1109,14 @@ annobin_emit_function_notes (bool force)
 	{
 	  annobin_inform (INFORM_VERBOSE, "Recording stack usage of %lu for %s",
 			  (unsigned long) current_function_static_stack_size,
-			  func_name);
+			  local_info.func_name);
 
 	  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE,
 				       current_function_static_stack_size,
 				       "numeric: stack-size",
-				       start_sym, end_sym, FUNC, sec_name);
-	  start_sym = end_sym = NULL;
+				       false /* not OPEN.  */,
+				       & local_info);
+	  local_info.start_sym = local_info.end_sym = NULL;
 	}
 
       annobin_total_static_stack_usage += current_function_static_stack_size;
@@ -1260,8 +1127,9 @@ annobin_emit_function_notes (bool force)
 
   /* Always record the fortify and assertion levels as we cannot be
      sure that the global values have been recorded.  cf BZ 1703500.  */
-  record_fortify_level (global_fortify_level, FUNC, sec_name);
-  record_glibcxx_assertions (global_glibcxx_assertions, FUNC, sec_name);
+  record_fortify_level (global_fortify_level, false /* not OPEN.  */,
+			& local_info);
+  record_glibcxx_assertions (global_glibcxx_assertions, false /* Not OPEN.  */, & local_info);
 }
 
 static const char *
@@ -1312,7 +1180,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   unsigned int  count;
   bool          force;
 
-  if (! annobin_enable_static_notes || asm_out_file == NULL)
+  if (asm_out_file == NULL)
     return;
 
   if (current_func.func_name != NULL)
@@ -1437,31 +1305,87 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   if (force)
     {
       if (current_func.comdat)
-	current_func.group_name = concat (IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)), NULL);
-      else
-	current_func.group_name = concat (current_func.section_name, ANNOBIN_GROUP_NAME, NULL);
+	{
+	  current_func.group_name = concat (IDENTIFIER_POINTER (DECL_COMDAT_GROUP (current_function_decl)), NULL);
 
-      /* Include a group name in our attribute section name.  */
-      current_func.attribute_section_string = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
-						      ", \"G\", %note, ",
-						      current_func.group_name,
-						      current_func.comdat ? ", comdat" : "",
-						      NULL);
+	  /* Include a group name in our attribute section name.  */
+	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
+							  ", \"G\", %note, ",
+							  current_func.group_name,
+							  ", comdat",
+							  NULL);
+	}
+      /* Check for linkonce sections.  These cannot be put into a group as it breaks the
+	 linkonce semantics.  Plus we have to put the notes into linkonce sections as well.  */
+      else if (strncmp (current_func.section_name, LINKONCE_SEC_PREFIX,
+		       strlen (LINKONCE_SEC_PREFIX)) == 0)
+	{
+	  current_func.group_name = NULL;
+	  current_func.note_section_declaration = concat (LINKONCE_SEC_PREFIX,
+							  GNU_BUILD_ATTRS_SECTION_NAME,
+							  current_func.section_name,
+							  ", \"\", %note", NULL);
+	}
+      else if (annobin_attach_type == group)
+	{
+	  current_func.group_name = concat (current_func.section_name, ANNOBIN_GROUP_NAME, NULL);
+	  /* Include a group name in our attribute section name.  */
+	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
+							  ", \"G\", %note, ",
+							  current_func.group_name,
+							  NULL);
+	}
+      else if (annobin_attach_type == link_order)
+	{
+	  current_func.group_name = NULL;
+	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
+							  ", \"o\", %note, ",
+							  current_func.section_name,
+							  NULL);
+	}
+      else
+	{
+	  current_func.group_name = NULL;
+	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
+							  ", \"\", %note", NULL);
+	}
     }
  else
    {
      if (current_func.comdat)
        ice ("current function is comdat but has no function section");
 
-     current_func.group_name = NULL;
-     current_func.attribute_section_string = concat (GNU_BUILD_ATTRS_SECTION_NAME, NULL);
+     if (current_func.note_section_declaration == NULL)
+       {
+	 switch (annobin_attach_type)
+	   {
+	   case none:
+	     current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
+							     ", \"\", %note",
+							     NULL);
+	     break;
+	   case group:
+	     current_func.group_name = concat (CODE_SECTION, ANNOBIN_GROUP_NAME, NULL);
+	     current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
+						     ", \"G\", %note, ",
+						     current_func.group_name,
+						     NULL);
+	     break;
+	   case link_order:
+	     current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
+							     ", \"o\", %note, "
+							     CODE_SECTION,	
+							     NULL);
+	     break;
+	   }
+       }
    }
 
   /* We use our own function start and end symbols so that they will
      not interfere with the program proper.  In particular if we use
      the function name symbol ourselves then we can cause problems
      when the linker attempts to resolve relocs against it and finds
-     that it has both PC relative and abolsute relocs.
+     that it has both PC relative and absolute relocs.
 
      We try our best to ensure that the new symbols will not clash
      with any other symbols in the program.  */
@@ -1508,12 +1432,12 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
     {
       const char * saved_end_sym;
 
-      /* If there is a possibility that GCC might generate an cold section
+      /* If there is a possibility that GCC might generate a cold section
 	 variant of the current function section, then we need to annotate
 	 that as well.  */
-      
+
       current_func.start_sym = concat (ANNOBIN_SYMBOL_PREFIX, current_func.asm_name, ".start", COLD_SECTION, NULL);
-      current_func.unlikely_end_sym   = concat (ANNOBIN_SYMBOL_PREFIX, current_func.asm_name, ".end", COLD_SECTION, NULL);
+      current_func.unlikely_end_sym = concat (ANNOBIN_SYMBOL_PREFIX, current_func.asm_name, ".end", COLD_SECTION, NULL);
 
       saved_end_sym = current_func.end_sym;
       current_func.end_sym = current_func.unlikely_end_sym;
@@ -1544,7 +1468,7 @@ queue_attachment (const char * section_name, const char * group_name)
   attach_item * item = (attach_item *) xmalloc (sizeof * item);
 
   item->section_name = concat (section_name, NULL);
- item->group_name = concat (group_name, NULL);
+  item->group_name = concat (group_name, NULL);
   item->next = attach_list;
   attach_list = item;
 }
@@ -1552,7 +1476,7 @@ queue_attachment (const char * section_name, const char * group_name)
 static void
 emit_queued_attachments (void)
 {
-  if (!annobin_enable_attach)
+  if (annobin_attach_type != group)
     return;
 
   attach_item * item;
@@ -1561,13 +1485,16 @@ emit_queued_attachments (void)
     {
       const char * name = item->section_name;
 
-      fprintf (asm_out_file, "\t.pushsection %s\n", name);
-      fprintf (asm_out_file, "\t.attach_to_group %s", item->group_name);
-      if (annobin_get_gcc_int_option (OPT_fverbose_asm))
-	fprintf (asm_out_file, " %s Add the %s section to the %s group",
-		 ASM_COMMENT_START, name, item->group_name);
-      fprintf (asm_out_file, "\n");
-      fprintf (asm_out_file, "\t.popsection\n");
+      if (item->group_name != NULL && item->group_name[0] != 0)
+	{
+	  fprintf (asm_out_file, "\t.pushsection %s\n", name);
+	  fprintf (asm_out_file, "\t.attach_to_group %s", item->group_name);
+	  if (annobin_get_gcc_int_option (OPT_fverbose_asm))
+	    fprintf (asm_out_file, " %s Add the %s section to the %s group",
+		     ASM_COMMENT_START, name, item->group_name);
+	  fprintf (asm_out_file, "\n");
+	  fprintf (asm_out_file, "\t.popsection\n");
+	}
 
       // FIXME: BZ 1684148: These free()s are triggering "attempt to free unallocated
       // memory" errors from the address sanitizer.  I have no idea why, as they were
@@ -1586,7 +1513,7 @@ emit_queued_attachments (void)
 static void
 annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 {
-  if (! annobin_enable_static_notes || asm_out_file == NULL)
+  if (asm_out_file == NULL)
     return;
 
   if (current_func.end_sym == NULL)
@@ -1607,8 +1534,8 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
       if (current_func.unlikely_section_name)
 	{
 	  /* Emit the end symbol in the unlikely section.
-	     Note - we attempt to create a new section that will be appended to the
-	     end of the sections that are going into the section group.  */
+	     Note - we attempt to create a new section that will be appended to
+	     the end of the sections that are going into the section group.  */
 	  fprintf (asm_out_file, "\t.pushsection %s.zzz, \"ax\", %%progbits\n",
 		   current_func.unlikely_section_name);
 	  annobin_emit_symbol (current_func.unlikely_end_sym);
@@ -1616,60 +1543,61 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 
 	  /* Make sure that the unlikely section will be added into the
 	     current function's group.  */
-	  if (annobin_enable_attach)
-	    queue_attachment (current_func.unlikely_section_name,
-			      current_func.group_name);
+	  queue_attachment (current_func.unlikely_section_name,
+			    current_func.group_name);
 	}
 
       fprintf (asm_out_file, "\t.pushsection %s\n", current_func.section_name);
 
-      /* We have a problem.  We want to create a section group containing
-	 the function section, the note section and the relocations.  But
-	 we cannot just emit:
+      if (annobin_attach_type == group)
+	{
+	  /* We have a problem.  We want to create a section group containing
+	     the function section, the note section and the relocations.  But
+	     we cannot just emit:
 
-	 .section .text.foo, "axG", %%progbits, foo.group
+	     .section .text.foo, "axG", %%progbits, foo.group
 
-	 because GCC will emit its own section definition, which does not
-	 attach to a group:
+	     because GCC will emit its own section definition, which does not
+	     attach to a group:
 
-	 .section .text.foo, "ax", %%progbits
+	     .section .text.foo, "ax", %%progbits
 
-	 This will create a *second* section called .text.foo, which is
-	 *not* in the group.  The notes generated by annobin will be
-	 attached to the group, but the code generated by gcc will not.
+	     This will create a *second* section called .text.foo, which is
+	     *not* in the group.  The notes generated by annobin will be
+	     attached to the group, but the code generated by gcc will not.
 
-	 We cannot create a reference from the non-group'ed section
-	 to the group'ed section as this will create a DT_TEXTREL entry
-	 (ie dynamic text relocation) which is not allowed.
+	     We cannot create a reference from the non-group'ed section
+	     to the group'ed section as this will create a DT_TEXTREL entry
+	     (ie dynamic text relocation) which is not allowed.
 
-	 We cannot access GCC's section structure and set the
-	 SECTION_DECLARED flag as the hash tab holding the structures is
-	 private to the varasm.c file.
+	     We cannot access GCC's section structure and set the
+	     SECTION_DECLARED flag as the hash tab holding the structures is
+	     private to the varasm.c file.
 
-	 We cannot intercept the asm_named_section() function in GCC as
-	 this is defined by the TARGET_ASM_NAMED_SECTION macro, rather
-	 than being defined in the target structure.
+	     We cannot intercept the asm_named_section() function in GCC as
+	     this is defined by the TARGET_ASM_NAMED_SECTION macro, rather
+	     than being defined in the target structure.
 
-	 If we omit the section group then the notes will work for
-	 retained sections, but they will not be removed for any garbage
-	 collected code.  So then you will have notes covering address
-	 ranges that are probably used for something else.
+	     If we omit the section group then the notes will work for
+	     retained sections, but they will not be removed for any garbage
+	     collected code.  So then you will have notes covering address
+	     ranges that are probably used for something else.
 
-	 The solution for now is to attach GCC's .text.foo section to the
-	 group created for annobin's .text.foo section by using a new
-	 assembler pseudo-op.  This can be disabled to allow the plugin
-	 to work with older assemblers, although it does mean that notes
-	 for function sections will be discarded by the linker.
+	     The solution for now is to attach GCC's .text.foo section to the
+	     group created for annobin's .text.foo section by using a new
+	     assembler pseudo-op.  This can be disabled to allow the plugin
+	     to work with older assemblers, although it does mean that notes
+	     for function sections will be discarded by the linker.
 
-	 Note - we do not have to do this for COMDAT sections as they are
-	 already part of a section group, and gcc always includes the group
-	 name in its .section directives.
+	     Note - we do not have to do this for COMDAT sections as they are
+	     already part of a section group, and gcc always includes the group
+	     name in its .section directives.
 
-	 Note - we do not emit these attach directives here as function
-	 sections can be reused.  So instead we accumulate them and issue
-	 them all at the end of compilation.  */
-      if (annobin_enable_attach)
-	queue_attachment (current_func.section_name, current_func.group_name);
+	     Note - we do not emit these attach directives here as function
+	     sections can be reused.  So instead we accumulate them and issue
+	     them all at the end of compilation.  */
+	  queue_attachment (current_func.section_name, current_func.group_name);
+	}
     }
 
   annobin_inform (INFORM_VERBOSE, "Function '%s' is assumed to end in section '%s'",
@@ -1688,7 +1616,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 {
   if (* suffix)
     {
-      if (annobin_enable_attach)
+      if (annobin_attach_type == group)
 	/* We put suffixed text sections into a group so that the linker
 	   can delete the notes if the code is discarded.  */
 	fprintf (asm_out_file, "\t.pushsection %s%s, \"axG\", %%progbits, %s%s%s\n",
@@ -1699,7 +1627,8 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 		 CODE_SECTION, suffix);
     }
   else
-    fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
+    fprintf (asm_out_file, "\t.pushsection %s, \"ax\", %%progbits\n",
+	     CODE_SECTION);
 
   fprintf (asm_out_file, "\t%s %s%s\n", global_file_name_symbols ? ".global" : ".hidden",
 	   annobin_output_filesym, suffix);
@@ -1736,81 +1665,133 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 
   fprintf (asm_out_file, "\t.popsection\n");
 
-  const char * start = concat (annobin_output_filesym, suffix, NULL);
-  const char * end = concat (annobin_current_endname, suffix, NULL);
-  const char * sec;
+  annobin_function_info info;
+  memset (& info, 0, sizeof info);
+  info.start_sym = concat (annobin_output_filesym, suffix, NULL);
+  info.end_sym  = concat (annobin_current_endname, suffix, NULL);
 
-  if (* suffix)
-    sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix,
-		  ", \"G\", %note, " CODE_SECTION, suffix, ANNOBIN_GROUP_NAME, NULL);
-  else
-    sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix, NULL);
+  switch (annobin_attach_type)
+    {
+    case none:
+      info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
+					      ", \"\", %note",
+					      NULL);
+      break;
+    case group:
+      info.group_name = concat (CODE_SECTION, suffix, ANNOBIN_GROUP_NAME, NULL);
+      info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
+					      * suffix ? suffix : "",
+					      ", \"G\", %note, ",
+					      info.group_name,
+					      NULL);
+      break;
+    case link_order:
+      info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
+					      * suffix ? suffix : "",
+					      ", \"o\", %note, "
+					      CODE_SECTION,	
+					      suffix,
+					      NULL);
+      break;
+    }
 
   char buffer [124];
 
   sprintf (buffer, "%d%c%d", SPEC_VERSION, producer_char, annobin_version);
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_VERSION, buffer,
-			      "string: version", start, end, OPEN, sec);
+			      "string: protocol version", true /* Is OPEN.  */,
+			      & info);
 
-  free ((void *) sec);
-  free ((void *) end);
-  free ((void *) start);
+  free ((void *) info.group_name);
+  free ((void *) info.note_section_declaration);
+  free ((void *) info.end_sym);
+  free ((void *) info.start_sym);
 }
 
 static void
 emit_global_notes (const char * suffix)
 {
-  const char * sec = concat (GNU_BUILD_ATTRS_SECTION_NAME, suffix, NULL);
+  annobin_function_info info;
+  memset (& info, 0, sizeof info);
 
-  annobin_inform (INFORM_VERBOSE, "Emit global notes for section .text%s", suffix);
+  switch (annobin_attach_type)
+    {
+    case none:
+      info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
+					      ", \"\", %note",
+					      NULL);
+      break;
+    case group:
+      info.group_name = concat (CODE_SECTION, suffix, ANNOBIN_GROUP_NAME, NULL);
+      info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
+					      * suffix ? suffix : "",
+					      ", \"G\", %note, ",
+					      info.group_name,
+					      NULL);
+      break;
+    case link_order:
+      info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
+					      * suffix ? suffix : "",
+					      ", \"o\", %note, "
+					      CODE_SECTION,	
+					      suffix,
+					      NULL);
+      break;
+    }
 
-  /* Record the version of the compiler.  */
+  annobin_inform (INFORM_VERBOSE, "Emit global notes for section %s%s",
+		  CODE_SECTION, suffix);
+
+  /* Record the versions of the compiler.  */
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, run_version,
-			      "string: build-tool", NULL, NULL, OPEN, sec);
+			      "string: build-tool", true /* An OPEN note.  */,
+			      & info);
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, build_version,
-			      "string: build-tool", NULL, NULL, OPEN, sec);
+			      "string: build-tool", true /* An OPEN note.  */,
+			      & info);
 
   /* Record optimization level, -W setting and -g setting  */
-  record_GOW_settings (global_GOWall_options, false, NULL, NULL, NULL, sec);
+  record_GOW_settings (global_GOWall_options, true /* This is an OPEN note.  */,
+		       & info);
 
   /* Record -fstack-protector option.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
 			       /* See BZ 1563141 for an example where global_stack_protection can be -1.  */
 			       global_stack_prot_option >= 0 ? global_stack_prot_option : 0,
 			       "numeric: -fstack-protector status",
-			       NULL, NULL, OPEN, sec);
+			       true /* An OPEN note.  */, & info);
   annobin_inform (INFORM_VERBOSE, "Record global stack protector setting of %d",
 		  global_stack_prot_option >= 0 ? global_stack_prot_option : 0);
 
 #ifdef flag_stack_clash_protection
   /* Record -fstack-clash-protection option.  */
-  record_stack_clash_note (NULL, NULL, OPEN, sec);
+  record_stack_clash_note (true /* An OPEN note.  */, & info);
   annobin_inform (INFORM_VERBOSE, "Record global stack clash protection setting of %d",
 		  annobin_get_gcc_int_option (OPT_fstack_clash_protection));
 #endif
 
 #ifdef flag_cf_protection
   /* Record -fcf-protection option.  */
-  record_cf_protection_note (NULL, NULL, OPEN, sec);
+  record_cf_protection_note (true /* An OPEN note.  */, & info);
   annobin_inform (INFORM_VERBOSE, "Record global cf protection setting of %d",
 		  annobin_get_gcc_int_option (OPT_fcf_protection_));
 #endif
 
-  record_fortify_level (global_fortify_level, OPEN, sec);
-  record_glibcxx_assertions (global_glibcxx_assertions, OPEN, sec);
+  record_fortify_level (global_fortify_level, true /* An OPEN note.  */, & info);
+  record_glibcxx_assertions (global_glibcxx_assertions, true /* An OPEN note.  */, & info);
 
   /* Record the PIC status.  */
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_PIC, global_pic_option,
-			       "numeric: PIC", NULL, NULL, OPEN, sec);
+			       "numeric: PIC", true /* An OPEN note.  */, & info);
   annobin_inform (INFORM_VERBOSE, "Record global PIC setting of %d", global_pic_option);
 
   /* Record enum size.  */
   annobin_output_bool_note (GNU_BUILD_ATTRIBUTE_SHORT_ENUM, global_short_enums != 0,
 			    global_short_enums != 0 ? "bool: short-enums: on" : "bool: short-enums: off",
-			    NULL, NULL, OPEN, sec);
+			    true /* An OPEN note.  */, & info);
   annobin_inform (INFORM_VERBOSE, "Record global SHORT ENUM setting of %d", global_short_enums);
 
-  record_frame_pointer_note (NULL, NULL, OPEN, sec);
+  record_frame_pointer_note (true /* An OPEN note.  */, & info);
 
   /* Building code with profiling, instrumentation or sanitization enabled
      can slow it down.  (cf PR 1753918).  Whilst this may be desireable
@@ -1852,14 +1833,16 @@ emit_global_notes (const char * suffix)
 		      annobin_get_gcc_int_option (OPT_fprofile),
 		      annobin_get_gcc_int_option (OPT_fprofile_arcs));
 
-      annobin_output_note (buffer, len + 1, true, "string: details of profiling enablement",
-			   NULL, NULL, 0, false, OPEN, sec);
+      annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
+			   "string: details of profiling enablement",
+			   true /* An OPEN note.  */, & info);
     }
 
   /* Record target specific notes.  */
-  annobin_record_global_target_notes (sec);
+  annobin_record_global_target_notes (& info);
 
-  free ((void *) sec);
+  free ((void *) info.group_name);
+  free ((void *) info.note_section_declaration);
 }
 
 #define FORTIFY_OPTION "_FORTIFY_SOURCE"
@@ -1935,9 +1918,6 @@ ends_with (const char * string, const char * terminator)
 static void
 annobin_create_global_notes (void * gcc_data, void * user_data)
 {
-  if (! annobin_enable_static_notes)
-    return;
-
   if (asm_out_file == NULL)
     {
       /* This happens during LTO compilation.  Compilation is triggered
@@ -2214,7 +2194,12 @@ annobin_emit_end_symbol (const char * suffix)
 {
   if (*suffix)
     {
-      fprintf (asm_out_file, "\t.pushsection %s%s\n", CODE_SECTION, suffix);
+      if (annobin_attach_type == group)
+	fprintf (asm_out_file, "\t.pushsection %s%s, \"axG\", %%progbits, %s%s%s\n",
+		 CODE_SECTION, suffix,
+		 CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
+      else
+	fprintf (asm_out_file, "\t.pushsection %s%s, \"ax\", %%progbits\n", CODE_SECTION, suffix);
 
       /* We want the end symbol to appear at the end of the section.
 	 But if we are creating a symbol for the hot or cold sections
@@ -2229,15 +2214,19 @@ annobin_emit_end_symbol (const char * suffix)
 	 in the same section.  Fortunately it appears that gcc does not
 	 perform hot/cold partitioning for the PPC64, and this is the
 	 only target that uses symbol biasing.  */
-      const char * extra_suffix = target_start_sym_bias ? "" : ".zzz";
-	
-      if (annobin_enable_attach)
-	/* Since we have issued the .attach, make sure that we include the group here.  */
-	fprintf (asm_out_file, "\t.section %s%s%s, \"axG\", %%progbits, %s%s%s\n",
-		 CODE_SECTION, suffix, extra_suffix,
-		 CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
-      else
-	fprintf (asm_out_file, "\t.section %s%s%s\n", CODE_SECTION, suffix, extra_suffix);
+      if (target_start_sym_bias == 0)
+	{
+	  const char * extra_suffix = ".zzz";
+
+	  if (annobin_attach_type == group)
+	    /* Since we have issued the .attach, make sure that we include the group here.  */
+	    fprintf (asm_out_file, "\t.section %s%s%s, \"axG\", %%progbits, %s%s%s\n",
+		     CODE_SECTION, suffix, extra_suffix,
+		     CODE_SECTION, suffix, ANNOBIN_GROUP_NAME);
+	  else
+	    fprintf (asm_out_file, "\t.section %s%s%s, \"ax\", %%progbits\n",
+		     CODE_SECTION, suffix, extra_suffix);
+	}
     }
   else
     fprintf (asm_out_file, "\t.pushsection %s\n", CODE_SECTION);
@@ -2272,39 +2261,22 @@ annobin_emit_end_symbol (const char * suffix)
 }
 
 static void
-annobin_create_loader_notes (void * gcc_data, void * user_data)
+annobin_finish_unit (void * gcc_data, void * user_data)
 {
   if (asm_out_file == NULL)
     return;
 
-  if (annobin_enable_static_notes)
-    {
-      /* It is possible that there is no code in the .text section.
-	 Eg because the compilation was run with the -ffunction-sections option.
-	 Nevertheless we generate this symbol because it is needed by the
-	 version note that was generated in annobin_create_global_notes().  */
-      if (annobin_enable_attach)
-	emit_queued_attachments ();
+  /* It is possible that there is no code in the .text section.
+     Eg because the compilation was run with the -ffunction-sections option.
+     Nevertheless we generate this symbol because it is needed by the
+     version note that was generated in annobin_create_global_notes().  */
+  emit_queued_attachments ();
 
-      annobin_emit_end_symbol ("");
-      annobin_emit_end_symbol (HOT_SUFFIX);
-      annobin_emit_end_symbol (COLD_SUFFIX);
-      annobin_emit_end_symbol (STARTUP_SUFFIX);
-      annobin_emit_end_symbol (EXIT_SUFFIX);
-    }
-
-  if (! annobin_enable_dynamic_notes)
-    return;
-
-  if (annobin_enable_stack_size_notes && annobin_total_static_stack_usage)
-    {
-      annobin_inform (INFORM_VERBOSE, "Recording total static usage of %ld", annobin_total_static_stack_usage);
-
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_SIZE, annobin_total_static_stack_usage,
-				   "numeric: stack-size", NULL, NULL, OPEN, GNU_BUILD_ATTRS_SECTION_NAME);
-    }
-
-  annobin_target_specific_loader_notes ();
+  annobin_emit_end_symbol ("");
+  annobin_emit_end_symbol (HOT_SUFFIX);
+  annobin_emit_end_symbol (COLD_SUFFIX);
+  annobin_emit_end_symbol (STARTUP_SUFFIX);
+  annobin_emit_end_symbol (EXIT_SUFFIX);
 }
 
 static void
@@ -2360,19 +2332,23 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	annobin_enable_stack_size_notes = false;
 
       else if (streq (key, "dynamic-notes"))
-	annobin_enable_dynamic_notes = true;
+	; // Deprecated.
       else if (streq (key, "no-dynamic-notes"))
-	annobin_enable_dynamic_notes = false;
+	; // Deprecated.
 
       else if (streq (key, "static-notes"))
-	annobin_enable_static_notes = true;
+	; // Deprecated.
       else if (streq (key, "no-static-notes"))
-	annobin_enable_static_notes = false;
+	; // Deprecated.
 
       else if (streq (key, "attach"))
-	annobin_enable_attach = true;
+	annobin_attach_type = group;
       else if (streq (key, "no-attach"))
-	annobin_enable_attach = false;
+	annobin_attach_type = none;
+      else if (streq (key, "link-order"))
+	annobin_attach_type = link_order;
+      else if (streq (key, "no-link-order"))
+	annobin_attach_type = none;
 
       else if (streq (key, "active-checks"))
 	annobin_active_checks = true;
@@ -2516,12 +2492,6 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	return 1;
     }
   
-  if (! annobin_enable_dynamic_notes && ! annobin_enable_static_notes)
-    {
-      annobin_inform (INFORM_VERBOSE, _("nothing to be done"));
-      return 0;
-    }
-
   // FIXME: Should we check the location of utility flags that we also examine ?
   // Ie: flag_verbose_asm, flag_function_sections, flag_reorder_functions,
   // flag_profile_values, flag_sanitize, flag_instrument_functions, profile_arc,
@@ -2563,7 +2533,7 @@ plugin_init (struct plugin_name_args *    plugin_info,
 
   register_callback ("annobin: Generate final annotations",
 		     PLUGIN_FINISH_UNIT,
-		     annobin_create_loader_notes,
+		     annobin_finish_unit,
 		     NULL);
   return 0;
 }

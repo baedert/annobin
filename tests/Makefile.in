@@ -476,8 +476,8 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 TESTS = compile-test hardening-test hardening-fail-test \
 	missing-notes-test active-checks-test abi-test \
-	function-sections-test assembler-gap-test dynamic-notes-test \
-	instrumentation-test section-size-test $(am__append_1)
+	function-sections-test assembler-gap-test instrumentation-test \
+	section-size-test $(am__append_1)
 XFAIL_TESTS = hardening-fail-test \
       missing-notes-test \
       active-checks-test \
@@ -722,13 +722,6 @@ function-sections-test.log: function-sections-test
 assembler-gap-test.log: assembler-gap-test
 	@p='assembler-gap-test'; \
 	b='assembler-gap-test'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-dynamic-notes-test.log: dynamic-notes-test
-	@p='dynamic-notes-test'; \
-	b='dynamic-notes-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

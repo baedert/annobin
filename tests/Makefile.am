@@ -14,7 +14,6 @@ TESTS=compile-test \
       abi-test \
       function-sections-test \
       assembler-gap-test \
-      dynamic-notes-test \
       instrumentation-test \
       section-size-test
 

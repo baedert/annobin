@@ -150,16 +150,6 @@ accept all of these options.  The options are:
      that the named function was compiled with different options from
      those that were globally enabled.
 
-'no-dynamic-notes'
-'dynamic-notes'
-     Do not, or do, record information for the dynamic loader.  The
-     default is to record this information.
-
-'no-static-notes'
-'static-notes'
-     Do not, or do, record information for static analysis.  The default
-     is to record this information.
-
 'stack-size-notes'
 'no-stack-size-notes'
      Do, or do not, record information about the stack requirements of
@@ -198,9 +188,22 @@ accept all of these options.  The options are:
      the function, it will also know that it should discard the notes
      and relocations as well.
 
-     The default is to enable 'attach', but the inverse option is
-     available in case the host assembler does not support the
-     '.attach_to_group' pseudo-op.  If this feature is disabled then
+     The default is 'no-attach' since 'link-order' is used instead.  But
+     if both 'attach' and 'link-order' are disabled then note generation
+     for function sections will not work properly.
+
+'link-order'
+'no-link-order'
+     As an alternative to using section groups and a special assembler
+     directive the plugin can use a feature of the ELF 'SHF_LINK_ORDER'
+     flag which tells the linker that it should discard a section if the
+     section it is linked to is also being discarded.  This behaviour is
+     enabled by the 'link-order' option.
+
+     The default is to enable 'link-order', but it can be disabled via
+     the 'no-link-order' option.  This may be necessary if the assembler
+     does not support setting the section link ordering flag.  Note
+     however that if both 'attach' and 'link-order' are disabled then
      note generation for function sections will not work properly.
 
 'rename'
@@ -218,6 +221,12 @@ accept all of these options.  The options are:
 
      Note - this option is currently under development, and is not yet
      fully functional.
+
+'dynamic-notes'
+'no-dynamic-notes'
+'static-notes'
+'no-static-notes'
+     These options are deprecated.
 
    The plugins record information appropriate to the compiler that is
 running them.  So the 'gcc' plugin records information about the
@@ -1856,26 +1865,26 @@ Tag Table:
 Node: Top705
 Node: Introduction1785
 Node: Plugins3895
-Node: Examining10838
-Node: The Version Encoding13567
-Node: The STACK Encoding13958
-Node: The PIC Encoding14556
-Node: The GOW Encoding15184
-Node: The CF Encoding16734
-Node: The ENUM Encoding17806
-Node: The INSTRUMENT Encoding18195
-Node: Annocheck19569
-Node: Built-By22098
-Node: Hardened23628
-Node: Notes28657
-Node: Section-Size29301
-Node: Timing31455
-Node: Configure Options32102
-Node: Legacy Scripts34329
-Node: Who Built Me35104
-Node: ABI Checking37864
-Node: Hardening Checks39978
-Node: Checking Archives44064
-Node: GNU FDL46486
+Node: Examining11293
+Node: The Version Encoding14022
+Node: The STACK Encoding14413
+Node: The PIC Encoding15011
+Node: The GOW Encoding15639
+Node: The CF Encoding17189
+Node: The ENUM Encoding18261
+Node: The INSTRUMENT Encoding18650
+Node: Annocheck20024
+Node: Built-By22553
+Node: Hardened24083
+Node: Notes29112
+Node: Section-Size29756
+Node: Timing31910
+Node: Configure Options32557
+Node: Legacy Scripts34784
+Node: Who Built Me35559
+Node: ABI Checking38319
+Node: Hardening Checks40433
+Node: Checking Archives44519
+Node: GNU FDL46941
 
 End Tag Table

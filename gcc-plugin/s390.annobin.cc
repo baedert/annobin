@@ -15,16 +15,6 @@
 #include "annobin-global.h"
 #include "annobin.h"
 
-/* The target specific part of the plugin must prodive the
-   following four functions:
-
-   annobin_save_target_specific_information - Called during plugin_init()
-   annobin_target_start_symbol_bias         - Called during plugin_init()
-   annobin_record_global_target_notes       - Called during PLUGIN_START_UNIT
-   annobin_get_target_pointer_size          - Called during PLUGIN_START_UNIT
-   annobin_target_specific_function_notes   - Called during PLUGIN_ALL_PASSES_START
-   annobin_target_specific_loader_notes     - Called during PLUGIN_FINISH_UNIT.  */
-
 signed int
 annobin_target_start_symbol_bias (void)
 {
@@ -45,16 +35,11 @@ annobin_save_target_specific_information (void)
 }
 
 void
-annobin_record_global_target_notes (const char * sec ATTRIBUTE_UNUSED)
+annobin_record_global_target_notes (annobin_function_info * info ATTRIBUTE_UNUSED)
 {
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
-{
-}
-
-void
-annobin_target_specific_loader_notes (void)
+annobin_target_specific_function_notes (annobin_function_info * info, bool force)
 {
 }

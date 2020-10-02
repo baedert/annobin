@@ -62,9 +62,9 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -ffunction-sections $srcdir
 $GCC -pie \
      -Wl,-z,now,-z,relro \
      -Wl,--gc-sections \
-     -Wl,-Map,fred.map \
- hello.o unused_code.o hello2.o -o function-sections-test.exe
+     -Wl,-Map,function-sections.map \
+ hello.o hello2.o unused_code.o -o function-sections-test.exe
 
 # FIXME - we should check that the notes were parsed correctly...
 # FIXME - we should check for gaps.
-$ANNOCHECK -v --ignore-gaps --skip-entry function-sections-test.exe
+$ANNOCHECK -v --ignore-gaps --skip-optimization --skip-entry function-sections-test.exe

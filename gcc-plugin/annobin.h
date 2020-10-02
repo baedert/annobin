@@ -50,37 +50,45 @@ extern struct plugin_gcc_version gcc_version ATTRIBUTE_UNUSED;
 #include "diagnostic-core.h"
 #endif
 
+/* This structure provides various names associated with a function.
+   The fields are computed in annobin_create_function_notes
+   and consumed in various places.  This structure is also used
+   For global data, but in this case the start and end symbols
+   are NULL.  */
+typedef struct annobin_function_info
+{
+  const char * func_name;
+  const char * asm_name;
+  const char * section_name;
+  const char * group_name;
+  bool         comdat;
+  const char * note_section_declaration;
+  const char * start_sym;
+  const char * end_sym;
+  const char * unlikely_section_name;
+  const char * unlikely_end_sym;
+} annobin_function_info;
+
 /* Called during plugin_init().
+   Should record any target specific information that will be needed later.
    Returns 0 upon success and 1 if there is a failure.  */
 extern int annobin_save_target_specific_information (void);
 
 /* Called during PLUGIN_START_UNIT.
-   Should only produce notes for the static tools, ie
-   notes in the SECNAME section.  */
-extern void annobin_record_global_target_notes (const char * SECNAME);
-
-/* Called during PLUGIN_START_UNIT.
-   Return the size of the target pointer in bits.
+   Returns the size of the target pointer in bits.
    Expected return values are either 32 or 64.  */
 extern unsigned int annobin_get_target_pointer_size (void);
 
+/* Called during PLUGIN_START_UNIT.
+   Should only produce global, target specific notes.  */
+extern void annobin_record_global_target_notes (annobin_function_info *);
+
 /* Called during PLUGIN_ALL_PASSES_START.
    Should produce notes specific to the function just compiled.
-   Should only produce notes for the static tools, ie
-   notes in the .gnu.build.attributes section.
-   Arguments are the START and END symbols for the function,
-   the name of the note SECTION into which the notes should be
-   placed and a boolean indicating if it is necessary to FORCE
+   Arguments are the current function structure
+   and a boolean indicating if it is necessary to FORCE
    the generation of notes even if nothing has changed.  */
-extern void annobin_target_specific_function_notes (const char * START,
-						    const char * END,
-						    const char * SECTION,
-						    bool         FORCE);
-
-/* Called during PLUGIN_FINISH_UNIT.
-   Should only produce notes for the dynamic loader, ie
-   notes in the .note.gnu.property section.  */
-extern void annobin_target_specific_loader_notes (void);
+extern void annobin_target_specific_function_notes (annobin_function_info *, bool FORCE);
 
 /* Called during plugin_init ().
    Returns the bias, if any, that should be applied to
@@ -100,27 +108,43 @@ extern void annobin_inform (unsigned, const char *, ...) ATTRIBUTE_PRINTF(2, 3);
 extern void ice (const char *);
 
 /* Called to generate a single note.  NAME is the text to go into the name
-   field of the note.  NAMESZ is the length of the name, including the
-   terminating NUL.  NAME_IS_STRING is true if NAME only contains ASCII
-   characters.  NAME_DESCRIPTION is a description of the name field, using
-   in comments and verbose output.
+   field of the note.  It can be NULL.  It can also contain non-ASCII characters.
+   NAME_LENGTH is the length of the name, including the terminating NUL.
+   NAME_IS_STRING is true if NAME only contains ASCII characters.
+   NAME_DESCRIPTION is a description of the name field, used in comments and
+   verbose output.
 
-   FIXME: Finish comment.  */
+   IS_OPEN is true for OPEN type notes and false for FUNC type notes.
+
+   The INFO structure contains pointers to the START_SYM and END_SYM to be
+   put into the description field of the note.  They can be NULL.
+
+   The INFO strcuture also contains the fully qualified note section name.    */
+
 extern void annobin_output_note (const char * NAME,
-				 unsigned     NAMESZ,
+				 unsigned     NAME_LENGTH,
 				 bool         NAME_IS_STRING,
 				 const char * NAME_DESCRIPTION,
-				 const char * DESC1,
-				 const char * DESC2,
-				 unsigned     DESCSZ,
-				 bool         DESC_IS_STRING,
-				 unsigned     TYPE,
-				 const char * SEC_NAME);
+				 bool         IS_OPEN,
+				 annobin_function_info * INFO);
 
-extern void annobin_output_static_note (const char *, unsigned, bool, const char *, const char *, const char *, unsigned, const char *);
-extern void annobin_output_bool_note (const char, const bool, const char *, const char *, const char *, unsigned, const char *);
-extern void annobin_output_string_note (const char, const char *, const char *, const char *, const char *, unsigned, const char *);
-extern void annobin_output_numeric_note (const char, unsigned long, const char *, const char *, const char *, unsigned, const char *);
+extern void annobin_output_bool_note (const char   BOOL_TYPE,
+				      const bool   BOOL_VALUE,
+				      const char * NAME_DESCRIPTION,
+				      bool         IS_OPEN,
+				      annobin_function_info * INFO);
+
+extern void annobin_output_string_note (const char   STRING_TYPE,
+					const char * THE_STRING,
+					const char * NAME_DESCRIPTION,
+					bool         IS_OPEN,
+					annobin_function_info * INFO);
+
+extern void annobin_output_numeric_note (const char    NUMERIC_TYPE,
+					 unsigned long VALUE,
+					 const char *  NAME_DESCRIPTION,
+					 bool          IS_OPEN,
+					 annobin_function_info * INFO);
 
 extern bool           annobin_is_64bit;
 extern bool           annobin_enable_stack_size_notes;

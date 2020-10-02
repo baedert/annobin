@@ -43,12 +43,13 @@ annobin_get_target_pointer_size (void)
 }
 
 void
-annobin_record_global_target_notes (const char * sec)
+annobin_record_global_target_notes (annobin_function_info * info)
 {
   saved_tls_dialect = annobin_get_gcc_int_option (OPT_mtls_dialect_);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
-			       "numeric: ABI: TLS dialect", NULL, NULL, OPEN, sec);
+			       "numeric: ABI: TLS dialect",
+			       true /* Is OPEN.  */, info);
   annobin_inform (INFORM_VERBOSE, "AArch64: Recording global TLS dialect of %d", saved_tls_dialect);
 
 #ifdef aarch64_branch_protection_string
@@ -62,23 +63,26 @@ annobin_record_global_target_notes (const char * sec)
   annobin_inform (INFORM_VERBOSE, "AArch64: Recording global AArch64 branch protection of '%s'", sbps);
   unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
 			   GNU_BUILD_ATTRIBUTE_TYPE_STRING, sbps);
-  annobin_output_static_note (buffer, len + 1, true, "string: -mbranch-protection status",
-			      NULL, NULL, OPEN, sec);
+  annobin_output_note (buffer, len + 1, true, "string: -mbranch-protection status",
+		       true /* Is OPEN.  */, info);
 #endif
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
+annobin_target_specific_function_notes (annobin_function_info * info, bool force)
 {
   signed int val = annobin_get_gcc_int_option (OPT_mtls_dialect_);
   if (force || saved_tls_dialect != val)
     {
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val,
-				   "numeric: ABI: TLS dialect", aname, aname_end,
-				   FUNC, sec_name);
+				   "numeric: ABI: TLS dialect",
+				   false /* Is not OPEN.  */, info);
       annobin_inform (INFORM_VERBOSE, "AArch64: Recording TLS dialect of %d for %s",
-		      val, current_function_name ());
+		      val, info->func_name);
 
+      /* We no longer need to include the start/end symbols in any
+	 further notes that we genenerate.  */
+      info->start_sym = info->end_sym = NULL;
     }
 
 #ifdef aarch64_branch_protection_string
@@ -91,45 +95,17 @@ annobin_target_specific_function_notes (const char * aname, const char * aname_e
 	abps = "default";
 
       annobin_inform (INFORM_VERBOSE, "AArch64: Recording AArch64 branch protection of '%s' for function '%s'",
-		      abps, aname);
+		      abps, info->func_name);
 
       unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
 			       GNU_BUILD_ATTRIBUTE_TYPE_STRING, abps);
-      annobin_output_static_note (buffer, len + 1, true, "string: -mbranch-protection status",
-				  aname, aname_end, FUNC, sec_name);
+      annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
+			   "string: -mbranch-protection status",
+			   false /* Is not OPEN.  */, info);
+
+      /* We no longer need to include the start/end symbols in any
+	 further notes that we genenerate.  */
+      info->start_sym = info->end_sym = NULL;
     }
 #endif
-}
-
-typedef struct
-{
-  Elf32_Word    pr_type;
-  Elf32_Word    pr_datasz;
-  Elf64_Xword   pr_data;
-} Elf64_loader_note;
-
-void
-annobin_target_specific_loader_notes (void)
-{
-  char   buffer [1024]; /* FIXME: Is this enough ?  */
-  char * ptr;
-
-  if (! annobin_enable_stack_size_notes)
-    return;
-
-  annobin_inform (INFORM_VERBOSE, "AArch64: Creating notes for the dynamic loader");
-
-  ptr = buffer;
-
-  Elf64_loader_note note64;
-
-  note64.pr_type   = GNU_PROPERTY_STACK_SIZE;
-  note64.pr_datasz = sizeof (note64.pr_data);
-  note64.pr_data   = annobin_max_stack_size;
-  memcpy (ptr, & note64, sizeof note64);
-  ptr += sizeof (note64);
-
-  annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
-		       false, NT_GNU_PROPERTY_TYPE_0, NOTE_GNU_PROPERTY_SECTION_NAME);
-  fflush (asm_out_file);
 }

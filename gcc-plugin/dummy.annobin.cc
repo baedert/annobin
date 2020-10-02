@@ -45,16 +45,11 @@ annobin_save_target_specific_information (void)
 }
 
 void
-annobin_record_global_target_notes (const char * sec)
+annobin_record_global_target_notes (annobin_function_info * info ATTRIBUTE_UNUSED)
 {
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
-{
-}
-
-void
-annobin_target_specific_loader_notes (void)
+annobin_target_specific_function_notes (annobin_function_info * info, bool force)
 {
 }

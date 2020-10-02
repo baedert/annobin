@@ -44,7 +44,7 @@ annobin_target_start_symbol_bias (void)
 }
 
 void
-annobin_record_global_target_notes (const char * sec)
+annobin_record_global_target_notes (annobin_function_info * info)
 {
   if (!annobin_is_64bit)
     ice ("PowerPC: The annobin plugin thinks that it is compiling for a 32-bit target");
@@ -52,53 +52,22 @@ annobin_record_global_target_notes (const char * sec)
   saved_tls_size = GET_INT_OPTION (rs6000_tls_size);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_size,
-			       "numeric: ABI: TLS size", NULL, NULL, OPEN, sec);
+			       "numeric: ABI: TLS size", true /* Is OPEN.  */, info);
   annobin_inform (INFORM_VERBOSE, "PowerPC: Recording global TLS size of %d", saved_tls_size);
 }
 
 void
-annobin_target_specific_function_notes (const char * aname, const char * aname_end, const char * sec_name, bool force)
+annobin_target_specific_function_notes (annobin_function_info * info, bool force)
 {
   int val = GET_INT_OPTION (rs6000_tls_size);
   if (!force && saved_tls_size == val)
     return;
 
-  annobin_inform (INFORM_VERBOSE, "PowerPC: Record TLS size of %d for %s", val, aname);
+  annobin_inform (INFORM_VERBOSE, "PowerPC: Record TLS size of %d for %s", val, info->func_name);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val,
-			       "numeric: ABI: TLS size", aname, aname_end, FUNC, sec_name);
+			       "numeric: ABI: TLS size", false /* Is not OPEN.  */, info);
+  /* We no longer need to include the start/end symbols in any
+     further notes that we generate.  */
+  info->start_sym = info->end_sym = NULL;
 }
-
-typedef struct
-{
-  Elf32_Word    pr_type;
-  Elf32_Word    pr_datasz;
-  Elf64_Xword   pr_data;
-} Elf64_loader_note;
-
-void
-annobin_target_specific_loader_notes (void)
-{
-  char   buffer [1024]; /* FIXME: Is this enough ?  */
-  char * ptr;
-
-  if (! annobin_enable_stack_size_notes)
-    return;
-
-  annobin_inform (INFORM_VERBOSE, "PowerPC: Creating notes for the dynamic loader");
-
-  ptr = buffer;
-
-  Elf64_loader_note note64;
-
-  note64.pr_type   = GNU_PROPERTY_STACK_SIZE;
-  note64.pr_datasz = sizeof (note64.pr_data);
-  note64.pr_data   = annobin_max_stack_size;
-  memcpy (ptr, & note64, sizeof note64);
-  ptr += sizeof (note64);
-
-  annobin_output_note ("GNU", 4, true, "Loader notes", buffer, NULL, ptr - buffer,
-		       false, NT_GNU_PROPERTY_TYPE_0, NOTE_GNU_PROPERTY_SECTION_NAME);
-  fflush (asm_out_file);
-}
-
