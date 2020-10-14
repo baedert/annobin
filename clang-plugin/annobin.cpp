@@ -121,6 +121,22 @@ private:
       annobin_current_file_start = concat ("_annobin_", filename, "_start");
       annobin_current_file_end   = concat ("_annobin_", filename, "_end");
 
+      // Generate start and end symbols.
+      //
+      // Note - we put the end symbol in a section called .text.zzz.
+      // The hope is that that this section will be the last section allocated
+      // to the .text section when the final link is made.  In that way we can
+      // ensure that the note range will be from wherever the start symbol below
+      // ends up in the final image to the end of the .text section in that image.
+      // This does mean however that if more than one compilation unit is
+      // linked together then the note ranges will overlap.
+      //
+      // The benefit of this approach is that if the linker discards any text
+      // sections (eg because garbage collection is enabled, or linkonce is being
+      // used), the note ranges will still be valid and there will no gaps.
+      //
+      // FIXME: This scheme fails if the user creates code sections that do not
+      // start with .text. or which sort alphabetically after .text.zz.
       static const char START_TEXT[] = "\
 \t.pushsection .text\n\
 \t.hidden %s\n\
