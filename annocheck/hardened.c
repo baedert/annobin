@@ -42,7 +42,7 @@ enum tool
   TOOL_GO,
   TOOL_RUST
 };
-  
+
 /* The contents of this structure are used on a per-input-file basis.
    The fields are initialised by start().  */
 static struct per_file
@@ -67,7 +67,7 @@ static struct per_file
 
   enum tool   tool;
   uint        version;
-  
+
   bool        warned_producer;
   bool        warned_about_instrumentation;
   bool        warned_version_mismatch;
@@ -442,7 +442,7 @@ skip_check (enum test_index check, const char * component_name)
     /* The stack overflow support code does not need stack protection.  */
     { "__stack_chk_fail_local", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "stack_chk_fail_local.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-   
+
     /* Also the atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
     { "atexit", { TEST_PIC, TEST_PIE, TEST_MAX, 0 } }
   };
@@ -513,7 +513,7 @@ report_i (einfo_type           type,
 
   einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
 }
-	
+
 static void
 report_s (einfo_type           type,
 	  const char *         format,
@@ -858,7 +858,7 @@ walk_build_notes (annocheck_data *     data,
 
       /* Parse the tool attribute looking for the version of gcc used to build the component.  */
       unsigned major, minor, rel;
-      
+
       /* As of version 8.80 there are two BUILT_ATTRIBUTE_TOOL version strings,
 	 one for the compiler that built the annobin plugin and one for the
 	 compiler that ran the annobin plugin.  Look for these here.  Their
@@ -877,7 +877,7 @@ walk_build_notes (annocheck_data *     data,
 
 	  if (strncmp (attr + 1, t->lead_in, strlen (t->lead_in)) != 0)
 	    continue;
-	    
+
 	  if (sscanf (attr + 1 + strlen (t->lead_in), "%u.%u.%u", & major, & minor, & rel) != 3)
 	    {
 	      einfo (VERBOSE2, "lead in '%s' matched, but conversion failed.  Full string: '%s'", t->lead_in, attr + 1);
@@ -943,7 +943,7 @@ walk_build_notes (annocheck_data *     data,
 
 	  if (strncmp (attr + 1, t->lead_in, strlen (t->lead_in)) != 0)
 	    continue;
-	    
+
 	  if (sscanf (attr + 1 + strlen (t->lead_in), "%u.%u.%u", & major, & minor, & rel) != 3)
 	    {
 	      einfo (VERBOSE2, "lead in '%s' matched, but conversion failed.  Full string: '%s'", t->lead_in, attr + 1);
@@ -1275,8 +1275,8 @@ walk_build_notes (annocheck_data *     data,
 	      break;
 
 	    case 0xff:
-	      /* BZ 1824393: We	have not scanned the DWARF notes yet, so we may	                                                  
-	      	 not have the full picture as to which tool(s) built this binary.  */   
+	      /* BZ 1824393: We	have not scanned the DWARF notes yet, so we may
+		 not have the full picture as to which tool(s) built this binary.  */
               report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE not detected on the command line",
                         data, sec, note_data, prefer_func_name, NULL);
 	      einfo (VERBOSE,    "%s:       This can happen if the source does not use C headers",
@@ -1466,7 +1466,7 @@ walk_build_notes (annocheck_data *     data,
       else
 	einfo (VERBOSE2, "Unsupported annobin note '%s' - ignored", attr);
       break;
-      
+
     case 's':
       if (streq (attr, "stack_clash"))
 	{
@@ -1886,7 +1886,7 @@ check_dynamic_section (annocheck_data *    data,
 	  if (dyn->d_un.d_val > 0)
 	    tests[TEST_BIND_NOW].num_maybe ++;
 	  break;
-	      
+
 	case DT_TEXTREL:
 	  tests[TEST_TEXTREL].num_fail ++;
 	  break;
@@ -2093,7 +2093,7 @@ check_seg (annocheck_data *    data,
 	 them again.  */
       assert (entry_point + 3 < seg->data->d_size);
       memcpy (entry_bytes, seg->data->d_buf + entry_point, sizeof entry_bytes);
-      
+
       if (per_file.e_machine == EM_386)
 	{
 	  /* Look for ENDBR32: 0xf3 0x0f 0x1e 0xfb. */
@@ -2253,7 +2253,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
     {
     default:
       break;
-      
+
     case TOOL_CLANG:
       /* Try to determine if there are any command line options recorded in the
 	 DW_AT_producer string.  FIXME: This is not a very good heuristic.  */
@@ -2687,7 +2687,7 @@ check_for_gaps (annocheck_data * data)
 		    }
 		}
 	    }
-	      
+
 	  gap_found = true;
 	  if (! BE_VERBOSE)
 	    break;
@@ -3226,7 +3226,7 @@ show_FORTIFY (annocheck_data * data, test * results)
       else if (per_file.e_type == ET_REL)
 	maybe (data, "Could not determine if -DFORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
       else
-	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");      
+	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
     }
 
   else if (! built_by_compiler ())
@@ -3556,7 +3556,7 @@ struct checker hardened_checker =
 };
 
 static __attribute__((constructor)) void
-register_checker (void) 
+register_checker (void)
 {
   if (! annocheck_add_checker (& hardened_checker, ANNOBIN_VERSION / 100))
     disabled = true;
