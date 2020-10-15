@@ -3224,9 +3224,9 @@ show_FORTIFY (annocheck_data * data, test * results)
 	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2.  Run with -v to see where");
 	}
       else if (per_file.e_type == ET_REL)
-	maybe (data, "Could not determine if -DFORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
+	maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
       else
-	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2");
+	fail (data, "The binary was compiled without -D_FORTIFY_SOURCE=2");
     }
 
   else if (! built_by_compiler ())
@@ -3245,9 +3245,9 @@ show_FORTIFY (annocheck_data * data, test * results)
 	 should also have seen -D_FORTIFY_SOURCE.  Hence its absence
 	 is a failure.  */
       else if (tests[TEST_GLIBCXX_ASSERTIONS].num_pass > 0)
-	fail (data, "The binary was compiled without -DFORTIFY_SOURCE=2 but with -D_GLIBCXX_ASSERTIONS");
+	fail (data, "The binary was compiled without -D_FORTIFY_SOURCE=2 but with -D_GLIBCXX_ASSERTIONS");
       else if (per_file.e_type == ET_REL)
-	maybe (data, "Could not determine if -DFORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
+	maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
       else
 	maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
     }
