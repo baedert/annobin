@@ -43,6 +43,14 @@ enum tool
   TOOL_RUST
 };
 
+enum lang
+{
+  LANG_UNKNOWN = 0,
+  LANG_C,
+  LANG_CXX,
+  LANG_OTHER
+};
+
 /* The contents of this structure are used on a per-input-file basis.
    The fields are initialised by start().  */
 static struct per_file
@@ -68,6 +76,8 @@ static struct per_file
   enum tool   tool;
   uint        version;
 
+  enum lang   lang;
+  
   bool        warned_producer;
   bool        warned_about_instrumentation;
   bool        warned_version_mismatch;
@@ -108,6 +118,7 @@ enum test_index
   TEST_GLIBCXX_ASSERTIONS,
   TEST_GNU_RELRO,
   TEST_GNU_STACK,
+  TEST_LTO,
   TEST_OPTIMIZATION,
   TEST_PIC,
   TEST_PIE,
@@ -136,6 +147,7 @@ static void show_FORTIFY            (annocheck_data *, test *);
 static void show_GLIBCXX_ASSERTIONS (annocheck_data *, test *);
 static void show_GNU_RELRO          (annocheck_data *, test *);
 static void show_GNU_STACK          (annocheck_data *, test *);
+static void show_LTO                (annocheck_data *, test *);
 static void show_OPTIMIZATION       (annocheck_data *, test *);
 static void show_PIC                (annocheck_data *, test *);
 static void show_PIE                (annocheck_data *, test *);
@@ -168,6 +180,7 @@ static test tests [TEST_MAX] =
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
   TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writeable"),
   TEST (gnu-stack,          GNU_STACK,          "The stack is not executable"),
+  TEST (lto,                LTO,                "Compiled with -flto"),
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
   TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
@@ -549,6 +562,44 @@ get_producer_name (enum tool tool)
     }
 }
 
+static const char *
+get_lang_name (enum lang lang)
+{
+  switch (lang)
+    {
+    default:
+    case LANG_UNKNOWN: return "unknown";
+    case LANG_C: return "C";
+    case LANG_CXX: return "C++";
+    case LANG_OTHER: return "other";
+    }
+}
+
+static void
+set_lang (annocheck_data *  data,
+	  enum lang         lang,
+	  const char *      source)
+{
+  if (per_file.lang == LANG_UNKNOWN)
+    {
+      einfo (VERBOSE, "%s: Written in %s (source: %s)",
+	     data->filename, get_lang_name (lang), source);
+
+      per_file.lang = lang;
+    }
+  else if (per_file.lang == lang)
+    ;
+  else
+    {
+      einfo (VERBOSE, "%s: ALSO written in %s (source: %s)",
+	     data->filename, get_lang_name (lang), source);
+      /* FIXME: What to do ?
+	 For now we choose C++ if it is one of the languages, so that the GLIBXX_ASSERTIONS test is enabled.  */
+      if (per_file.lang != LANG_CXX && lang == LANG_CXX)
+	per_file.lang = lang;
+    }
+}
+
 static void
 set_producer (annocheck_data *     data,
 	      enum tool            tool,
@@ -600,8 +651,16 @@ set_producer (annocheck_data *     data,
 	  per_file.warned_producer = true;
 	}
 
-      per_file.tool = TOOL_MIXED;
-      per_file.version = 0;
+      if (per_file.tool != TOOL_CLANG && tool != TOOL_CLANG)
+	{
+	  per_file.tool = TOOL_MIXED;
+	  per_file.version = 0;
+	}
+      else if (tool == TOOL_CLANG)
+	{
+	  per_file.tool = TOOL_CLANG;
+	  per_file.version = version;
+	}
     }
 }
 
@@ -740,9 +799,16 @@ walk_build_notes (annocheck_data *     data,
 	}
     }
 
-  /* We skip notes for empty ranges unless we are dealing with unrelocated object files.  */
-  if (per_file.e_type != ET_REL && note_data->start == note_data->end)
-    return true;
+  /* We skip notes for empty ranges unless we are dealing with unrelocated
+     object files, or files not produced by gcc (where we cannot guarnatee
+     note ranges).  */
+  if (per_file.e_type != ET_REL
+      && note_data->start == note_data->end
+      && per_file.tool == TOOL_GCC)
+    {
+      einfo (VERBOSE2, "Skipping note because its range is zero");
+      return true;
+    }
 
   const char *  namedata = sec->data->d_buf + name_offset;
   uint          pos = (namedata[0] == 'G' ? 3 : 1);
@@ -894,7 +960,7 @@ walk_build_notes (annocheck_data *     data,
 	    }
 	  else if (per_file.run_major != major)
 	    {
-	      einfo (INFO, "%s: WARN: this file was built by more than one version of %s (%u and %u)",
+	      einfo (WARN, "%s: this file was built by more than one version of %s (%u and %u)",
 		     data->filename, t->tool_name, per_file.run_major, major);
 	      if (per_file.run_major < major)
 		per_file.run_major = major;
@@ -959,7 +1025,7 @@ walk_build_notes (annocheck_data *     data,
 	    }
 	  else if (per_file.anno_major != major)
 	    {
-	      einfo (INFO, "%s: WARN: notes produced by annobins compiled for more than one version of %s (%u vs %u)",
+	      einfo (WARN, "%s: notes produced by annobins compiled for more than one version of %s (%u vs %u)",
 		     data->filename, t->tool_name, per_file.anno_major, major);
 	      if (per_file.anno_major < major)
 		per_file.anno_major = major;
@@ -1307,8 +1373,9 @@ walk_build_notes (annocheck_data *     data,
 	{
 	  if (value == -1)
 	    {
-	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for optimize note (%x)",
+	      report_i (VERBOSE, "%s: FAIL: (%s): unexpected value for optimize note (%x)",
 			data, sec, note_data, prefer_func_name, value);
+	      tests[TEST_LTO].num_maybe ++;
 	      tests[TEST_OPTIMIZATION].num_maybe ++;
 	    }
 	  else
@@ -1390,6 +1457,39 @@ walk_build_notes (annocheck_data *     data,
 		      tests[TEST_WARNINGS].num_fail ++;
 		    }
 		}
+
+	      if (! skip_check (TEST_LTO, get_component_name (data, sec, note_data, prefer_func_name)))
+		{
+		  if (value & (1 << 16))
+		    {
+		      if (value & (1 << 17))
+			{
+			  report_i (VERBOSE, "%s: BUG!: (%s): Compiled with -flto and -fno-lto",
+				    data, sec, note_data, prefer_func_name, value);
+			  tests[TEST_LTO].num_fail ++;
+			}
+		      else
+			{
+			  /* Compiled with -flto.  */
+			  report_i (VERBOSE2, "%s: PASS: (%s): Compiled with -flto",
+				    data, sec, note_data, prefer_func_name, value);
+			  tests[TEST_LTO].num_pass ++;
+			}
+		    }
+		  else if (value & (1 << 17))
+		    {
+		      /* Compiled without -flto.
+			 Not a failure because we are still bringing up universal LTO enabledment.  */
+		      report_i (VERBOSE, "%s: FAIL: (%s): Compiled without -flto",
+				data, sec, note_data, prefer_func_name, value);
+		      tests[TEST_LTO].num_fail ++;
+		    }
+		  else
+		    {
+		      report_i (VERBOSE2, "%s: UNKW: (%s): LTO compilation status not recorded",
+				data, sec, note_data, prefer_func_name, value);
+		    }
+		}
 	    }
 	}
       else if (streq (attr, "GLIBCXX_ASSERTIONS"))
@@ -1401,9 +1501,17 @@ walk_build_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_GLIBCXX_ASSERTIONS].num_fail ++;
+	      if (per_file.lang == LANG_UNKNOWN || per_file.lang == LANG_CXX)
+		{
+		  report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
+			    data, sec, note_data, prefer_func_name, NULL);
+		  tests[TEST_GLIBCXX_ASSERTIONS].num_fail ++;
+		}
+	      else
+		{
+		  report_s (VERBOSE, "%s: skip: (%s): Compiled without -D_GLIBCXX_ASSERTIONS, but not written in C++",
+			    data, sec, note_data, prefer_func_name, NULL);
+		}
 	      break;
 
 	    case 1:
@@ -1414,13 +1522,13 @@ walk_build_notes (annocheck_data *     data,
 
 	    default:
 	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for glibcxx_assertions note (%x)",
-		      data, sec, note_data, prefer_func_name, value);
+			data, sec, note_data, prefer_func_name, value);
 	      tests[TEST_GLIBCXX_ASSERTIONS].num_maybe ++;
 	      break;
 	    }
 	}
       else
-	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
+	einfo (VERBOSE2, "Unsupported annobin note '%s' - ignored", attr);
       break;
 
     case 'I':
@@ -2182,28 +2290,60 @@ static const tool_id tools[] =
   { NULL, 0 }
 };
 
-/* Look for DW_AT_producer attributes.  */
-
-static bool
-hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, void * ptr ATTRIBUTE_UNUSED)
+static void
+parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
 {
-  Dwarf_Attribute  attr;
-  const char *     string;
+  Dwarf_Word val;
 
-  if (dwarf_attr (die, DW_AT_producer, & attr) == NULL)
-    return true;
+  if (dwarf_formudata (attr, & val) != 0)
+    {
+      warn (data, "Unable to parse DW_AT_language attribute");
+      return;
+    }
+  
+  einfo (VERBOSE2, "%s: DW_AT_language = %x", data->filename, (int) val);
 
-  string = dwarf_formstring (& attr);
+  switch (val)
+    {
+    case DW_LANG_C89:
+    case DW_LANG_C:
+    case DW_LANG_C99:
+    case DW_LANG_ObjC:
+    case DW_LANG_C11:
+      set_lang (data, LANG_C, "DW_AT_language");
+      break;
+
+    case DW_LANG_C_plus_plus:
+    case DW_LANG_ObjC_plus_plus:
+    case DW_LANG_C_plus_plus_03:
+    case DW_LANG_C_plus_plus_11:
+    case DW_LANG_C_plus_plus_14:
+      einfo (VERBOSE, "%s: Written in C++", data->filename);
+      set_lang (data, LANG_CXX, "DW_AT_language");
+      break;
+
+    default:
+      einfo (VERBOSE, "%s: Written in a language other than C and CC++", data->filename);
+      set_lang (data, LANG_OTHER, "DW_AT_language");
+      break;
+    }
+}
+
+static void
+parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
+{
+  const char * string = dwarf_formstring (attr);
+
   if (string == NULL)
     {
-      unsigned int form = dwarf_whatform (& attr);
+      unsigned int form = dwarf_whatform (attr);
 
       if (form == DW_FORM_GNU_strp_alt)
 	warn (data, "DW_FORM_GNU_strp_alt not yet handled");
       else
 	warn (data, "DWARF DW_AT_producer attribute uses non-string form");
       /* Keep scanning - there may be another DW_AT_producer attribute.  */
-      return true;
+      return;
     }
 
   einfo (VERBOSE2, "%s: DW_AT_producer = %s", data->filename, string);
@@ -2233,8 +2373,7 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 	warn (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
       else
 	warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
-      /* Keep scanning.  */
-      return true;
+      return;
     }
 
   if (madeby != TOOL_GCC && per_file.tool == TOOL_UNKNOWN)
@@ -2340,9 +2479,25 @@ hardened_dwarf_walker (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * die, vo
 
       break;
     }
+}
 
-  /* Keep scanning - there may be another DW_AT_producer attribute.
-     FIXME: This could take some time - is it worth it ?  */
+/* Look for DW_AT_producer and DW_AT_language attributes.  */
+
+static bool
+hardened_dwarf_walker (annocheck_data *  data,
+		       Dwarf *           dwarf ATTRIBUTE_UNUSED,
+		       Dwarf_Die *       die,
+		       void *            ptr ATTRIBUTE_UNUSED)
+{
+  Dwarf_Attribute  attr;
+
+  if (dwarf_attr (die, DW_AT_language, & attr) != NULL)
+    parse_dw_at_language (data, & attr);
+  
+  if (dwarf_attr (die, DW_AT_producer, & attr) == NULL)
+    parse_dw_at_producer (data, & attr);
+
+  /* Keep scanning.  */
   return true;
 }
 
@@ -3070,6 +3225,48 @@ show_OPTIMIZATION (annocheck_data * data, test * results)
 }
 
 static void
+show_LTO (annocheck_data * data, test * results)
+{
+  /* FIXME: For now these checks are soft fails.  */
+  if (results->num_fail > 0)
+    {
+      if (results->num_pass > 0 || results->num_maybe > 0)
+	{
+	  if (BE_VERBOSE)
+	    skip (data, "WOULD-FAIL: Parts of the binary were compiled without LTO enabled");
+	  else
+	    skip (data, "WOULD-FAIL: Parts of the binary were compiled without LTO enabled.  Run with -v to see where");
+	}
+      else
+	skip (data, "WOULD-FAIL: The binary was compiled without LTO enabled");
+    }
+  else if (results->num_maybe > 0)
+    {
+      if (results->num_pass > 0)
+	{
+	  if (! BE_VERBOSE)
+	    fail (data, "Some parts of the binary had corrupt LTO data.  Run with -v to see where");
+	  else
+	    fail (data, "Some parts of the binary had corrupt LTO data");
+	}
+      else
+	fail (data, "The LTO data was corrupt");
+    }
+  else if (results->num_pass > 0)
+    {
+      pass (data, "Compiled with LTO enabled");
+    }
+  else if (! built_by_compiler ())
+    {
+      skip (data, "Test of LTO enablement.  (Not built by gcc/clang)");
+    }
+  else
+    {
+      skip (data, "The LTO setting was not recorded");
+    }
+}
+
+static void
 show_PIC (annocheck_data * data, test * results)
 {
   if (results->num_fail > 0)
@@ -3224,7 +3421,12 @@ show_FORTIFY (annocheck_data * data, test * results)
 	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2.  Run with -v to see where");
 	}
       else if (per_file.e_type == ET_REL)
-	maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
+	{
+	  if (per_file.lang == LANG_OTHER || per_file.lang == LANG_UNKNOWN)
+	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
+	  else
+	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used");	    
+	}
       else
 	fail (data, "The binary was compiled without -D_FORTIFY_SOURCE=2");
     }
@@ -3247,7 +3449,12 @@ show_FORTIFY (annocheck_data * data, test * results)
       else if (tests[TEST_GLIBCXX_ASSERTIONS].num_pass > 0)
 	fail (data, "The binary was compiled without -D_FORTIFY_SOURCE=2 but with -D_GLIBCXX_ASSERTIONS");
       else if (per_file.e_type == ET_REL)
-	maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
+	{
+	  if (per_file.lang == LANG_OTHER || per_file.lang == LANG_UNKNOWN)
+	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
+	  else
+	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used");
+	}
       else
 	maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
     }
@@ -3319,8 +3526,10 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
 	  else
 	    fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS.  Run with -v to see where");
 	}
-      else
+      else if (per_file.lang == LANG_CXX || per_file.lang == LANG_UNKNOWN)
 	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
+      else
+	skip (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS but it is not written in C++");
     }
 
   else if (! built_by_compiler ())
@@ -3485,6 +3694,9 @@ usage (void)
   for (i = 0; i < TEST_MAX; i++)
     einfo (INFO, "    --skip-%-19sDisables: %s", tests[i].name, tests[i].description);
 
+  einfo (INFO, "    --skip-%-19sDisables all tests", "all");
+  einfo (INFO, "  To enable a disabled test use --test-<name>");
+  
   einfo (INFO, "  The tool will also report missing annobin data unless:");
   einfo (INFO, "    --ignore-gaps             Ignore missing annobin data");
 
@@ -3501,9 +3713,17 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
   if (const_strneq (arg, "--skip-"))
     {
-      arg += 7;
+      arg += strlen ("--skip-");
 
       int i;
+
+      if (streq (arg, "all"))
+	{
+	  for (i = 0; i < TEST_MAX; i++)
+	    tests[i].enabled = false;
+	  return true;
+	}
+      
       for (i = 0; i < TEST_MAX; i++)
 	{
 	  if (streq (arg, tests[i].name))
@@ -3516,6 +3736,34 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return false;
     }
 
+  if (const_strneq (arg, "--test-"))
+    {
+      arg += strlen ("--test-");
+
+      int i;
+
+      if (streq (arg, "all"))
+	{
+	  for (i = 0; i < TEST_MAX; i++)
+	    tests[i].enabled = true;
+	  return true;
+	}
+      
+      for (i = 0; i < TEST_MAX; i++)
+	{
+	  if (streq (arg, tests[i].name))
+	    {
+	      tests[i].enabled = true;
+	      return true;
+	    }
+	}
+
+      return false;
+    }
+
+
+
+  
   if (streq (arg, "--enable-hardened"))
     {
       disabled = false;

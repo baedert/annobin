@@ -337,7 +337,6 @@ namespace
       sprintf (buf, "running on %s", LTOCodeGenerator::getVersionString ());
       OutputStringNote (module, GNU_BUILD_ATTRIBUTE_TOOL,
 			buf, "tool note (running on)");
-
       
       // Generate a PIE note.
       unsigned int val;
@@ -411,7 +410,14 @@ namespace
       val <<= 9;
       // FIXME: For now we lie and say that -Wall was used.
       val |= 1 << 14;
-      verbose ("optimization level is %u", optLevel);
+
+      if (module.getModuleFlag("ThinLTO")
+	  || module.getModuleFlag("EnableSplitLTOUnit"))
+	val |= 1 << 16;
+      else
+	val |= 1 << 17;
+      inform ("optimization level is %u, LTO is %s", optLevel, val & (1 << 16) ? "on" : "off");
+      verbose ("optimization level is %u, LTO is %s", optLevel, val & (1 << 16) ? "on" : "off");
       OutputNumericNote (module, "GOW", val, "Optimization Level");
 
       

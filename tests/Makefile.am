@@ -1,4 +1,4 @@
-## Copyright (C) 2017-2019 Red Hat
+## Copyright (C) 2017-2020 Red Hat
 
 ## You should have received a copy of the GNU General Public License
 ## along with this program; see the file COPYING3.  If not see
@@ -7,14 +7,15 @@
 ## Process this file with automake to produce Makefile.in.
 
 TESTS=compile-test \
-      hardening-test \
-      hardening-fail-test \
-      missing-notes-test \
-      active-checks-test \
       abi-test \
-      function-sections-test \
+      active-checks-test \
       assembler-gap-test \
+      function-sections-test \
+      hardening-fail-test \
+      hardening-test \
       instrumentation-test \
+      lto-test \
+      missing-notes-test \
       section-size-test
 
 if HAVE_DEBUGINFOD

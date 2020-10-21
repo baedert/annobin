@@ -464,10 +464,30 @@ notes_end_file (annocheck_data * data)
 	    {
 	      if (value == -1)
 		einfo (PARTIAL, "Optimization: *unknown (-1)*\n");
-	      else if (value & (1 << 13))
-		einfo (PARTIAL, "Optimization: -Og\n");
 	      else
-		einfo (PARTIAL, "Optimization: -O%d\n",(value >> 9) & 3);
+		{
+		  /* FIXME: Add debug bits.  */
+
+		  einfo (PARTIAL, "-O%d ", (value >> 9) & 3);
+		  if (value & (1 << 11))
+		    einfo (PARTIAL, "-Os ");
+		  if (value & (1 << 12))
+		    einfo (PARTIAL, "-Ofast ");
+		  if (value & (1 << 13))
+		    einfo (PARTIAL, "-Og ");
+
+		  if (value & (1 << 14))
+		    einfo (PARTIAL, "-Wall ");
+		  if (value & (1 << 15))
+		    einfo (PARTIAL, "-Wformat-security ");
+
+		  if (value & (1 << 16))
+		    einfo (PARTIAL, "-flto ");
+		  if (value & (1 << 17))
+		    einfo (PARTIAL, "-fno-lto ");
+		  
+		  einfo (PARTIAL, "\n");
+		}
 	      /* FIXME: Display G and W data...  */
 	    }
 	  else if (streq (note->data, "GLIBCXX_ASSERTIONS"))

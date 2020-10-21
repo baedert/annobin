@@ -423,7 +423,16 @@ private:
       // not appear to be valid in clang v9 onwards. :-(
       if (Context.getDiagnostics().getEnableAllWarnings())
 	val |= (1 << 14);
-      verbose ("Optimization = %d, Wall = %d", CodeOpts.OptimizationLevel, Context.getDiagnostics().getEnableAllWarnings());
+      if (CodeOpts.PrepareForLTO || CodeOpts.PrepareForThinLTO)
+	val |= (1 << 16);
+      else
+	val |= (1 << 17);
+
+      verbose ("Optimization = %d, Wall = %d, LTO = %s",
+	       CodeOpts.OptimizationLevel,
+	       Context.getDiagnostics().getEnableAllWarnings(),
+	       CodeOpts.PrepareForLTO || CodeOpts.PrepareForThinLTO ? "on" : "off"
+	       );
       OutputNumericNote (Context, "GOW", val, "Optimization Level and Wall");
 
 #if CLANG_VERSION_MAJOR > 7

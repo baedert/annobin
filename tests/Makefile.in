@@ -474,9 +474,9 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-TESTS = compile-test hardening-test hardening-fail-test \
-	missing-notes-test active-checks-test abi-test \
-	function-sections-test assembler-gap-test instrumentation-test \
+TESTS = compile-test abi-test active-checks-test assembler-gap-test \
+	function-sections-test hardening-fail-test hardening-test \
+	instrumentation-test lto-test missing-notes-test \
 	section-size-test $(am__append_1)
 XFAIL_TESTS = hardening-fail-test \
       missing-notes-test \
@@ -677,23 +677,9 @@ compile-test.log: compile-test
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-hardening-test.log: hardening-test
-	@p='hardening-test'; \
-	b='hardening-test'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-hardening-fail-test.log: hardening-fail-test
-	@p='hardening-fail-test'; \
-	b='hardening-fail-test'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-missing-notes-test.log: missing-notes-test
-	@p='missing-notes-test'; \
-	b='missing-notes-test'; \
+abi-test.log: abi-test
+	@p='abi-test'; \
+	b='abi-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -705,9 +691,9 @@ active-checks-test.log: active-checks-test
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-abi-test.log: abi-test
-	@p='abi-test'; \
-	b='abi-test'; \
+assembler-gap-test.log: assembler-gap-test
+	@p='assembler-gap-test'; \
+	b='assembler-gap-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -719,9 +705,16 @@ function-sections-test.log: function-sections-test
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-assembler-gap-test.log: assembler-gap-test
-	@p='assembler-gap-test'; \
-	b='assembler-gap-test'; \
+hardening-fail-test.log: hardening-fail-test
+	@p='hardening-fail-test'; \
+	b='hardening-fail-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+hardening-test.log: hardening-test
+	@p='hardening-test'; \
+	b='hardening-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -729,6 +722,20 @@ assembler-gap-test.log: assembler-gap-test
 instrumentation-test.log: instrumentation-test
 	@p='instrumentation-test'; \
 	b='instrumentation-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+lto-test.log: lto-test
+	@p='lto-test'; \
+	b='lto-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+missing-notes-test.log: missing-notes-test
+	@p='missing-notes-test'; \
+	b='missing-notes-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

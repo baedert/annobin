@@ -772,6 +772,12 @@ annobin_get_optimize_debug (void)
   return GET_INT_OPTION (optimize_debug);
 }
 
+static inline bool
+annobin_in_lto_p (void)
+{
+  return GET_INT_OPTION (in_lto_p) != 0;
+}
+    
 /* Compute a numeric value representing the settings/levels of
    the -O and -g options, and some -W options.  This is to help
    verify the recommended hardening options for binaries.
@@ -786,7 +792,9 @@ annobin_get_optimize_debug (void)
    bit  12     : -Ofast
    bit  13     : -Og
    bit  14     : -Wall
-   bit  15     : -Wformat-security  */
+   bit  15     : -Wformat-security
+   bit  16     : LTO enabled
+   bit  17     : LTO disabled.  */
 
 static unsigned int
 compute_GOWall_options (void)
@@ -863,6 +871,13 @@ compute_GOWall_options (void)
      flag.  FIXME: Add other important warnings.  */
   if (GET_INT_OPTION (warn_format_security))
     val|= (1 << 15);
+
+  if (annobin_in_lto_p () 
+      || GET_STR_OPTION (flag_lto) != NULL)
+    val |= (1 << 16);
+  else /* We record the negative so that annocheck can detect that
+	  we definitely have recorded something for this feature.  */
+    val |= (1 << 17);
 
   return val;
 }
@@ -1166,12 +1181,6 @@ annobin_emit_symbol (const char * name)
   annobin_inform (INFORM_VERBOSE, "Create symbol %s", name);
 }
 
-static inline bool
-annobin_in_lto_p (void)
-{
-  return GET_INT_OPTION (in_lto_p) != 0;
-}
-    
 /* Create any notes specific to the current function.  */
 
 static void
@@ -2491,12 +2500,6 @@ plugin_init (struct plugin_name_args *    plugin_info,
       if (fail)
 	return 1;
     }
-  
-  // FIXME: Should we check the location of utility flags that we also examine ?
-  // Ie: flag_verbose_asm, flag_function_sections, flag_reorder_functions,
-  // flag_profile_values, flag_sanitize, flag_instrument_functions, profile_arc,
-  // profile_arc_flag, flag_instrument_function_entry_exit, flag_stack_usage_info,
-  // flag_omit_frame_pointer, flag_short_enums, flag_generate_lto
   
   /* Record global compiler options.
      NB/ The format of these strings is important, as knowledge
