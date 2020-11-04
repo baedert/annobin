@@ -111,7 +111,7 @@ enum test_index
   TEST_BIND_NOW,
   TEST_BRANCH_PROTECTION,
   TEST_CF_PROTECTION,
-  TEST_DYNAMIC,
+  TEST_DYNAMIC_SEGMENT,
   TEST_DYNAMIC_TAGS,
   TEST_ENTRY,
   TEST_FORTIFY,
@@ -140,7 +140,7 @@ enum test_index
 static void show_BIND_NOW           (annocheck_data *, test *);
 static void show_BRANCH_PROTECTION  (annocheck_data *, test *);
 static void show_CF_PROTECTION      (annocheck_data *, test *);
-static void show_DYNAMIC            (annocheck_data *, test *);
+static void show_DYNAMIC_SEGMENT    (annocheck_data *, test *);
 static void show_DYNAMIC_TAGS       (annocheck_data *, test *);
 static void show_ENTRY              (annocheck_data *, test *);
 static void show_FORTIFY            (annocheck_data *, test *);
@@ -173,7 +173,7 @@ static test tests [TEST_MAX] =
   TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
   TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8+ only)"),
-  TEST (dynamic,            DYNAMIC,            "There is at most one dynamic segment/section"),
+  TEST (dynamic-segment,    DYNAMIC_SEGMENT,    "There is at most one dynamic segment/section"),
   TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI present (AArch64 only)"),
   TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
@@ -184,7 +184,7 @@ static test tests [TEST_MAX] =
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
   TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
-  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, aarch64)"),
+  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, aarch64, PowerPC)"),
   TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
   TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
   TEST (short-enum,         SHORT_ENUM,         "Compiled with consistent use of -fshort-enum"),
@@ -325,6 +325,8 @@ interesting_sec (annocheck_data *     data,
 	++ tests[TEST_GNU_STACK].num_pass;
       else
 	++ tests[TEST_GNU_STACK].num_fail;
+
+      return false;
     }
 
   /* Note the permissions on GOT/PLT relocation sections.  */
@@ -335,12 +337,16 @@ interesting_sec (annocheck_data *     data,
     {
       if (sec->shdr.sh_flags & SHF_WRITE)
 	++ tests[TEST_WRITEABLE_GOT].num_fail;
+      return false;
     }
 
   if (sec->shdr.sh_size == 0)
     return false;
 
   if (streq (sec->secname, ".comment"))
+    return true;
+
+  if (streq (sec->secname, ".gnu.attributes"))
     return true;
 
   /* These types of section need further processing.  */
@@ -1710,8 +1716,8 @@ walk_build_notes (annocheck_data *     data,
 static void
 ffail (annocheck_data * data, const char * message, int level)
 {
-  einfo (level, "%s: check: %s", data->filename, message);
-  einfo (level, "%s: note:  This test is not yet enabled, but if it was enabled, it would fail...",
+  einfo (level, "%s: look: %s", data->filename, message);
+  einfo (level, "%s: ^^^^:  This test is not yet enabled, but if it was enabled, it would fail...",
 	 data->filename);
 }
 
@@ -1728,6 +1734,99 @@ vfuture_fail (annocheck_data * data, const char * message)
 }
 
 static bool
+handle_ppc64_property_note (annocheck_data *      data,
+			    annocheck_section *   sec,
+			    ulong                 type,
+			    ulong                 size,
+			    const unsigned char * notedata)
+{
+  einfo (VERBOSE, "PPC64 property note handler not yet written...\n");
+  return true;
+}
+
+static bool
+handle_aarch64_property_note (annocheck_data *     data,
+			  annocheck_section *  sec,
+			  ulong                type,
+			  ulong                size,
+			  const unsigned char * notedata)
+{
+  if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
+    {
+      einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
+      return true;
+    }
+
+  if (size != 4)
+    {
+      einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
+      einfo (VERBOSE2, "debugging: data note at offset %lx has size %lu, expected 4",
+	     (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
+      return false;
+    }
+
+  ulong property = get_4byte_value (notedata);
+
+  if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_BTI) == 0)
+    {
+      vfuture_fail (data, "The BTI property is not enabled");
+      einfo (VERBOSE2, "debugging: property bits = %lx", property);
+      return false;
+    }
+
+  if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_PAC) == 0)
+    {
+      vfuture_fail (data, "The PAC property is not enabled");
+      einfo (VERBOSE2, "debugging: property bits = %lx", property);
+      return false;
+    }
+
+  einfo (INFO, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", data->filename);
+  return true;
+}
+
+static bool
+handle_x86_property_note (annocheck_data *     data,
+			  annocheck_section *  sec,
+			  ulong                type,
+			  ulong                size,
+			  const unsigned char * notedata)
+{
+  if (type != GNU_PROPERTY_X86_FEATURE_1_AND)
+    {
+      einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
+      return true;
+    }
+
+  if (size != 4)
+    {
+      einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
+      einfo (VERBOSE2, "debugging: data note at offset %lx has size %lu, expected 4",
+	     (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
+      return false;
+    }
+
+  ulong property = get_4byte_value (notedata);
+
+  if ((property & GNU_PROPERTY_X86_FEATURE_1_IBT) == 0)
+    {
+      einfo (VERBOSE, "%s: FAIL: The IBT property is not enabled", data->filename);
+      einfo (VERBOSE2, "debugging: property bits = %lx", property);
+      return false;
+    }
+
+  if ((property & GNU_PROPERTY_X86_FEATURE_1_SHSTK) == 0)
+    {
+      einfo (VERBOSE, "%s: FAIL: The SHSTK property is not enabled", data->filename);
+      einfo (VERBOSE2, "debugging: property bits = %lx", property);
+      return false;
+    }
+
+  einfo (VERBOSE2, "%s: PASS: Both the IBT and SHSTK properties are present in the GNU Property note", data->filename);
+  return true;
+}
+
+static bool
 walk_property_notes (annocheck_data *     data,
 		     annocheck_section *  sec,
 		     GElf_Nhdr *          note,
@@ -1738,6 +1837,27 @@ walk_property_notes (annocheck_data *     data,
   if (skip_check (TEST_PROPERTY_NOTE, NULL))
     return true;
 
+  bool (* handler) (annocheck_data *, annocheck_section *, ulong, ulong, const unsigned char *);
+  switch (per_file.e_machine)
+    {
+    case EM_X86_64:
+    case EM_386:
+      handler = handle_x86_property_note;
+      break;
+
+    case EM_AARCH64:
+      handler = handle_aarch64_property_note;
+      break;
+
+    case EM_PPC64:
+      handler = handle_ppc64_property_note;
+      break;
+
+    default:
+      /* FIXME: ICE here ?  */
+      return true;
+    }
+  
   if (note->n_type != NT_GNU_PROPERTY_TYPE_0)
     {
       einfo (VERBOSE, "%s: FAIL: Unexpected GNU Property note type", data->filename);
@@ -1791,74 +1911,8 @@ walk_property_notes (annocheck_data *     data,
 	  goto fail;
 	}
 
-      if (per_file.e_machine == EM_X86_64 || per_file.e_machine == EM_386)
-	{
-	  switch (type)
-	    {
-	    case GNU_PROPERTY_X86_FEATURE_1_AND:
-	      if (size != 4)
-		{
-		  einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
-		  einfo (VERBOSE2, "debugging: data note at offset %lx has size %lu, expected 4",
-			 (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
-		  goto fail;
-		}
-
-	      ulong property = get_4byte_value (notedata);
-	      if ((property & GNU_PROPERTY_X86_FEATURE_1_IBT) == 0)
-		{
-		  einfo (VERBOSE, "%s: FAIL: The IBT property is not enabled", data->filename);
-		  einfo (VERBOSE2, "debugging: property bits = %lx", property);
-		  goto fail;
-		}
-	      else if ((property & GNU_PROPERTY_X86_FEATURE_1_SHSTK) == 0)
-		{
-		  einfo (VERBOSE, "%s: FAIL: The SHSTK property is not enabled", data->filename);
-		  einfo (VERBOSE2, "debugging: property bits = %lx", property);
-		  goto fail;
-		}
-	      else
-		{
-		  einfo (VERBOSE2, "%s: PASS: Both the IBT and SHSTK properties are present in the GNU Property note", data->filename);
-		}
-	      break;
-
-	    default:
-	      einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
-	      break;
-	    }
-	}
-      else /* (per_file.e_machine == EM_AARCH64)  */
-	{
-	  if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
-	    einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
-	  else if (size != 4)
-	    {
-	      einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
-	      einfo (VERBOSE2, "debugging: data note at offset %lx has size %lu, expected 4",
-		     (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
-	      goto fail;
-	    }
-	  else
-	    {
-	      ulong property = get_4byte_value (notedata);
-
-	      if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_BTI) == 0)
-		{
-		  vfuture_fail (data, "The BTI property is not enabled");
-		  einfo (VERBOSE2, "debugging: property bits = %lx", property);
-		  goto fail;
-		}
-	      else if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_PAC) == 0)
-		{
-		  vfuture_fail (data, "The PAC property is not enabled");
-		  einfo (VERBOSE2, "debugging: property bits = %lx", property);
-		  goto fail;
-		}
-	      else
-		einfo (INFO, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", data->filename);
-	    }
-	}
+      if (! handler (data, sec, type, size, notedata))
+	goto fail;
 
       notedata  += ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
       remaining -= ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
@@ -1877,6 +1931,7 @@ supports_property_notes (int e_machine)
 {
   return e_machine == EM_X86_64
     || e_machine == EM_AARCH64
+    || e_machine == EM_PPC64
     || e_machine == EM_386;
 }
 
@@ -1957,14 +2012,14 @@ check_dynamic_section (annocheck_data *    data,
       return true;
     }
 
-  if (tests[TEST_DYNAMIC].num_pass == 0)
+  if (tests[TEST_DYNAMIC_SEGMENT].num_pass == 0)
     {
-      tests[TEST_DYNAMIC].num_pass = 1;
+      tests[TEST_DYNAMIC_SEGMENT].num_pass = 1;
     }
   else
     {
       einfo (VERBOSE, "%s: FAIL: contains multiple dynamic sections", data->filename);
-      tests[TEST_DYNAMIC].num_fail ++;
+      tests[TEST_DYNAMIC_SEGMENT].num_fail ++;
     }
 
   size_t num_entries = sec->shdr.sh_size == 0 / sec->shdr.sh_entsize;
@@ -2034,9 +2089,10 @@ check_dynamic_section (annocheck_data *    data,
 }
 
 static bool
-check_comment_section (annocheck_data *     data,
-		       annocheck_section *  sec)
+check_code_section (annocheck_data *     data,
+		    annocheck_section *  sec)
 {
+  /* At the moment we are only interested in the .comment section.  */
   if (sec->data->d_size <= 11 || ! streq (sec->secname, ".comment"))
     return true;
 
@@ -2099,7 +2155,7 @@ check_sec (annocheck_data *     data,
     case SHT_NOTE:     return check_note_section (data, sec);
     case SHT_STRTAB:   return check_string_section (data, sec);
     case SHT_DYNAMIC:  return check_dynamic_section (data, sec);
-    case SHT_PROGBITS: return check_comment_section (data, sec);
+    case SHT_PROGBITS: return check_code_section (data, sec);
     default:           return true;
     }
 }
@@ -2151,13 +2207,13 @@ interesting_seg (annocheck_data *    data,
       break;
 
     case PT_DYNAMIC:
-      if (tests[TEST_DYNAMIC].num_pass < 2)
+      if (tests[TEST_DYNAMIC_SEGMENT].num_pass < 2)
 	/* 0 means it had no dynamic sections, 1 means it had a dynamic section.  */
-	tests[TEST_DYNAMIC].num_pass = 2;
+	tests[TEST_DYNAMIC_SEGMENT].num_pass = 2;
       else
 	{
 	  einfo (VERBOSE, "FAIL: %s: contains multiple dynamic segments.", data->filename);
-	  tests[TEST_DYNAMIC].num_fail ++;
+	  tests[TEST_DYNAMIC_SEGMENT].num_fail ++;
 	}
       break;
 
@@ -3013,32 +3069,47 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
       else
 	fail (data, "Bad GNU Property note(s).  Run with -v to see what is wrong");
     }
+
   else if (results->num_maybe > 0)
     maybe (data, "Corrupt GNU Property note");
+
   else if (results->num_pass > 0)
     pass (data, "Good GNU Property note");
-  else if (per_file.e_machine == EM_X86_64 || per_file.e_machine == EM_386)
-    {
-      if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
-	{
-	  if (! built_by_compiler ())
-	    skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
-	  else
-	    fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled");
-	}
-    }
-  else if (per_file.e_machine == EM_AARCH64)
-    {
-      if (tests[TEST_BRANCH_PROTECTION].enabled && tests[TEST_BRANCH_PROTECTION].num_pass > 0)
-	{
-	  if (! built_by_compiler ())
-	    skip (data, "Branch protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that the BTI/PAC protection will *not* be enabled for any part of the binary");
-	  else
-	    future_fail (data, "branch protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global BTI/PAC protection cannot be enabled");
-	}
-    }
+
   else
-    pass (data, "GNU Property note not needed");
+    {
+      switch (per_file.e_machine)
+	{
+	case EM_X86_64:
+	case EM_386:
+	  if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
+	    {
+	      if (! built_by_compiler ())
+		skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
+	      else
+		fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled");
+	    }
+	  break;
+
+	case EM_AARCH64:
+	  if (tests[TEST_BRANCH_PROTECTION].enabled && tests[TEST_BRANCH_PROTECTION].num_pass > 0)
+	    {
+	      if (! built_by_compiler ())
+		skip (data, "Branch protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that the BTI/PAC protection will *not* be enabled for any part of the binary");
+	      else
+		future_fail (data, "branch protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global BTI/PAC protection cannot be enabled");
+	    }
+	  break;
+
+	case EM_PPC64:
+	  future_fail (data, "Missing GNU Property note");
+	  break;
+
+	default:
+	  fail (data, "ICE: property notes for this architecture not handled");
+	  break;
+	}
+    }
 }
 
 static void
@@ -3046,7 +3117,7 @@ show_BIND_NOW (annocheck_data * data, test * results)
 {
   if (per_file.e_type != ET_EXEC && per_file.e_type != ET_DYN)
     skip (data, "Test for -Wl,-z,now.  (Only needed for executables)");
-  else if (tests[TEST_DYNAMIC].num_pass == 0)
+  else if (tests[TEST_DYNAMIC_SEGMENT].num_pass == 0)
     skip (data, "Test for -Wl,-z,now.  (No dynamic segment present)");
   else if (results->num_maybe == 0)
     skip (data, "Test for -Wl,-z-now.  (Dynamic segment present, but no dynamic relocations found)");
@@ -3063,7 +3134,7 @@ show_BIND_NOW (annocheck_data * data, test * results)
 }
 
 static void
-show_DYNAMIC (annocheck_data * data, test * results)
+show_DYNAMIC_SEGMENT (annocheck_data * data, test * results)
 {
   if (results->num_fail > 0)
     fail (data, "Multiple dynamic sections/segments found");
@@ -3096,7 +3167,7 @@ show_GNU_RELRO (annocheck_data * data, test * results)
   /* Relocateable object files are not yet linked.  */
   if (per_file.e_type == ET_REL)
     skip (data, "Test for -Wl,-z,relro.  (Not needed in object files)");
-  else if (tests[TEST_DYNAMIC].num_pass == 0)
+  else if (tests[TEST_DYNAMIC_SEGMENT].num_pass == 0)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic segment present)");
   else if (tests [TEST_BIND_NOW].num_maybe == 0)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic relocations)");

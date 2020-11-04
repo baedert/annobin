@@ -12,17 +12,17 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f lto-hello.o hello2.o hello3.o libhello.so lto-test.exe
+rm -f hello.o hello2.o hello3.o libhello.so objcopy-test.exe objcopy-merged.exe
 
 GCC=${GCC:-gcc}
+OBJCOPY=${OBJCOPY:-objcopy}
 ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
 PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
-OPTS="-g -c -O2 -fpie -flto"
+OPTS="-g -c -O2 -fpie"
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello.c
-mv hello.o lto-hello.o
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello2.c 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello3.c
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS -shared $srcdir/hello_lib.c -o libhello.so
@@ -31,8 +31,12 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS -shared $srcdir/hello_lib.c -o libhello
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
     -flto \
     -pie \
-  lto-hello.o hello2.o hello3.o -L. -lhello -o lto-test.exe
+  hello.o hello2.o hello3.o -L. -lhello -o objcopy-test.exe
+
+# Run objcopy to merge the notes
+
+$OBJCOPY --merge-notes objcopy-test.exe objcopy-merged.exe
 
 # Run annocheck, but only enable the LTO test.
 
-$ANNOCHECK -v --ignore-gaps --skip-all --test-lto lto-test.exe | grep -e "PASS: Compiled with LTO enabled"
+$ANNOCHECK -v --ignore-gaps --skip-all --test-optimization objcopy-merged.exe | grep -e "PASS: Compiled with sufficient optimization"

@@ -7,7 +7,7 @@
 @c man begin INCLUDE
 @set VERSION 9.0
 @set VERSION_PACKAGE (Annobin) 
-@set UPDATED January 2020
+@set UPDATED November 2020
 @c man end
 
 @ifnottex
@@ -773,8 +773,11 @@ built by a particular compiler.
 
 annocheck
   [@b{--skip-bind-now}]
+  [@b{--skip-branch-protection}]
   [@b{--skip-cf-protection}]
   [@b{--skip-dynamic-segment}]
+  [@b{--skip-dynamic-tags}]
+  [@b{--skip-entry}]
   [@b{--skip-fortify}]
   [@b{--skip-glibcxx-assertions}]
   [@b{--skip-gnu-relro}]
@@ -792,8 +795,8 @@ annocheck
   [@b{--skip-stack-realign}]
   [@b{--skip-textrel}]
   [@b{--skip-threads}]
+  [@b{--skip-warnings}]
   [@b{--skip-writeable-got}]
-  [@b{--skip-all}]
   [@b{--test-@var{name}}]
   [@b{--ignore-gaps}]
   [@b{--disable-hardened}]
@@ -916,11 +919,10 @@ section.
 Disabled by @option{--skip-gnu-relro}.
 
 @item GNU Property Note
-For @var{x86_64} binaries, check that a correctly formatted GNU
-Property note is present.  These notes are only generated with a
-program is compiled with the @option{-fcf-protection} gcc option is
-enabled, so if annocheck's @option{--skip-cf-protection} option is
-enabled then this test will be skipped as well.
+For @var{x86_64}, @var{AArch64} and @var{PowerPC} binaries, check that
+a correctly formatted GNU Property note is present.  The contents of
+the notes are architecture specific.
+Disabled by @option{--skip-property-note}.
 
 @item Enum Size
 Check that the program makes consistent use of the

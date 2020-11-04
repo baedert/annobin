@@ -476,7 +476,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 TESTS = compile-test abi-test active-checks-test assembler-gap-test \
 	function-sections-test hardening-fail-test hardening-test \
-	instrumentation-test lto-test missing-notes-test \
+	instrumentation-test lto-test missing-notes-test objcopy-test \
 	section-size-test $(am__append_1)
 XFAIL_TESTS = hardening-fail-test \
       missing-notes-test \
@@ -736,6 +736,13 @@ lto-test.log: lto-test
 missing-notes-test.log: missing-notes-test
 	@p='missing-notes-test'; \
 	b='missing-notes-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+objcopy-test.log: objcopy-test
+	@p='objcopy-test'; \
+	b='objcopy-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

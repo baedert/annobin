@@ -1,4 +1,4 @@
-This is annobin.info, produced by makeinfo version 6.6 from
+This is annobin.info, produced by makeinfo version 6.7 from
 annobin.texi.
 
 This file documents the annobin plugin on the Fedora system.
@@ -664,8 +664,11 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
 
      annocheck
        [-skip-bind-now]
+       [-skip-branch-protection]
        [-skip-cf-protection]
        [-skip-dynamic-segment]
+       [-skip-dynamic-tags]
+       [-skip-entry]
        [-skip-fortify]
        [-skip-glibcxx-assertions]
        [-skip-gnu-relro]
@@ -683,8 +686,8 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-skip-stack-realign]
        [-skip-textrel]
        [-skip-threads]
+       [-skip-warnings]
        [-skip-writeable-got]
-       [-skip-all]
        [-test-NAME]
        [-ignore-gaps]
        [-disable-hardened]
@@ -790,11 +793,9 @@ code to support the test.
      writeable section.  Disabled by '--skip-gnu-relro'.
 
 'GNU Property Note'
-     For X86_64 binaries, check that a correctly formatted GNU Property
-     note is present.  These notes are only generated with a program is
-     compiled with the '-fcf-protection' gcc option is enabled, so if
-     annocheck's '--skip-cf-protection' option is enabled then this test
-     will be skipped as well.
+     For X86_64, AARCH64 and POWERPC binaries, check that a correctly
+     formatted GNU Property note is present.  The contents of the notes
+     are architecture specific.  Disabled by '--skip-property-note'.
 
 'Enum Size'
      Check that the program makes consistent use of the '-fshort-enum'
@@ -1904,15 +1905,20 @@ Node: The INSTRUMENT Encoding19087
 Node: Annocheck20461
 Node: Built-By22990
 Node: Hardened24520
-Node: Notes29986
-Node: Section-Size30630
-Node: Timing32784
-Node: Configure Options33431
-Node: Legacy Scripts35658
-Node: Who Built Me36433
-Node: ABI Checking39193
-Node: Hardening Checks41307
-Node: Checking Archives45393
-Node: GNU FDL47815
+Node: Notes29967
+Node: Section-Size30611
+Node: Timing32765
+Node: Configure Options33412
+Node: Legacy Scripts35639
+Node: Who Built Me36414
+Node: ABI Checking39174
+Node: Hardening Checks41288
+Node: Checking Archives45374
+Node: GNU FDL47796
 
 End Tag Table
+
+
+Local Variables:
+coding: utf-8
+End:

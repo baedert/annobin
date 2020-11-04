@@ -16,6 +16,7 @@ TESTS=compile-test \
       instrumentation-test \
       lto-test \
       missing-notes-test \
+      objcopy-test \
       section-size-test
 
 if HAVE_DEBUGINFOD
