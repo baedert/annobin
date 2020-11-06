@@ -2550,7 +2550,7 @@ hardened_dwarf_walker (annocheck_data *  data,
   if (dwarf_attr (die, DW_AT_language, & attr) != NULL)
     parse_dw_at_language (data, & attr);
   
-  if (dwarf_attr (die, DW_AT_producer, & attr) == NULL)
+  if (dwarf_attr (die, DW_AT_producer, & attr) != NULL)
     parse_dw_at_producer (data, & attr);
 
   /* Keep scanning.  */

@@ -332,11 +332,11 @@ process_command_line (uint argc, const char * argv[])
 
 	      if (const_strneq (arg, "dwarf-dir")) /* Old name for --debug-dir.  */
 		debug_path = parameter;
-	      else if (const_strneq (arg, "debug-dir"))
+	      else if (const_strneq (arg, "debug-dir") || const_strneq (arg, "debugdir"))
 		debug_path = parameter;
-	      else if (const_strneq (arg, "debug-rpm"))
+	      else if (const_strneq (arg, "debug-rpm") || const_strneq (arg, "debugrpm"))
 		debug_rpm = parameter;
-	      else if (const_strneq (arg, "debug-file"))
+	      else if (const_strneq (arg, "debug-file") || const_strneq (arg, "debugfile"))
 		debug_file = parameter;
 	      else
 		goto unknown_arg;
