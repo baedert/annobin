@@ -39,6 +39,15 @@ AC_ARG_WITH(
   [:])
 ])
 
+AC_DEFUN([BUILD_GCC_PLUGIN], [
+
+AC_ARG_WITH(
+  [gcc-plugin],
+  [AC_HELP_STRING([--without-gcc_plugin],[do not build the gcc plugin])],
+  [with_gcc_plugin=no],
+  [:])
+])
+
 AC_DEFUN([LLVM_PLUGIN], [
 
 AC_ARG_WITH(

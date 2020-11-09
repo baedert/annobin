@@ -2529,7 +2529,7 @@ plugin_init (struct plugin_name_args *    plugin_info,
 		     annobin_create_function_notes,
 		     NULL);
 
-  register_callback ("annobin: Register per-function end symbol",
+  register_callback ("annobin: Register per-function end symbols",
 		     PLUGIN_ALL_PASSES_END,
 		     annobin_create_function_end_symbol,
 		     NULL);

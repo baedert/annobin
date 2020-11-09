@@ -957,6 +957,9 @@ configure options available to customise the build:
      backend.  This is separate from the Clang plugin and can be used
      with any language that uses LLVM as a backend compiler.
 
+'--without-gcc-plugin'
+     Do not build the gcc plugin.
+
 '--enable-maintainer-mode'
      This enables the regeneration of the 'Makefile' and 'configure'
      files when building the 'annobin' sources.
@@ -1909,12 +1912,12 @@ Node: Notes29967
 Node: Section-Size30611
 Node: Timing32765
 Node: Configure Options33412
-Node: Legacy Scripts35639
-Node: Who Built Me36414
-Node: ABI Checking39174
-Node: Hardening Checks41288
-Node: Checking Archives45374
-Node: GNU FDL47796
+Node: Legacy Scripts35697
+Node: Who Built Me36472
+Node: ABI Checking39232
+Node: Hardening Checks41346
+Node: Checking Archives45432
+Node: GNU FDL47854
 
 End Tag Table
 

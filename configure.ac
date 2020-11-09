@@ -5,7 +5,7 @@
 AC_PREREQ(2.64)
 AC_INIT([Binary Annotations], 9.0,,[annobin-plugin])
 AC_CONFIG_AUX_DIR([config])
-AC_CONFIG_SRCDIR([gcc-plugin/annobin.h])
+AC_CONFIG_SRCDIR([annobin-global.h])
 
 AC_CANONICAL_SYSTEM
 AC_USE_SYSTEM_EXTENSIONS
@@ -58,6 +58,8 @@ GMP
 ANNOCHECK
 # Determine if we should build the clang-plugin
 CLANG_PLUGIN
+# Determine if we should build the gcc-plugin
+BUILD_GCC_PLUGIN
 # Determine if we should build the llvm-plugin
 LLVM_PLUGIN
 
@@ -141,11 +143,14 @@ AC_SUBST(target_noncanonical)
 AC_TYPE_INT64_T
 AC_TYPE_UINT64_T
 AC_HEADER_SYS_WAIT
-AM_CONDITIONAL([COND_TESTS], [test "$with_tests" != no])
-AM_CONDITIONAL([COND_ANNOCHECK], [test "$with_annocheck" != no])
-AM_CONDITIONAL([COND_CLANG], [test "$with_clang_plugin" == yes])
-AM_CONDITIONAL([COND_LLVM], [test "$with_llvm_plugin" == yes])
-AC_CONFIG_FILES(gcc-plugin/Makefile doc/Makefile Makefile)
+
+AM_CONDITIONAL([COND_TESTS],      [test "$with_tests" != no])
+AM_CONDITIONAL([COND_ANNOCHECK],  [test "$with_annocheck" != no])
+AM_CONDITIONAL([COND_CLANG],      [test "$with_clang_plugin" == yes])
+AM_CONDITIONAL([COND_GCC_PLUGIN], [test "$with_gcc_plugin" != no])
+AM_CONDITIONAL([COND_LLVM],       [test "$with_llvm_plugin" == yes])
+
+AC_CONFIG_FILES(doc/Makefile Makefile)
 if test "$with_tests" != no; then
   AC_CONFIG_FILES(tests/Makefile)
 fi
@@ -155,9 +160,12 @@ fi
 if test "$with_clang" = yes; then
   AC_CONFIG_FILES(clang-plugin/Makefile)
 fi
+if test "$with_gcc_plugin" != no; then
+  AC_CONFIG_FILES(gcc-plugin/Makefile)
+  AC_CONFIG_HEADERS(gcc-plugin/config.h)
+fi
 if test "$with_llvm" = yes; then
   AC_CONFIG_FILES(llvm-plugin/Makefile)
 fi
-  
-AC_CONFIG_HEADERS(gcc-plugin/config.h)
+
 AC_OUTPUT

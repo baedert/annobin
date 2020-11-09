@@ -592,7 +592,7 @@ PACKAGE_STRING='Binary Annotations 9.0'
 PACKAGE_BUGREPORT=''
 PACKAGE_URL=''
 
-ac_unique_file="gcc-plugin/annobin.h"
+ac_unique_file="annobin-global.h"
 # Factoring default headers for most tests.
 ac_includes_default="\
 #include <stdio.h>
@@ -635,6 +635,8 @@ LTLIBOBJS
 LIBOBJS
 COND_LLVM_FALSE
 COND_LLVM_TRUE
+COND_GCC_PLUGIN_FALSE
+COND_GCC_PLUGIN_TRUE
 COND_CLANG_FALSE
 COND_CLANG_TRUE
 COND_ANNOCHECK_FALSE
@@ -800,6 +802,7 @@ with_gmp
 with_annocheck
 with_libelf
 with_clang
+with_gcc_plugin
 with_llvm
 enable_maintainer_mode
 with_debuginfod
@@ -1473,6 +1476,7 @@ Optional Packages:
   --without-annocheck     do not build annocheck
   --without-libelf        remove libelf dependency
   --with-clang            build the clang plugin
+  --without-gcc_plugin    do not build the gcc plugin
   --with-llvm             build the llvm plugin
   --with-debuginfod       Enable debuginfo lookups with debuginfod
                           (auto/yes/no)
@@ -18227,6 +18231,18 @@ else
 fi
 
 
+# Determine if we should build the gcc-plugin
+
+
+
+# Check whether --with-gcc-plugin was given.
+if test "${with_gcc_plugin+set}" = set; then :
+  withval=$with_gcc_plugin; with_gcc_plugin=no
+else
+  :
+fi
+
+
 # Determine if we should build the llvm-plugin
 
 
@@ -18539,6 +18555,7 @@ $as_echo "#define HAVE_SYS_WAIT_H 1" >>confdefs.h
 
 fi
 
+
  if test "$with_tests" != no; then
   COND_TESTS_TRUE=
   COND_TESTS_FALSE='#'
@@ -18563,6 +18580,14 @@ else
   COND_CLANG_FALSE=
 fi
 
+ if test "$with_gcc_plugin" != no; then
+  COND_GCC_PLUGIN_TRUE=
+  COND_GCC_PLUGIN_FALSE='#'
+else
+  COND_GCC_PLUGIN_TRUE='#'
+  COND_GCC_PLUGIN_FALSE=
+fi
+
  if test "$with_llvm_plugin" == yes; then
   COND_LLVM_TRUE=
   COND_LLVM_FALSE='#'
@@ -18571,7 +18596,8 @@ else
   COND_LLVM_FALSE=
 fi
 
-ac_config_files="$ac_config_files gcc-plugin/Makefile doc/Makefile Makefile"
+
+ac_config_files="$ac_config_files doc/Makefile Makefile"
 
 if test "$with_tests" != no; then
   ac_config_files="$ac_config_files tests/Makefile"
@@ -18585,12 +18611,16 @@ if test "$with_clang" = yes; then
   ac_config_files="$ac_config_files clang-plugin/Makefile"
 
 fi
+if test "$with_gcc_plugin" != no; then
+  ac_config_files="$ac_config_files gcc-plugin/Makefile"
+
+  ac_config_headers="$ac_config_headers gcc-plugin/config.h"
+
+fi
 if test "$with_llvm" = yes; then
   ac_config_files="$ac_config_files llvm-plugin/Makefile"
 
 fi
-
-ac_config_headers="$ac_config_headers gcc-plugin/config.h"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -18743,6 +18773,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${COND_CLANG_TRUE}" && test -z "${COND_CLANG_FALSE}"; then
   as_fn_error $? "conditional \"COND_CLANG\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${COND_GCC_PLUGIN_TRUE}" && test -z "${COND_GCC_PLUGIN_FALSE}"; then
+  as_fn_error $? "conditional \"COND_GCC_PLUGIN\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${COND_LLVM_TRUE}" && test -z "${COND_LLVM_FALSE}"; then
@@ -19727,14 +19761,14 @@ do
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
     "libtool-rpath-patch") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool-rpath-patch" ;;
-    "gcc-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES gcc-plugin/Makefile" ;;
     "doc/Makefile") CONFIG_FILES="$CONFIG_FILES doc/Makefile" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "tests/Makefile") CONFIG_FILES="$CONFIG_FILES tests/Makefile" ;;
     "annocheck/Makefile") CONFIG_FILES="$CONFIG_FILES annocheck/Makefile" ;;
     "clang-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES clang-plugin/Makefile" ;;
-    "llvm-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES llvm-plugin/Makefile" ;;
+    "gcc-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES gcc-plugin/Makefile" ;;
     "gcc-plugin/config.h") CONFIG_HEADERS="$CONFIG_HEADERS gcc-plugin/config.h" ;;
+    "llvm-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES llvm-plugin/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac

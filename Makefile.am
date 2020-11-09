@@ -18,10 +18,14 @@ if COND_CLANG
   MAYBE_CLANG = clang-plugin
 endif
 
+if COND_GCC_PLUGIN
+  MAYBE_GCC = gcc-plugin
+endif
+
 if COND_LLVM
   MAYBE_LLVM = llvm-plugin
 endif
 
-SUBDIRS = gcc-plugin doc $(MAYBE_TESTS) $(MAYBE_ANNOCHECK) $(MAYBE_CLANG) $(MAYBE_LLVM)
+SUBDIRS = doc $(MAYBE_GCC) $(MAYBE_CLANG) $(MAYBE_LLVM) $(MAYBE_ANNOCHECK) $(MAYBE_TESTS) 
 dist_doc_DATA = LICENSE COPYING3
 ACLOCAL_AMFLAGS = -I config

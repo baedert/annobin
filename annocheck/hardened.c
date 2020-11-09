@@ -588,7 +588,7 @@ set_lang (annocheck_data *  data,
 {
   if (per_file.lang == LANG_UNKNOWN)
     {
-      einfo (VERBOSE, "%s: Written in %s (source: %s)",
+      einfo (VERBOSE, "%s: info: Written in %s (source: %s)",
 	     data->filename, get_lang_name (lang), source);
 
       per_file.lang = lang;
@@ -1751,6 +1751,13 @@ handle_aarch64_property_note (annocheck_data *     data,
 			  ulong                size,
 			  const unsigned char * notedata)
 {
+  /* These are not defined in the RHEL-7 build environment.  */
+#ifndef GNU_PROPERTY_AARCH64_FEATURE_1_AND
+#define GNU_PROPERTY_AARCH64_FEATURE_1_AND	0xc0000000
+#define GNU_PROPERTY_AARCH64_FEATURE_1_BTI	(1U << 0)
+#define GNU_PROPERTY_AARCH64_FEATURE_1_PAC	(1U << 1)
+#endif
+  
   if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
     {
       einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
@@ -1792,6 +1799,14 @@ handle_x86_property_note (annocheck_data *     data,
 			  ulong                size,
 			  const unsigned char * notedata)
 {
+  /* These are not defined in the RHEL-7 build environment.  */
+#ifndef GNU_PROPERTY_X86_FEATURE_1_AND
+#define GNU_PROPERTY_X86_UINT32_AND_LO		0xc0000002
+#define GNU_PROPERTY_X86_FEATURE_1_AND          (GNU_PROPERTY_X86_UINT32_AND_LO + 0)
+#define GNU_PROPERTY_X86_FEATURE_1_IBT		(1U << 0)
+#define GNU_PROPERTY_X86_FEATURE_1_SHSTK	(1U << 1)
+#endif
+
   if (type != GNU_PROPERTY_X86_FEATURE_1_AND)
     {
       einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
