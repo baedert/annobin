@@ -34,12 +34,13 @@ enum tool
 {
   TOOL_UNKNOWN = 0,
   TOOL_MIXED,
-  TOOL_GCC,
-  TOOL_GAS,
   TOOL_CLANG,
-  TOOL_LLVM,
   TOOL_FORTRAN,
+  TOOL_GAS,
+  TOOL_GCC,
+  TOOL_GIMPLE,
   TOOL_GO,
+  TOOL_LLVM,
   TOOL_RUST
 };
 
@@ -77,7 +78,8 @@ static struct per_file
   uint        version;
 
   enum lang   lang;
-  
+
+  bool        has_gimple;
   bool        warned_producer;
   bool        warned_about_instrumentation;
   bool        warned_version_mismatch;
@@ -201,7 +203,7 @@ static test tests [TEST_MAX] =
 static inline bool
 is_compiler (enum tool tool)
 {
-  return tool == TOOL_GCC || tool == TOOL_CLANG || tool == TOOL_LLVM;
+  return tool == TOOL_GCC || tool == TOOL_CLANG || tool == TOOL_LLVM || tool == TOOL_GIMPLE;
 }
 
 static inline bool
@@ -228,6 +230,12 @@ built_by_mixed (void)
   return per_file.tool == TOOL_MIXED;
 }
 
+static inline bool
+built_with_gimple (void)
+{
+  return per_file.has_gimple;
+}
+
 static void
 warn (annocheck_data * data, const char * message)
 {
@@ -240,6 +248,451 @@ static void
 info (annocheck_data * data, const char * message)
 {
   einfo (VERBOSE, "%s: info: %s", data->filename, message);
+}
+
+static bool
+skip_check (enum test_index check, const char * component_name)
+{
+  if (check < TEST_MAX && ! tests[check].enabled)
+    return true;
+
+  if (component_name == NULL)
+    return false;
+
+  if (const_strneq (component_name, "component: "))
+    component_name += strlen ("component: ");
+
+  if (streq (component_name, "elf_init.c")
+      || streq (component_name, "init.c"))
+    {
+      if (check < TEST_MAX)
+	einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
+      return true;
+    }
+
+  const static struct ignore
+  {
+    const char *     func_name;
+    enum test_index  test_indicies[4];
+  }
+  skip_these_funcs[] =
+  {
+    /* We know that some glibc startup functions cannot be compiled
+       with stack protection enabled.  So do not complain about them.  */
+    { "_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "__libc_csu_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "__libc_csu_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+
+    /* FIXME: Not sure about these two - they need some tests skipping
+       but I do not think that they were stack tests...  */
+    { "static_reloc.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "_dl_relocate_static_pie", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+
+    /* The stack overflow support code does not need stack protection.  */
+    { "__stack_chk_fail_local", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "stack_chk_fail_local.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+
+    /* Also the atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+    { "atexit", { TEST_PIC, TEST_PIE, TEST_MAX, 0 } }
+  };
+
+  int i;
+
+  for (i = ARRAY_SIZE (skip_these_funcs); i--;)
+    if (streq (component_name, skip_these_funcs[i].func_name))
+      {
+	for (i = 0; i < ARRAY_SIZE (skip_these_funcs[0].test_indicies); i++)
+	  if (skip_these_funcs[0].test_indicies[i] == check)
+	    {
+	      if (check < TEST_MAX)
+		einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
+	      else
+		einfo (VERBOSE2, "skipping tests of component %s", component_name);
+	      return true;
+	    }
+
+	/* No need to continue searching - we have already matched the name.  */
+	break;
+      }
+
+  return false;
+}
+
+static const char *
+get_tool_name (enum tool tool)
+{
+  switch (tool)
+    {
+    default:           return "<unrecognised>";
+    case TOOL_UNKNOWN: return "<unknown>";
+    case TOOL_MIXED:   return "<mixed>";
+    case TOOL_CLANG:   return "clang";
+    case TOOL_FORTRAN: return "fortran";
+    case TOOL_GAS:     return "gas";
+    case TOOL_GCC:     return "gcc";
+    case TOOL_GIMPLE:  return "gimple";
+    case TOOL_GO:      return "go";
+    case TOOL_LLVM:    return "llvm";
+    case TOOL_RUST:    return "rust";
+    }
+}
+
+static const char *
+get_lang_name (enum lang lang)
+{
+  switch (lang)
+    {
+    default:
+    case LANG_UNKNOWN: return "unknown";
+    case LANG_C: return "C";
+    case LANG_CXX: return "C++";
+    case LANG_OTHER: return "other";
+    }
+}
+
+static void
+set_lang (annocheck_data *  data,
+	  enum lang         lang,
+	  const char *      source)
+{
+  if (per_file.lang == LANG_UNKNOWN)
+    {
+      einfo (VERBOSE, "%s: info: Written in %s (source: %s)",
+	     data->filename, get_lang_name (lang), source);
+
+      per_file.lang = lang;
+    }
+  else if (per_file.lang == lang)
+    ;
+  else
+    {
+      einfo (VERBOSE, "%s: ALSO written in %s (source: %s)",
+	     data->filename, get_lang_name (lang), source);
+      /* FIXME: What to do ?
+	 For now we choose C++ if it is one of the languages, so that the GLIBXX_ASSERTIONS test is enabled.  */
+      if (per_file.lang != LANG_CXX && lang == LANG_CXX)
+	per_file.lang = lang;
+    }
+}
+
+static void
+set_producer (annocheck_data *     data,
+	      enum tool            tool,
+	      unsigned int         version,
+	      const char *         source)
+{
+  einfo (VERBOSE2, "info: Record producer %s version %u source %s", get_tool_name (tool), version, source);
+
+  if (tool == TOOL_GIMPLE)
+    per_file.has_gimple = true;
+
+  if (per_file.tool == TOOL_UNKNOWN)
+    {
+      per_file.tool = tool;
+      per_file.version = version;
+      einfo (VERBOSE, "%s: info: Set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
+    }
+  else if (per_file.tool == tool)
+    {
+      if (per_file.version != version)
+	{
+	  if (! per_file.warned_producer)
+	    {
+	      einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
+		     data->filename, version, per_file.version);
+	      per_file.warned_producer = true;
+	    }
+
+	  if (per_file.version < version)
+	    per_file.version = version;
+	}
+    }
+  else if ((per_file.tool == TOOL_GAS && is_compiler (tool))
+	   || (built_by_compiler () && tool == TOOL_GAS))
+    {
+      if (! per_file.warned_producer)
+	{
+	  info (data, "Mixed assembler and GCC detected - treating as pure GCC");
+	  per_file.warned_producer = true;
+	}
+
+      per_file.tool = TOOL_GCC;
+    }
+  else if ((per_file.tool == TOOL_GIMPLE && is_compiler (tool))
+	   || (built_by_compiler () && tool == TOOL_GIMPLE))
+    {
+      if (! per_file.warned_producer)
+	{
+	  info (data, "Mixed Gimple and GCC detected - treating as pure GCC");
+	  per_file.warned_producer = true;
+	}
+
+      per_file.tool = TOOL_GCC;
+    }
+  else if (! built_by_mixed ())
+    {
+      if (! per_file.warned_producer)
+	{
+	  einfo (VERBOSE, "%s: info: This binary was built by more than one tool (%s and %s)",
+		 data->filename,
+		get_tool_name (per_file.tool),
+		get_tool_name (tool));
+	  per_file.warned_producer = true;
+	}
+
+      if (per_file.tool != TOOL_CLANG && tool != TOOL_CLANG)
+	{
+	  per_file.tool = TOOL_MIXED;
+	  per_file.version = 0;
+	}
+      else if (tool == TOOL_CLANG)
+	{
+	  per_file.tool = TOOL_CLANG;
+	  per_file.version = version;
+	}
+    }
+}
+
+struct tool_string
+{
+  const char * lead_in;
+  const char * tool_name;
+  enum tool    tool_id;
+};
+
+typedef struct tool_id
+{
+  const char *  producer_string;
+  enum tool     tool_type;
+} tool_id;
+
+static const tool_id tools[] =
+{
+ /* { "GNU C++", TOOL_GXX }, */
+  { "GNU C", TOOL_GCC },
+  { "GNU Fortran", TOOL_FORTRAN },
+  { "rustc version", TOOL_RUST },
+  { "clang version", TOOL_CLANG },
+  { "clang LLVM", TOOL_CLANG }, /* Is this right ?  */
+  { "GNU Fortran", TOOL_FORTRAN },
+  { "GNU GIMPLE", TOOL_GIMPLE },
+  { "Go cmd/compile", TOOL_GO },
+  { "GNU AS", TOOL_GAS },
+  { NULL, 0 }
+};
+
+static void
+parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
+{
+  Dwarf_Word val;
+
+  if (dwarf_formudata (attr, & val) != 0)
+    {
+      warn (data, "Unable to parse DW_AT_language attribute");
+      return;
+    }
+  
+  einfo (VERBOSE2, "%s: DW_AT_language = %x", data->filename, (int) val);
+
+  switch (val)
+    {
+    case DW_LANG_C89:
+    case DW_LANG_C:
+    case DW_LANG_C99:
+    case DW_LANG_ObjC:
+    case DW_LANG_C11:
+      set_lang (data, LANG_C, "DW_AT_language");
+      break;
+
+    case DW_LANG_C_plus_plus:
+    case DW_LANG_ObjC_plus_plus:
+    case DW_LANG_C_plus_plus_03:
+    case DW_LANG_C_plus_plus_11:
+    case DW_LANG_C_plus_plus_14:
+      einfo (VERBOSE, "%s: Written in C++", data->filename);
+      set_lang (data, LANG_CXX, "DW_AT_language");
+      break;
+
+    default:
+      einfo (VERBOSE, "%s: Written in a language other than C and CC++", data->filename);
+      set_lang (data, LANG_OTHER, "DW_AT_language");
+      break;
+    }
+}
+
+static void
+parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
+{
+  const char * string = dwarf_formstring (attr);
+
+  if (string == NULL)
+    {
+      unsigned int form = dwarf_whatform (attr);
+
+      if (form == DW_FORM_GNU_strp_alt)
+	warn (data, "DW_FORM_GNU_strp_alt not yet handled");
+      else
+	warn (data, "DWARF DW_AT_producer attribute uses non-string form");
+      /* Keep scanning - there may be another DW_AT_producer attribute.  */
+      return;
+    }
+
+  einfo (VERBOSE2, "%s: DW_AT_producer = %s", data->filename, string);
+
+  /* See if we can determine exactly which tool did produce this binary.  */
+  const tool_id *  tool;
+  const char *     where;
+  enum tool        madeby = TOOL_UNKNOWN;
+  unsigned int     version = 0;
+
+  for (tool = tools; tool->producer_string != NULL; tool ++)
+    if ((where = strstr (string, tool->producer_string)) != NULL)
+      {
+	madeby = tool->tool_type;
+	/* Look for a space after the ID string.  */
+	where = strchr (where + strlen (tool->producer_string), ' ');
+	if (where != NULL)
+	  version = strtod (where, NULL);
+	break;
+      }
+
+  if (madeby == TOOL_UNKNOWN)
+    {
+      /* FIXME: This can happen for object files because the DWARF data
+	 has not been relocated.  Find out how to handle this using libdwarf.  */
+      if (per_file.e_type == ET_REL)
+	warn (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
+      else
+	warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
+      return;
+    }
+
+  if (madeby != TOOL_GCC && madeby != TOOL_GIMPLE && per_file.tool == TOOL_UNKNOWN)
+    einfo (VERBOSE, "%s: Discovered non-gcc code producer (%s), skipping gcc specific checks",
+	   data->filename, get_tool_name (madeby));
+
+  set_producer (data, madeby, version, "DW_AT_producer");
+
+  /* The DW_AT_producer string may also contain some of the command
+     line options that were used to compile the binary.  This happens
+     when using the -grecord-gcc-switches option for example.  So we
+     have an opportunity to check for producer-specific command line
+     options.  Note - this is suboptimal since these options do not
+     necessarily apply to the entire binary, but in the absence of
+     annobin data they are better than nothing.  */
+  switch (madeby)
+    {
+    default:
+      break;
+
+    case TOOL_CLANG:
+      /* Try to determine if there are any command line options recorded in the
+	 DW_AT_producer string.  FIXME: This is not a very good heuristic.  */
+      if (strstr (string, "-f") || strstr (string, "-g") || strstr (string, "-O"))
+	{
+	  if (! skip_check (TEST_OPTIMIZATION, NULL))
+	    {
+	      if (strstr (string, " -O2") || strstr (string, " -O3"))
+		{
+		  tests[TEST_OPTIMIZATION].num_pass ++;
+		  einfo (VERBOSE2, "%s: PASS: Compiled with sufficient optimization", data->filename);
+		}
+	      else if (strstr (string, " -O0") || strstr (string, " -O1"))
+		{
+		  /* FIXME: This may not be a failure.  GCC needs -O2 or
+		     better for -D_FORTIFY_SOURCE to work properly, but
+		     other compilers may not.  */
+		  tests[TEST_OPTIMIZATION].num_fail ++;
+		  einfo (VERBOSE, "%s: FAIL: Built with insufficient optimization", data->filename);
+		}
+	      else
+		einfo (VERBOSE2, "%s: MAYB: Optimization level not found in DW_AT_producer string", data->filename);
+	    }
+
+	  if (! skip_check (TEST_PIC, NULL))
+	    {
+	      if (strstr (string, " -fpic") || strstr (string, " -fPIC")
+		  || strstr (string, " -fpie") || strstr (string, " -fPIE"))
+		{
+		  tests[TEST_PIC].num_pass ++;
+		  einfo (VERBOSE2, "%s: PASS: Compiled with -fpic/-fpie", data->filename);
+		}
+	      else
+		einfo (VERBOSE2, "%s: MAYB: -fPIC/-fPIE not found in DW_AT_producer string", data->filename);
+	    }
+
+	  if (! skip_check (TEST_STACK_PROT, NULL))
+	    {
+	      if (strstr (string, "-fstack-protector-strong")
+		  || strstr (string, "-fstack-protector-all"))
+		{
+		  tests[TEST_STACK_PROT].num_pass ++;
+		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient stack protection", data->filename);
+		}
+	      else if (strstr (string, "-fstack-protector"))
+		{
+		  tests[TEST_STACK_PROT].num_fail ++;
+		  einfo (VERBOSE, "%s: FAIL: Compiled with insufficient stack protection", data->filename);
+		}
+	      else
+		einfo (VERBOSE2, "%s: MAYB: -fstack-protector not found in DW_AT_producer string", data->filename);
+	    }
+
+	  if (! skip_check (TEST_WARNINGS, NULL))
+	    {
+	      if (strstr (string, "-Wall")
+		  || strstr (string, "-Wformat-security")
+		  || strstr (string, "-Werror=format-security"))
+		{
+		  tests[TEST_WARNINGS].num_pass ++;
+		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient warning enablement", data->filename);
+		}
+	      else if (! built_with_gimple ()) /* Gimple compilation drops all warnings.  */
+		einfo (VERBOSE2, "%s: MAYB: -Wall/-Wformat-security not found in DW_AT_producer string", data->filename);
+	    }
+
+	  if ((per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64)
+	      && ! skip_check (TEST_CF_PROTECTION, NULL))
+	    {
+	      if (strstr (string, "-fcf-protection"))
+		{
+		  tests[TEST_CF_PROTECTION].num_pass ++;
+		  einfo (VERBOSE, "%s: PASS: Compiled with control flow protection enabled", data->filename);
+		}
+	      else
+		einfo (VERBOSE2, "%s: MAYB: -fcf-protection not found in DW_AT_producer string", data->filename);
+	    }
+	}
+      else if (! per_file.warned_command_line)
+	{
+	  warn (data, "Command line options not recorded by -grecord-gcc-switches");
+	  per_file.warned_command_line = true;
+	}
+
+      break;
+    }
+}
+
+/* Look for DW_AT_producer and DW_AT_language attributes.  */
+
+static bool
+hardened_dwarf_walker (annocheck_data *  data,
+		       Dwarf *           dwarf ATTRIBUTE_UNUSED,
+		       Dwarf_Die *       die,
+		       void *            ptr ATTRIBUTE_UNUSED)
+{
+  Dwarf_Attribute  attr;
+
+  if (dwarf_attr (die, DW_AT_language, & attr) != NULL)
+    parse_dw_at_language (data, & attr);
+  
+  if (dwarf_attr (die, DW_AT_producer, & attr) != NULL)
+    parse_dw_at_producer (data, & attr);
+
+  /* Keep scanning.  */
+  return true;
 }
 
 static bool
@@ -289,6 +742,10 @@ start (annocheck_data * data)
      should be ET_DYN, even executable programs.  */
   if (per_file.e_type == ET_EXEC && tests[TEST_PIE].enabled)
     tests[TEST_PIE].num_fail ++;
+
+  /* Check to see if something other than gcc produced parts
+     of this binary.  */
+  (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
 
   return true;
 }
@@ -418,76 +875,6 @@ stack_prot_type (uint value)
     }
 }
 
-static bool
-skip_check (enum test_index check, const char * component_name)
-{
-  if (check < TEST_MAX && ! tests[check].enabled)
-    return true;
-
-  if (component_name == NULL)
-    return false;
-
-  if (const_strneq (component_name, "component: "))
-    component_name += strlen ("component: ");
-
-  if (streq (component_name, "elf_init.c")
-      || streq (component_name, "init.c"))
-    {
-      if (check < TEST_MAX)
-	einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
-      return true;
-    }
-
-  const static struct ignore
-  {
-    const char *     func_name;
-    enum test_index  test_indicies[4];
-  }
-  skip_these_funcs[] =
-  {
-    /* We know that some glibc startup functions cannot be compiled
-       with stack protection enabled.  So do not complain about them.  */
-    { "_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "__libc_csu_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "__libc_csu_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-
-    /* FIXME: Not sure about these two - they need some tests skipping
-       but I do not think that they were stack tests...  */
-    { "static_reloc.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "_dl_relocate_static_pie", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-
-    /* The stack overflow support code does not need stack protection.  */
-    { "__stack_chk_fail_local", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "stack_chk_fail_local.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-
-    /* Also the atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
-    { "atexit", { TEST_PIC, TEST_PIE, TEST_MAX, 0 } }
-  };
-
-  int i;
-
-  for (i = ARRAY_SIZE (skip_these_funcs); i--;)
-    if (streq (component_name, skip_these_funcs[i].func_name))
-      {
-	for (i = 0; i < ARRAY_SIZE (skip_these_funcs[0].test_indicies); i++)
-	  if (skip_these_funcs[0].test_indicies[i] == check)
-	    {
-	      if (check < TEST_MAX)
-		einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
-	      else
-		einfo (VERBOSE2, "skipping tests of component %s", component_name);
-	      return true;
-	    }
-
-	/* No need to continue searching - we have already matched the name.  */
-	break;
-      }
-
-  return false;
-}
-
 static void
 record_range (ulong start, ulong end)
 {
@@ -549,133 +936,6 @@ report_s (einfo_type           type,
 
   einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
 }
-
-static const char *
-get_producer_name (enum tool tool)
-{
-  switch (tool)
-    {
-    default:           return "<unrecognised>";
-    case TOOL_UNKNOWN: return "<unknown>";
-    case TOOL_MIXED:   return "<mixed>";
-    case TOOL_GCC:     return "gcc";
-    case TOOL_GAS:     return "gas";
-    case TOOL_CLANG:   return "clang";
-    case TOOL_LLVM:    return "llvm";
-    case TOOL_FORTRAN: return "fortran";
-    case TOOL_GO:      return "go";
-    case TOOL_RUST:    return "rust";
-    }
-}
-
-static const char *
-get_lang_name (enum lang lang)
-{
-  switch (lang)
-    {
-    default:
-    case LANG_UNKNOWN: return "unknown";
-    case LANG_C: return "C";
-    case LANG_CXX: return "C++";
-    case LANG_OTHER: return "other";
-    }
-}
-
-static void
-set_lang (annocheck_data *  data,
-	  enum lang         lang,
-	  const char *      source)
-{
-  if (per_file.lang == LANG_UNKNOWN)
-    {
-      einfo (VERBOSE, "%s: info: Written in %s (source: %s)",
-	     data->filename, get_lang_name (lang), source);
-
-      per_file.lang = lang;
-    }
-  else if (per_file.lang == lang)
-    ;
-  else
-    {
-      einfo (VERBOSE, "%s: ALSO written in %s (source: %s)",
-	     data->filename, get_lang_name (lang), source);
-      /* FIXME: What to do ?
-	 For now we choose C++ if it is one of the languages, so that the GLIBXX_ASSERTIONS test is enabled.  */
-      if (per_file.lang != LANG_CXX && lang == LANG_CXX)
-	per_file.lang = lang;
-    }
-}
-
-static void
-set_producer (annocheck_data *     data,
-	      enum tool            tool,
-	      unsigned int         version,
-	      const char *         source)
-{
-  einfo (VERBOSE2, "info: Record producer %s version %u source %s", get_producer_name (tool), version, source);
-
-  if (per_file.tool == TOOL_UNKNOWN)
-    {
-      per_file.tool = tool;
-      per_file.version = version;
-      einfo (VERBOSE, "%s: info: Set binary producer to %s version %u", data->filename, get_producer_name (tool), version);
-    }
-  else if (per_file.tool == tool)
-    {
-      if (per_file.version != version)
-	{
-	  if (! per_file.warned_producer)
-	    {
-	      einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
-		     data->filename, version, per_file.version);
-	      per_file.warned_producer = true;
-	    }
-
-	  if (per_file.version < version)
-	    per_file.version = version;
-	}
-    }
-  else if ((per_file.tool == TOOL_GAS && is_compiler (tool))
-	   || (built_by_compiler () && tool == TOOL_GAS))
-    {
-      if (! per_file.warned_producer)
-	{
-	  info (data, "Mixed assembler and GCC detected - treating as pure GCC");
-	  per_file.warned_producer = true;
-	}
-
-      per_file.tool = TOOL_GCC;
-    }
-  else if (! built_by_mixed ())
-    {
-      if (! per_file.warned_producer)
-	{
-	  einfo (VERBOSE, "%s: info: This binary was built by more than one tool (%s and %s)",
-		 data->filename,
-		get_producer_name (per_file.tool),
-		get_producer_name (tool));
-	  per_file.warned_producer = true;
-	}
-
-      if (per_file.tool != TOOL_CLANG && tool != TOOL_CLANG)
-	{
-	  per_file.tool = TOOL_MIXED;
-	  per_file.version = 0;
-	}
-      else if (tool == TOOL_CLANG)
-	{
-	  per_file.tool = TOOL_CLANG;
-	  per_file.version = version;
-	}
-    }
-}
-
-struct tool_string
-{
-  const char * lead_in;
-  const char * tool_name;
-  enum tool    tool_id;
-};
 
 static ulong
 get_4byte_value (const unsigned char * data)
@@ -1452,11 +1712,12 @@ walk_build_notes (annocheck_data *     data,
 		  /* FIXME: At the moment the clang plugin is unable to detect -Wall.
 		     for clang v9+.  */
 		  if (built_by_clang () && per_file.version > 8)
-		    break;
-		  if (built_by_mixed ())
-		    break;
-
-		  if (! skip_check (TEST_WARNINGS, get_component_name (data, sec, note_data, prefer_func_name)))
+		    ;
+		  else if (built_by_mixed ())
+		    ;
+		  else if (built_with_gimple ()) /* Gimple compilation drops all warnings.  */
+		    ;
+		  else if (! skip_check (TEST_WARNINGS, get_component_name (data, sec, note_data, prefer_func_name)))
 		    {
 		      report_i (VERBOSE, "%s: FAIL: (%s): Compiled without either -Wall or -Wformat-security",
 				data, sec, note_data, prefer_func_name, value);
@@ -2341,237 +2602,6 @@ check_seg (annocheck_data *    data,
   return true;
 }
 
-typedef struct tool_id
-{
-  const char *  producer_string;
-  enum tool     tool_type;
-} tool_id;
-
-static const tool_id tools[] =
-{
- /* { "GNU C++", TOOL_GXX }, */
-  { "GNU C", TOOL_GCC },
-  { "GNU Fortran", TOOL_FORTRAN },
-  { "rustc version", TOOL_RUST },
-  { "clang version", TOOL_CLANG },
-  { "clang LLVM", TOOL_CLANG }, /* Is this right ?  */
-  { "GNU Fortran", TOOL_FORTRAN },
-  { "Go cmd/compile", TOOL_GO },
-  { "GNU AS", TOOL_GAS },
-  { NULL, 0 }
-};
-
-static void
-parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
-{
-  Dwarf_Word val;
-
-  if (dwarf_formudata (attr, & val) != 0)
-    {
-      warn (data, "Unable to parse DW_AT_language attribute");
-      return;
-    }
-  
-  einfo (VERBOSE2, "%s: DW_AT_language = %x", data->filename, (int) val);
-
-  switch (val)
-    {
-    case DW_LANG_C89:
-    case DW_LANG_C:
-    case DW_LANG_C99:
-    case DW_LANG_ObjC:
-    case DW_LANG_C11:
-      set_lang (data, LANG_C, "DW_AT_language");
-      break;
-
-    case DW_LANG_C_plus_plus:
-    case DW_LANG_ObjC_plus_plus:
-    case DW_LANG_C_plus_plus_03:
-    case DW_LANG_C_plus_plus_11:
-    case DW_LANG_C_plus_plus_14:
-      einfo (VERBOSE, "%s: Written in C++", data->filename);
-      set_lang (data, LANG_CXX, "DW_AT_language");
-      break;
-
-    default:
-      einfo (VERBOSE, "%s: Written in a language other than C and CC++", data->filename);
-      set_lang (data, LANG_OTHER, "DW_AT_language");
-      break;
-    }
-}
-
-static void
-parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
-{
-  const char * string = dwarf_formstring (attr);
-
-  if (string == NULL)
-    {
-      unsigned int form = dwarf_whatform (attr);
-
-      if (form == DW_FORM_GNU_strp_alt)
-	warn (data, "DW_FORM_GNU_strp_alt not yet handled");
-      else
-	warn (data, "DWARF DW_AT_producer attribute uses non-string form");
-      /* Keep scanning - there may be another DW_AT_producer attribute.  */
-      return;
-    }
-
-  einfo (VERBOSE2, "%s: DW_AT_producer = %s", data->filename, string);
-
-  /* See if we can determine exactly which tool did produce this binary.  */
-  const tool_id *  tool;
-  const char *     where;
-  enum tool        madeby = TOOL_UNKNOWN;
-  unsigned int     version = 0;
-
-  for (tool = tools; tool->producer_string != NULL; tool ++)
-    if ((where = strstr (string, tool->producer_string)) != NULL)
-      {
-	madeby = tool->tool_type;
-	/* Look for a space after the ID string.  */
-	where = strchr (where + strlen (tool->producer_string), ' ');
-	if (where != NULL)
-	  version = strtod (where, NULL);
-	break;
-      }
-
-  if (madeby == TOOL_UNKNOWN)
-    {
-      /* FIXME: This can happen for object files because the DWARF data
-	 has not been relocated.  Find out how to handle this using libdwarf.  */
-      if (per_file.e_type == ET_REL)
-	warn (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
-      else
-	warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
-      return;
-    }
-
-  if (madeby != TOOL_GCC && per_file.tool == TOOL_UNKNOWN)
-    info (data, "Discovered non-gcc code producer, skipping gcc specific checks");
-
-  set_producer (data, madeby, version, "DW_AT_producer");
-
-  /* The DW_AT_producer string may also contain some of the command
-     line options that were used to compile the binary.  This happens
-     when using the -grecord-gcc-switches option for example.  So we
-     have an opportunity to check for producer-specific command line
-     options.  Note - this is suboptimal since these options do not
-     necessarily apply to the entire binary, but in the absence of
-     annobin data they are better than nothing.  */
-  switch (madeby)
-    {
-    default:
-      break;
-
-    case TOOL_CLANG:
-      /* Try to determine if there are any command line options recorded in the
-	 DW_AT_producer string.  FIXME: This is not a very good heuristic.  */
-      if (strstr (string, "-f") || strstr (string, "-g") || strstr (string, "-O"))
-	{
-	  if (! skip_check (TEST_OPTIMIZATION, NULL))
-	    {
-	      if (strstr (string, " -O2") || strstr (string, " -O3"))
-		{
-		  tests[TEST_OPTIMIZATION].num_pass ++;
-		  einfo (VERBOSE2, "%s: PASS: Compiled with sufficient optimization", data->filename);
-		}
-	      else if (strstr (string, " -O0") || strstr (string, " -O1"))
-		{
-		  /* FIXME: This may not be a failure.  GCC needs -O2 or
-		     better for -D_FORTIFY_SOURCE to work properly, but
-		     other compilers may not.  */
-		  tests[TEST_OPTIMIZATION].num_fail ++;
-		  einfo (VERBOSE, "%s: FAIL: Built with insufficient optimization", data->filename);
-		}
-	      else
-		einfo (VERBOSE2, "%s: MAYB: Optimization level not found in DW_AT_producer string", data->filename);
-	    }
-
-	  if (! skip_check (TEST_PIC, NULL))
-	    {
-	      if (strstr (string, " -fpic") || strstr (string, " -fPIC")
-		  || strstr (string, " -fpie") || strstr (string, " -fPIE"))
-		{
-		  tests[TEST_PIC].num_pass ++;
-		  einfo (VERBOSE2, "%s: PASS: Compiled with -fpic/-fpie", data->filename);
-		}
-	      else
-		einfo (VERBOSE2, "%s: MAYB: -fPIC/-fPIE not found in DW_AT_producer string", data->filename);
-	    }
-
-	  if (! skip_check (TEST_STACK_PROT, NULL))
-	    {
-	      if (strstr (string, "-fstack-protector-strong")
-		  || strstr (string, "-fstack-protector-all"))
-		{
-		  tests[TEST_STACK_PROT].num_pass ++;
-		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient stack protection", data->filename);
-		}
-	      else if (strstr (string, "-fstack-protector"))
-		{
-		  tests[TEST_STACK_PROT].num_fail ++;
-		  einfo (VERBOSE, "%s: FAIL: Compiled with insufficient stack protection", data->filename);
-		}
-	      else
-		einfo (VERBOSE2, "%s: MAYB: -fstack-protector not found in DW_AT_producer string", data->filename);
-	    }
-
-	  if (! skip_check (TEST_WARNINGS, NULL))
-	    {
-	      if (strstr (string, "-Wall")
-		  || strstr (string, "-Wformat-security")
-		  || strstr (string, "-Werror=format-security"))
-		{
-		  tests[TEST_WARNINGS].num_pass ++;
-		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient warning enablement", data->filename);
-		}
-	      else
-		einfo (VERBOSE2, "%s: MAYB: -Wall/-Wformat-security not found in DW_AT_producer string", data->filename);
-	    }
-
-	  if ((per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64)
-	      && ! skip_check (TEST_CF_PROTECTION, NULL))
-	    {
-	      if (strstr (string, "-fcf-protection"))
-		{
-		  tests[TEST_CF_PROTECTION].num_pass ++;
-		  einfo (VERBOSE, "%s: PASS: Compiled with control flow protection enabled", data->filename);
-		}
-	      else
-		einfo (VERBOSE2, "%s: MAYB: -fcf-protection not found in DW_AT_producer string", data->filename);
-	    }
-	}
-      else if (! per_file.warned_command_line)
-	{
-	  warn (data, "Command line options not recorded by -grecord-gcc-switches");
-	  per_file.warned_command_line = true;
-	}
-
-      break;
-    }
-}
-
-/* Look for DW_AT_producer and DW_AT_language attributes.  */
-
-static bool
-hardened_dwarf_walker (annocheck_data *  data,
-		       Dwarf *           dwarf ATTRIBUTE_UNUSED,
-		       Dwarf_Die *       die,
-		       void *            ptr ATTRIBUTE_UNUSED)
-{
-  Dwarf_Attribute  attr;
-
-  if (dwarf_attr (die, DW_AT_language, & attr) != NULL)
-    parse_dw_at_language (data, & attr);
-  
-  if (dwarf_attr (die, DW_AT_producer, & attr) != NULL)
-    parse_dw_at_producer (data, & attr);
-
-  /* Keep scanning.  */
-  return true;
-}
-
 static void
 fail (annocheck_data * data, const char * message)
 {
@@ -3049,7 +3079,9 @@ show_WARNINGS (annocheck_data * data, test * results)
 {
   if (results->num_fail > 0)
     {
-      if (BE_VERBOSE)
+      if (built_with_gimple ())
+	skip (data, "Checking for warning options.  (Gimple compilation drops warnings)");
+      else if (BE_VERBOSE)
 	fail (data, "Compiled without using either the -Wall or -Wformat-security options");
       else
 	fail (data, "Compiled without using either the -Wall or -Wformat-security options. Run with -v to see where");
@@ -3060,8 +3092,10 @@ show_WARNINGS (annocheck_data * data, test * results)
     }
   else if (results->num_pass == 0)
     {
-      if (! built_by_compiler ())
-	skip (data, "Checking for warning options (not built by gcc");
+      if (built_with_gimple ())
+	skip (data, "Checking for warning options.  (Built by gimple)");
+      else if (! built_by_compiler ())
+	skip (data, "Checking for warning options.  (Not built by gcc)");
       else
 	maybe (data, "No data about compilation warnings found");
     }
@@ -3696,10 +3730,6 @@ finish (annocheck_data * data)
 {
   if (disabled || per_file.debuginfo_file)
     return true;
-
-  /* Check to see if something other than gcc produced parts
-     of this binary.  */
-  (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
 
   if (! per_file.build_notes_seen
       /* NB/ This code must happen after the call to annocheck_walk_dwarf()

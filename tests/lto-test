@@ -19,7 +19,7 @@ ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
 PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
-OPTS="-g -c -O2 -fpie -flto"
+OPTS="-g -c -O2 -fpie -flto -D_FORTIFY_SOURCE=2"
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello.c
 mv hello.o lto-hello.o
