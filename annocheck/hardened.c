@@ -3537,56 +3537,73 @@ show_STACK_CLASH (annocheck_data * data, test * results)
 static void
 show_FORTIFY (annocheck_data * data, test * results)
 {
-  if (results->num_fail > 0)
+  if (! built_by_compiler ())
+    skip (data, "Test for -D_FORTIFY_SOURCE=2.  (Not built by gcc/clang)");
+
+  else if (results->num_fail > 0)
     {
-      if (results->num_pass > 0 || results->num_maybe > 0)
+      if (tests[TEST_LTO].num_pass > 0)
+	/* FIXME: This is wrong.  It only applies if -flto was used in the parts
+	   of the binary where -D_FORTIFY_SOURCES was not detected.  We ought
+	   to be checking this.  */
+	skip (data, "The -D_FORTIFY_SOURCE=2 option was not seen (which happens when compiling with LTO enabled)");
+
+      else if (per_file.e_type == ET_REL)
+	{
+	  if (per_file.lang == LANG_OTHER || per_file.lang == LANG_UNKNOWN)
+	    skip (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
+	  else
+	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used");	    
+	}
+
+      else if (results->num_pass > 0 || results->num_maybe > 0)
 	{
 	  if (BE_VERBOSE)
 	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2");
 	  else
 	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=2.  Run with -v to see where");
 	}
-      else if (per_file.e_type == ET_REL)
-	{
-	  if (per_file.lang == LANG_OTHER || per_file.lang == LANG_UNKNOWN)
-	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
-	  else
-	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used");	    
-	}
+
       else
 	fail (data, "The binary was compiled without -D_FORTIFY_SOURCE=2");
     }
 
-  else if (! built_by_compiler ())
-    skip (data, "Test for -D_FORTIFY_SOURCE=2.  (Not built by gcc/clang)");
-
   else if (results->num_maybe > 0)
     {
-      if (results->num_pass > 0)
+      if (per_file.e_type == ET_REL)
+	{
+	  if (per_file.lang == LANG_OTHER || per_file.lang == LANG_UNKNOWN)
+	    skip (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
+	  else
+	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used");
+	}
+
+      else if (tests[TEST_LTO].num_pass > 0)
+	skip (data, "The -D_FORTIFY_SOURCE=2 option was not seen (which happens when compiling with LTO enabled)");
+
+      /* If we know that we have seen -D_GLIBCXX_ASSERTIONS then we
+	 should also have seen -D_FORTIFY_SOURCE.  Hence its absence
+	 is a failure.  */
+      else if (tests[TEST_GLIBCXX_ASSERTIONS].num_pass > 0)
+	fail (data, "Some parts of the binary were compiled without -D_FORTIFY_SOURCE=2 but with -D_GLIBCXX_ASSERTIONS");
+
+      else if (results->num_pass > 0)
 	{
 	  if (! BE_VERBOSE)
 	    fail (data, "Some parts of the binary were not compiled with -D_FORTIFY_SOURCE=2.  Run with -v to see where");
 	  else
 	    fail (data, "Some parts of the binary were not compiled with -D_FORTIFY_SOURCE=2");
 	}
-      /* If we know that we have seen -D_GLIBCXX_ASSERTIONS then we
-	 should also have seen -D_FORTIFY_SOURCE.  Hence its absence
-	 is a failure.  */
-      else if (tests[TEST_GLIBCXX_ASSERTIONS].num_pass > 0)
-	fail (data, "The binary was compiled without -D_FORTIFY_SOURCE=2 but with -D_GLIBCXX_ASSERTIONS");
-      else if (per_file.e_type == ET_REL)
-	{
-	  if (per_file.lang == LANG_OTHER || per_file.lang == LANG_UNKNOWN)
-	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used, but this may be because this is an object file compiled from a language that does not use C headers");
-	  else
-	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=2 was used");
-	}
+
       else
 	maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
     }
 
   else if (results->num_pass > 0)
     pass (data, "Compiled with -D_FORTIFY_SOURCE=2");
+
+  else if (tests[TEST_LTO].num_pass > 0)
+    skip (data, "The -D_FORTIFY_SOURCE=2 option was not seen (which happens when compiling with LTO enabled)");
 
   else if (per_file.compiled_code_seen)
     maybe (data, "The -D_FORTIFY_SOURCE=2 option was not seen");
@@ -3670,18 +3687,24 @@ show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
 	  else
 	    maybe (data, "Some parts of the binary do not record whether -D_GLIBCXX_ASSERTIONS was used");
 	}
+
       /* If we know that we have seen -D_FORTIFY_SOURCE then we should also
 	 have seen -D_GLIBCXX_ASSERTIONS.  Hence its absence is a failure.  */
       else if (tests[TEST_FORTIFY].num_pass > 0)
-	{
-	  fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
-	}
+	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
+
+      else if (tests[TEST_LTO].num_pass > 0)
+	skip (data, "The -D_GLIBCXX_ASSERTIONS option was not seen (which happens when compiling with LTO enabled)");
+
       else
 	maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
     }
 
   else if (results->num_pass > 0)
     pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
+
+  else if (tests[TEST_LTO].num_pass > 0)
+    skip (data, "The -D_GLIBCXX_ASSERTIONS option was not seen (which happens when compiling with LTO enabled)");
 
   else if (per_file.compiled_code_seen)
     maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
