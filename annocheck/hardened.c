@@ -1747,7 +1747,7 @@ walk_build_notes (annocheck_data *     data,
 		    {
 		      /* Compiled without -flto.
 			 Not a failure because we are still bringing up universal LTO enabledment.  */
-		      report_i (VERBOSE, "%s: FAIL: (%s): Compiled without -flto",
+		      report_i (VERBOSE, "%s: LOOK: (%s): Compiled without -flto",
 				data, sec, note_data, prefer_func_name, value);
 		      tests[TEST_LTO].num_fail ++;
 		    }
@@ -2628,6 +2628,12 @@ skip (annocheck_data * data, const char * message)
   einfo (VERBOSE, "%s: skip: %s", data->filename, message);
 }
 
+static void
+look (annocheck_data * data, const char * message)
+{
+  future_fail (data, message);
+}
+
 /* Returns true if GAP is one that can be ignored.  */
 
 static bool
@@ -3020,7 +3026,7 @@ show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
       /* FIXME: Only inform the user for now.  Once -mbranch-protection has
 	 been added to the rpm macros then change this result to a maybe().  */
       /* maybe (data, "The -mbranch-protection setting was not recorded");  */
-      future_fail (data, "The -mbranch-protection setting was not recorded");
+      look (data, "The -mbranch-protection setting was not recorded");
     }
 }
 
@@ -3112,7 +3118,7 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
   else if (results->num_fail > 0)
     {
       if (per_file.e_machine == EM_AARCH64)
-	future_fail (data, "Bad GNU Property note(s)");
+	look (data, "Bad GNU Property note(s)");
       else if (BE_VERBOSE)
 	fail (data, "Bad GNU Property note(s)");
       else
@@ -3146,12 +3152,12 @@ show_PROPERTY_NOTE (annocheck_data * data, test * results)
 	      if (! built_by_compiler ())
 		skip (data, "Branch protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that the BTI/PAC protection will *not* be enabled for any part of the binary");
 	      else
-		future_fail (data, "branch protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global BTI/PAC protection cannot be enabled");
+		look (data, "branch protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global BTI/PAC protection cannot be enabled");
 	    }
 	  break;
 
 	case EM_PPC64:
-	  future_fail (data, "Missing GNU Property note");
+	  look (data, "Missing GNU Property note (specific to PowerPC)");
 	  break;
 
 	default:
@@ -3203,11 +3209,11 @@ show_DYNAMIC_TAGS (annocheck_data * data, test * results)
   else if (results->num_pass == 3)
     pass (data, "Both PAC and BTI dynamic tags are present");
   else if (results->num_pass == 2)
-    future_fail (data, "The BTI dynamic tags is missing");
+    look (data, "The BTI dynamic tags is missing");
   else if (results->num_pass == 1)
-    future_fail (data, "The PAC dynamic tags is missing");
+    look (data, "The PAC dynamic tags is missing");
   else
-    future_fail (data, "The BTI and PAC dynamic tags are missing");
+    look (data, "The BTI and PAC dynamic tags are missing");
 }
 
 static void
@@ -3353,12 +3359,12 @@ show_LTO (annocheck_data * data, test * results)
       if (results->num_pass > 0 || results->num_maybe > 0)
 	{
 	  if (BE_VERBOSE)
-	    skip (data, "WOULD-FAIL: Parts of the binary were compiled without LTO enabled");
+	    look (data, "Parts of the binary were compiled without LTO enabled");
 	  else
-	    skip (data, "WOULD-FAIL: Parts of the binary were compiled without LTO enabled.  Run with -v to see where");
+	    look (data, "Parts of the binary were compiled without LTO enabled.  Run with -v to see where");
 	}
       else
-	skip (data, "WOULD-FAIL: The binary was compiled without LTO enabled");
+	look (data, "The binary was compiled without LTO enabled");
     }
   else if (results->num_maybe > 0)
     {
@@ -3382,7 +3388,7 @@ show_LTO (annocheck_data * data, test * results)
     }
   else
     {
-      skip (data, "The LTO setting was not recorded");
+      skip (data, "The LTO setting was not recorded (probably due to the use of an old version of the annobin plugin)");
     }
 }
 
