@@ -13,6 +13,8 @@ PLUGIN_OPTIONS = \
 
 INCDIR = @srcdir@/..
 
+CLANG_LIBS = -lLLVM
+
 PLUGIN_INSTALL_DIR = `clang --print-seach-dirs | gawk -e'BEGIN { FS = ":" } /libraries/ { print gensub(" =","",1,$2) } END { }'`
 
 PLUGIN_NAME = annobin-for-clang.so
@@ -20,7 +22,7 @@ PLUGIN_NAME = annobin-for-clang.so
 all: $(PLUGIN_NAME)
 
 $(PLUGIN_NAME): annobin.cpp
-	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) -I$(INCDIR) $< -o $@
+	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) -I$(INCDIR) $(CLANG_LIBS) $< -o $@
 
 install: $(PLUGIN_NAME)
 	install -Dpm0755 -t ${PLUGIN_INSTALL_DIR} $<
