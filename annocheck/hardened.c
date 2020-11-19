@@ -698,6 +698,9 @@ hardened_dwarf_walker (annocheck_data *  data,
 static bool
 start (annocheck_data * data)
 {
+  if (disabled)
+    return false;
+
   /* (Re) Set the results for the tests.  */
   int i;
 
@@ -1066,7 +1069,7 @@ walk_build_notes (annocheck_data *     data,
     }
 
   /* We skip notes for empty ranges unless we are dealing with unrelocated
-     object files, or files not produced by gcc (where we cannot guarnatee
+     object files, or files not produced by gcc (where we cannot guarantee
      note ranges).  */
   if (per_file.e_type != ET_REL
       && note_data->start == note_data->end
@@ -1360,7 +1363,7 @@ walk_build_notes (annocheck_data *     data,
 
 	case 0:
 	  report_s (VERBOSE, "%s: FAIL: (%s): compiled without -fPIC/-fPIE",
-		  data, sec, note_data, prefer_func_name, NULL);
+		    data, sec, note_data, prefer_func_name, NULL);
 	  tests[TEST_PIC].num_fail ++;
 	  break;
 
@@ -1574,14 +1577,14 @@ walk_build_notes (annocheck_data *     data,
 	    case 3: /* CF_RETURN: Return but not branch.  */
 	    case 7: /* CF_RETURN | CF_SET */
 	      report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=return",
-		      data, sec, note_data, prefer_func_name, NULL);
+			data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
 
 	    case 1: /* CF_NONE: No protection. */
 	    case 5: /* CF_NONE | CF_SET */
 	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fcf-protection",
-		      data, sec, note_data, prefer_func_name, NULL);
+			data, sec, note_data, prefer_func_name, NULL);
 	      tests[TEST_CF_PROTECTION].num_fail ++;
 	      break;
 	    }
@@ -2424,6 +2427,9 @@ static bool
 check_sec (annocheck_data *     data,
 	   annocheck_section *  sec)
 {
+  if (disabled)
+    return false;
+
   /* Note - the types checked here should correspond to the types
      selected in interesting_sec().  */
   switch (sec->shdr.sh_type)
@@ -2523,6 +2529,9 @@ static bool
 check_seg (annocheck_data *    data,
 	   annocheck_segment * seg)
 {
+  if (disabled)
+    return false;
+
   if (seg->phdr->p_type == PT_LOAD)
     {
       Elf64_Addr entry_point = per_file.e_entry - seg->phdr->p_vaddr;
@@ -3905,9 +3914,6 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 
       return false;
     }
-
-
-
   
   if (streq (arg, "--enable-hardened"))
     {

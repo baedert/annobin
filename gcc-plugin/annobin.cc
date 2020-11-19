@@ -2181,21 +2181,24 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      two sections.  */
   annobin_emit_start_sym_and_version_note (HOT_SUFFIX, ANNOBIN_TOOL_ID_GCC_HOT);
   queue_attachment (HOT_SECTION, concat (HOT_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  //  emit_global_notes (HOT_SUFFIX);
+  // We have to emit notes for these other sections too, as we do not know
+  // which one(s) will actually end up containing any code.  Annocheck will
+  // ignore empty note ranges.
+  emit_global_notes (HOT_SUFFIX);
 
   annobin_emit_start_sym_and_version_note (COLD_SUFFIX, ANNOBIN_TOOL_ID_GCC_COLD);
   queue_attachment (COLD_SECTION, concat (COLD_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  //  emit_global_notes (COLD_SUFFIX);
+  emit_global_notes (COLD_SUFFIX);
 
   /* *sigh* As of gcc 9, a .text.startup section can also be created.  */
   annobin_emit_start_sym_and_version_note (STARTUP_SUFFIX, ANNOBIN_TOOL_ID_GCC_STARTUP);
   queue_attachment (STARTUP_SECTION, concat (STARTUP_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  //  emit_global_notes (STARTUP_SUFFIX);
+  emit_global_notes (STARTUP_SUFFIX);
 
   /* Presumably a .text.exit section can also be created, although I have not seen that yet.  */
   annobin_emit_start_sym_and_version_note (EXIT_SUFFIX, ANNOBIN_TOOL_ID_GCC_EXIT);
   queue_attachment (EXIT_SECTION, concat (EXIT_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  //  emit_global_notes (EXIT_SUFFIX);
+  emit_global_notes (EXIT_SUFFIX);
 }
 
 static void
