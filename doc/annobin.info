@@ -663,6 +663,7 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
 
 
      annocheck
+       [-skip-all]
        [-skip-bind-now]
        [-skip-branch-protection]
        [-skip-cf-protection]
@@ -670,6 +671,7 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-skip-dynamic-tags]
        [-skip-entry]
        [-skip-fortify]
+       [-skip-future]
        [-skip-glibcxx-assertions]
        [-skip-gnu-relro]
        [-skip-gnu-stack]
@@ -689,6 +691,8 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-skip-warnings]
        [-skip-writeable-got]
        [-test-NAME]
+       [-test-all]
+       [-test-future]
        [-ignore-gaps]
        [-disable-hardened]
        [-enable-hardened]
@@ -803,11 +807,18 @@ code to support the test.
 
    The tool does support a couple of other command line options as well:
 
+'--skip-future'
+     Do not report future fail tests.  These are tests for security
+     features which are not yet implemented.
+
 '--skip-all'
      Disable all tests.  Not really useful unless followed by...
 
 '--test-NAME'
      Enable test NAME.
+
+'--test-future'
+     Enable the reporting of future fail tests.
 
 '--enable-hardened'
      Enable the tool if it was previously disabled.  The option is the
@@ -1908,16 +1919,16 @@ Node: The INSTRUMENT Encoding19087
 Node: Annocheck20461
 Node: Built-By22990
 Node: Hardened24520
-Node: Notes29967
-Node: Section-Size30611
-Node: Timing32765
-Node: Configure Options33412
-Node: Legacy Scripts35697
-Node: Who Built Me36472
-Node: ABI Checking39232
-Node: Hardening Checks41346
-Node: Checking Archives45432
-Node: GNU FDL47854
+Node: Notes30244
+Node: Section-Size30888
+Node: Timing33042
+Node: Configure Options33689
+Node: Legacy Scripts35974
+Node: Who Built Me36749
+Node: ABI Checking39509
+Node: Hardening Checks41623
+Node: Checking Archives45709
+Node: GNU FDL48131
 
 End Tag Table
 

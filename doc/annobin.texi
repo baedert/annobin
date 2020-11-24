@@ -772,6 +772,7 @@ built by a particular compiler.
 @c man begin SYNOPSIS annocheck
 
 annocheck
+  [@b{--skip-all}]
   [@b{--skip-bind-now}]
   [@b{--skip-branch-protection}]
   [@b{--skip-cf-protection}]
@@ -779,6 +780,7 @@ annocheck
   [@b{--skip-dynamic-tags}]
   [@b{--skip-entry}]
   [@b{--skip-fortify}]
+  [@b{--skip-future}]
   [@b{--skip-glibcxx-assertions}]
   [@b{--skip-gnu-relro}]
   [@b{--skip-gnu-stack}]
@@ -798,6 +800,8 @@ annocheck
   [@b{--skip-warnings}]
   [@b{--skip-writeable-got}]
   [@b{--test-@var{name}}]
+  [@b{--test-all}]
+  [@b{--test-future}]
   [@b{--ignore-gaps}]
   [@b{--disable-hardened}]
   [@b{--enable-hardened}]
@@ -933,11 +937,19 @@ Check that the program makes consistent use of the
 The tool does support a couple of other command line options as well:
 
 @table @code
+
+@item --skip-future
+Do not report future fail tests.  These are tests for security
+features which are not yet implemented.
+
 @item --skip-all
 Disable all tests.  Not really useful unless followed by...
 
 @item --test-@var{name}
 Enable test @var{name}.
+
+@item --test-future
+Enable the reporting of future fail tests.
 
 @item --enable-hardened
 Enable the tool if it was previously disabled.  The option is the

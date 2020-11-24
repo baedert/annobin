@@ -199,6 +199,11 @@ static test tests [TEST_MAX] =
   TEST (writeable-got,      WRITEABLE_GOT,      "The .got section is not writeable"),
 };
 
+#ifdef DISABLE_FUTURE_FAIL
+static bool report_future_fail = false;
+#else
+static bool report_future_fail = true;
+#endif
 
 static inline bool
 is_compiler (enum tool tool)
@@ -1750,9 +1755,9 @@ walk_build_notes (annocheck_data *     data,
 		    {
 		      /* Compiled without -flto.
 			 Not a failure because we are still bringing up universal LTO enabledment.  */
-		      report_i (VERBOSE, "%s: LOOK: (%s): Compiled without -flto",
+		      report_i (VERBOSE, "%s: look: (%s): Compiled without -flto",
 				data, sec, note_data, prefer_func_name, value);
-		      tests[TEST_LTO].num_fail ++;
+		      /* tests[TEST_LTO].num_fail ++; */
 		    }
 		  else
 		    {
@@ -1980,6 +1985,9 @@ walk_build_notes (annocheck_data *     data,
 static void
 ffail (annocheck_data * data, const char * message, int level)
 {
+  if (! report_future_fail)
+    level = VERBOSE2;
+
   einfo (level, "%s: look: %s", data->filename, message);
   einfo (level, "%s: ^^^^:  This test is not yet enabled, but if it was enabled, it would fail...",
 	 data->filename);
@@ -2220,7 +2228,7 @@ check_note_section (annocheck_data *    data,
 {
   if (sec->shdr.sh_addralign != 4 && sec->shdr.sh_addralign != 8)
     {
-      einfo (ERROR, "%s: note section %s not properly aligned (alignment: %ld)",
+      einfo (WARN, "%s: note section %s not properly aligned (alignment: %ld)",
 	     data->filename, sec->secname, (long) sec->shdr.sh_addralign);
     }
 
@@ -3878,6 +3886,12 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	  return true;
 	}
       
+      if (streq (arg, "future"))
+	{
+	  report_future_fail = false;
+	  return true;
+	}
+      
       for (i = 0; i < TEST_MAX; i++)
 	{
 	  if (streq (arg, tests[i].name))
@@ -3900,6 +3914,12 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	{
 	  for (i = 0; i < TEST_MAX; i++)
 	    tests[i].enabled = true;
+	  return true;
+	}
+      
+      if (streq (arg, "future"))
+	{
+	  report_future_fail = true;
 	  return true;
 	}
       
