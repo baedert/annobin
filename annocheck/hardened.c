@@ -2443,7 +2443,7 @@ check_code_section (annocheck_data *     data,
 	  einfo (VERBOSE2, "%s: built by clang version %u (extracted from '%s' in comment section)",
 		 data->filename, version, where);
 	}
-      else if ((where = strstr (tool, lld_prefix)) != NULL)
+      else if (strstr (tool, lld_prefix) != NULL)
 	{
 	  einfo (VERBOSE2, "ignoring linker version string found in .comment section");
 	}

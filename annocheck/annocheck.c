@@ -273,7 +273,10 @@ process_command_line (uint argc, const char * argv[])
 {
   uint a = 1;
 
-  progname = argv[0];
+  progname = component_names[0];
+
+  if (argc > 0 && argv == NULL)
+    return false;
 
   while (a < argc)
     {
@@ -802,10 +805,10 @@ follow_debuglink (annocheck_data * data)
       if (path == NULL)
 	path = "";
       
-      debugfile = n = xmalloc (strlen (leadin)
-                               + strlen (path)
-			       + len * 2
-			       + strlen (".debug") + 6);
+      debugfile = xmalloc (strlen (leadin)
+			   + strlen (path)
+			   + len * 2
+			   + strlen (".debug") + 6);
       
       sprintf (build_id_dir, "%02x", * d++);
       len --;
