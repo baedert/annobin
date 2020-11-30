@@ -84,6 +84,8 @@ static struct per_file
   bool        warned_about_instrumentation;
   bool        warned_version_mismatch;
   bool        warned_command_line;
+  bool        other_language;
+  bool        also_written;
 } per_file;
 
 static hardened_note_data *  ranges = NULL;
@@ -333,14 +335,14 @@ get_tool_name (enum tool tool)
     default:           return "<unrecognised>";
     case TOOL_UNKNOWN: return "<unknown>";
     case TOOL_MIXED:   return "<mixed>";
-    case TOOL_CLANG:   return "clang";
-    case TOOL_FORTRAN: return "fortran";
+    case TOOL_CLANG:   return "Clang";
+    case TOOL_FORTRAN: return "Fortran";
     case TOOL_GAS:     return "gas";
-    case TOOL_GCC:     return "gcc";
+    case TOOL_GCC:     return "GCC";
     case TOOL_GIMPLE:  return "gimple";
-    case TOOL_GO:      return "go";
-    case TOOL_LLVM:    return "llvm";
-    case TOOL_RUST:    return "rust";
+    case TOOL_GO:      return "GO";
+    case TOOL_LLVM:    return "LLVM";
+    case TOOL_RUST:    return "Rust";
     }
 }
 
@@ -364,7 +366,7 @@ set_lang (annocheck_data *  data,
 {
   if (per_file.lang == LANG_UNKNOWN)
     {
-      einfo (VERBOSE, "%s: info: Written in %s (source: %s)",
+      einfo (VERBOSE2, "%s: info: Written in %s (source: %s)",
 	     data->filename, get_lang_name (lang), source);
 
       per_file.lang = lang;
@@ -373,8 +375,12 @@ set_lang (annocheck_data *  data,
     ;
   else
     {
-      einfo (VERBOSE, "%s: ALSO written in %s (source: %s)",
-	     data->filename, get_lang_name (lang), source);
+      if (! per_file.also_written)
+	{
+	  einfo (VERBOSE, "%s: ALSO written in %s (source: %s)",
+		 data->filename, get_lang_name (lang), source);
+	  per_file.also_written = true;
+	}
       /* FIXME: What to do ?
 	 For now we choose C++ if it is one of the languages, so that the GLIBXX_ASSERTIONS test is enabled.  */
       if (per_file.lang != LANG_CXX && lang == LANG_CXX)
@@ -521,7 +527,23 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
       break;
 
     default:
-      einfo (VERBOSE, "%s: Written in a language other than C and CC++", data->filename);
+      if (! per_file.other_language)
+	{
+	  switch (val)
+	    {
+	    case DW_LANG_Go:
+	      einfo (VERBOSE, "%s: Written in GO", data->filename);
+	      break;
+	    case DW_LANG_Rust:
+	      einfo (VERBOSE, "%s: Written in RUST", data->filename);
+	      break;
+	    default:
+	      einfo (VERBOSE, "%s: Written in a language other than C and CC++", data->filename);
+	      einfo (VERBOSE2, "debugging: val = %ld", val);
+	      break;
+	    }
+	  per_file.other_language = true;
+	}
       set_lang (data, LANG_OTHER, "DW_AT_language");
       break;
     }
@@ -1755,8 +1777,13 @@ walk_build_notes (annocheck_data *     data,
 		    {
 		      /* Compiled without -flto.
 			 Not a failure because we are still bringing up universal LTO enabledment.  */
-		      report_i (VERBOSE, "%s: look: (%s): Compiled without -flto",
-				data, sec, note_data, prefer_func_name, value);
+		      if (! report_future_fail)
+			report_i (VERBOSE2, "%s: look: (%s): Compiled without -flto",
+				  data, sec, note_data, prefer_func_name, value);
+		      else
+			report_i (VERBOSE, "%s: look: (%s): Compiled without -flto",
+				  data, sec, note_data, prefer_func_name, value);
+			
 		      /* tests[TEST_LTO].num_fail ++; */
 		    }
 		  else
