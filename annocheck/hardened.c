@@ -539,7 +539,7 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
 	      break;
 	    default:
 	      einfo (VERBOSE, "%s: Written in a language other than C and CC++", data->filename);
-	      einfo (VERBOSE2, "debugging: val = %ld", val);
+	      einfo (VERBOSE2, "debugging: val = %ld", (long) val);
 	      break;
 	    }
 	  per_file.other_language = true;
