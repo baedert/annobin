@@ -25,7 +25,7 @@ unsigned int
 annobin_get_target_pointer_size (void)
 {
   // Note - testing POINTER_SIZE is unreliable.
-  return GET_INT_OPTION (target_flags) & MASK_64BIT ? 64 : 32;
+  return GET_INT_OPTION_BY_NAME (target_flags) & MASK_64BIT ? 64 : 32;
 }
 
 int

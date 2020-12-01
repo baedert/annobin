@@ -68,14 +68,15 @@ annobin_record_global_target_notes (annobin_function_info * info)
      are significant for purposes of ABI compatibility.  We do not
      bother to filter out any bits however, as we prefer to leave
      it to the consumer to decide what is significant.  */
-  min_x86_isa = max_x86_isa = global_x86_isa = GET_INT_OPTION (ix86_isa_flags);
+  min_x86_isa = max_x86_isa = global_x86_isa = GET_INT_OPTION_BY_NAME (ix86_isa_flags);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
 			       "numeric: ABI", true /* Is OPEN.  */, info);
   annobin_inform (INFORM_VERBOSE, "x86_64: Record global isa of %lx", global_x86_isa);
 
   
-  global_stack_realign = GET_INT_OPTION (ix86_force_align_arg_pointer);
+  global_stack_realign = GET_INT_OPTION_BY_NAME (ix86_force_align_arg_pointer);
+
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
   annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
@@ -90,7 +91,7 @@ annobin_target_specific_function_notes (annobin_function_info * info, bool force
 {
   unsigned long val;
 
-  val = GET_INT_OPTION (ix86_isa_flags);
+  val = GET_INT_OPTION_BY_NAME (ix86_isa_flags);
   if (force || val != global_x86_isa)
     {
       annobin_inform (INFORM_VERBOSE, "x86_64: Record ISA value of %lx for %s",
@@ -109,7 +110,7 @@ annobin_target_specific_function_notes (annobin_function_info * info, bool force
       info->start_sym = info->end_sym = NULL;
     }
 
-  val = GET_INT_OPTION (ix86_force_align_arg_pointer);
+  val = GET_INT_OPTION_BY_NAME (ix86_force_align_arg_pointer);
   if (force || val != global_stack_realign)
     {
       char buffer [128];

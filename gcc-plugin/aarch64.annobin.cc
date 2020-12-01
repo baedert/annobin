@@ -45,7 +45,7 @@ annobin_get_target_pointer_size (void)
 void
 annobin_record_global_target_notes (annobin_function_info * info)
 {
-  saved_tls_dialect = annobin_get_gcc_int_option (OPT_mtls_dialect_);
+  saved_tls_dialect = GET_INT_OPTION_BY_INDEX (OPT_mtls_dialect_);
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, saved_tls_dialect,
 			       "numeric: ABI: TLS dialect",
@@ -53,7 +53,7 @@ annobin_record_global_target_notes (annobin_function_info * info)
   annobin_inform (INFORM_VERBOSE, "AArch64: Recording global TLS dialect of %d", saved_tls_dialect);
 
 #ifdef aarch64_branch_protection_string
-  saved_branch_protection_string = annobin_get_gcc_str_option (OPT_mbranch_protection_);
+  saved_branch_protection_string = GET_STR_OPTION_BY_INDEX (OPT_mbranch_protection_);
 
   char buffer [128];
   const char * sbps = saved_branch_protection_string;
@@ -71,7 +71,7 @@ annobin_record_global_target_notes (annobin_function_info * info)
 void
 annobin_target_specific_function_notes (annobin_function_info * info, bool force)
 {
-  signed int val = annobin_get_gcc_int_option (OPT_mtls_dialect_);
+  signed int val = GET_INT_OPTION_BY_INDEX (OPT_mtls_dialect_);
   if (force || saved_tls_dialect != val)
     {
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val,
@@ -86,7 +86,7 @@ annobin_target_specific_function_notes (annobin_function_info * info, bool force
     }
 
 #ifdef aarch64_branch_protection_string
-  const char * abps = annobin_get_gcc_str_option (OPT_mbranch_protection_);
+  const char * abps = GET_STR_OPTION_BY_INDEX (OPT_mbranch_protection_);
   
   if (force || saved_branch_protection_string != abps)
     {

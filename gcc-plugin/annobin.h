@@ -159,30 +159,32 @@ extern unsigned long  annobin_max_stack_size;
    For most command line options however the offset into global_options
    is held in the cl_options array, and the entries in this array only change
    when new command line options are added.  Which is rarely the case with a
-   minor revision.  So annobin provides the following two functions to
+   minor revision.  So annobin provides the following two macros/functions to
    access these options via their OPT_<name> values:  */
 
-extern int            annobin_get_gcc_int_option (int);
-extern const char *   annobin_get_gcc_str_option (int);
+extern const char *   annobin_get_str_option_by_index (int);
+extern int            annobin_get_int_option_by_index (int);
 
-/* For other fields in global_options, not indexed via cl_options, annobin
-   provides these two macros:  */
+#define GET_STR_OPTION_BY_INDEX(INDX) annobin_get_str_option_by_index (INDX)
+#define GET_INT_OPTION_BY_INDEX(INDX) annobin_get_int_option_by_index (INDX)
+
+/* GCC 11 introduced a new array - cl_vars - which can be used to find the
+   offsets for other fields in the global_options array.  So the following
+   functions/macros make use of this, if it is available.  If not then the
+   original offset is used instead, although this is prone to the problem
+   described above.  */
 
 extern struct gcc_options * annobin_global_options;
+extern const char *         annobin_get_str_option_by_name (const char *, const char *);
+extern const int            annobin_get_int_option_by_name (const char *, const int);
 
-#define GET_STR_OPTION(NAME)	annobin_global_options->x_##NAME
-#define GET_INT_OPTION(NAME) 	annobin_global_options->x_##NAME
+#define GET_STR_OPTION_BY_NAME(NAME)	annobin_get_str_option_by_name (#NAME, annobin_global_options->x_##NAME)
+#define GET_INT_OPTION_BY_NAME(NAME) 	annobin_get_int_option_by_name (#NAME, annobin_global_options->x_##NAME)
 
-/* They are still prone to failure however, for the reasons described
-   above.  For the moment thereofre these macros are placeholders.
-   Once there is a way to resolve this situation it can be accessed
-   through them.
-
-   Finally the definition below corrupts the global_options symbol
-   so that it cannot be used, even indirectly via other macros.
-   This means that any new code that accesses global_options will
-   be detected right away, and can be fixed to use the functions or
-   macros above.  */
+/* Finally the definition below corrupts the global_options symbol so that it
+   cannot be used, even indirectly via other macros.  This means that any new
+   code that accesses global_options array will be detected at compile time,
+   and can be fixed to use the functions or macros above.  */
 
 #define ANNOBIN_ILLEGAL_GLOBAL_OPTIONS 999_illegal_reference_to_global_options
 #define global_options                 ANNOBIN_ILLEGAL_GLOBAL_OPTIONS       

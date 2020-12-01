@@ -20,7 +20,7 @@
 #include "annobin.h"
 
 /* Accessing the global_options structure is only permitted via annobin's version.  */
-#undef global_options
+#undef  global_options
 struct gcc_options * annobin_global_options = & global_options;
 #define global_options ANNOBIN_ILLEGAL_GLOBAL_OPTIONS       
 
@@ -193,7 +193,7 @@ init_annobin_input_filename (void)
     }
 
   /* This might fail, if annobin is out of sync with gcc.  */
-  annobin_input_filename = GET_STR_OPTION (main_input_filename);
+  annobin_input_filename = GET_STR_OPTION_BY_NAME(main_input_filename);
 
   return annobin_input_filename != NULL;
 }
@@ -281,7 +281,7 @@ annobin_emit_asm (const char * text, const char * comment)
       len = fprintf (asm_out_file, "%s", text);
     }
 
-  if (annobin_get_gcc_int_option (OPT_fverbose_asm) && comment)
+  if (comment && GET_INT_OPTION_BY_INDEX (OPT_fverbose_asm))
     {
       if (len == 0)
 	;
@@ -521,7 +521,9 @@ annobin_output_numeric_note (const char     numeric_type,
 		       name_description, is_open, info);
 }
 
-/* Returns the value of gcc command line option CL_OPTION_INDEX.
+/* Returns the real index into the global_options array of the gcc
+   command line option that used to be indexed by CL_OPTION_INDEX.
+   
    Returns -1 if the option could not be found.  */
 
 static int
@@ -546,15 +548,15 @@ annobin_remap (unsigned int cl_option_index)
     unsigned int        real_index;
     union
     {
-      int                 iflag;
-      void *              pflag;
+      int               iflag;
+      void *            pflag;
     };
     bool                warned;
   }
   cl_remap [] =
   {
     /* This is an array of the options that we know annobin wants to
-       access.  */
+       access and for which there are entries in the cl_options array.  */
 #define MAKE_ENTRY(opt_name, opt_num, flag_name) \
     { false, opt_name, opt_num, 0, annobin_global_options->x_##flag_name, false}
    
@@ -661,7 +663,7 @@ annobin_remap (unsigned int cl_option_index)
    Returns -1 if the option could not be found.  */
 
 int
-annobin_get_gcc_int_option (int cl_option_index)
+annobin_get_int_option_by_index (int cl_option_index)
 {
   cl_option_index = annobin_remap (cl_option_index);
   if (cl_option_index == -1)
@@ -711,7 +713,7 @@ annobin_get_gcc_int_option (int cl_option_index)
    Returns NULL if the option could not be found.  */
 
 const char *
-annobin_get_gcc_str_option (int cl_option_index)
+annobin_get_str_option_by_index (int cl_option_index)
 {
   cl_option_index = annobin_remap (cl_option_index);
   if (cl_option_index == -1)
@@ -743,16 +745,54 @@ annobin_get_gcc_str_option (int cl_option_index)
     }
 }
 
+const char *
+annobin_get_str_option_by_name (const char * name ATTRIBUTE_UNUSED,
+				const char * default_return)
+{
+#if GCCPLUGIN_VERSION_MAJOR >= 11
+  /* GCC version 11 introduced the cl_vars array which provides offsets for
+     fields in global_options which are not handled by cl_options.  */
+  struct cl_var * var = cl_vars;
+
+  for (var = cl_vars; var->name != NULL; var ++)
+    if (strmp (var->name, name) == 0)
+      return (const char *) (* (const char **) (((char *) annobin_global_options) + var->var_offset));
+
+  annobin_inform (INFORM_VERBOSE, "WARN: gcc variable '%s' not found within cl_vars array", name);
+#endif
+
+  return default_return;
+}
+
+const int
+annobin_get_int_option_by_name (const char * name ATTRIBUTE_UNUSED,
+				const int    default_return)
+{
+#if GCCPLUGIN_VERSION_MAJOR >= 11
+  /* GCC version 11 introduced the cl_vars array which provides offsets for
+     fields in global_options which are not handled by cl_options.  */
+  struct cl_var * var = cl_vars;
+
+  for (var = cl_vars; var->name != NULL; var ++)
+    if (strmp (var->name, name) == 0)
+      return (const int) (* (const int **) (((char *) annobin_global_options) + var->var_offset));
+
+  annobin_inform (INFORM_VERBOSE, "WARN: gcc variable '%s' not found within cl_vars array", name);
+#endif
+
+  return default_return;
+}
+
 static int
 compute_pic_option (void)
 {
-  int val = annobin_get_gcc_int_option (OPT_fpie);
+  int val = GET_INT_OPTION_BY_INDEX (OPT_fpie);
   if (val > 1)
     return 4;
   if (val)
     return 3;
 
-  val = annobin_get_gcc_int_option (OPT_fpic);
+  val = GET_INT_OPTION_BY_INDEX (OPT_fpic);
   if (val > 1)
     return 2;
   if (val)
@@ -763,19 +803,19 @@ compute_pic_option (void)
 static inline int
 annobin_get_optimize (void)
 {
-  return GET_INT_OPTION (optimize);
+  return GET_INT_OPTION_BY_NAME (optimize);
 }
 
 static inline int
 annobin_get_optimize_debug (void)
 {
-  return GET_INT_OPTION (optimize_debug);
+  return GET_INT_OPTION_BY_NAME (optimize_debug);
 }
 
 static inline bool
 annobin_in_lto_p (void)
 {
-  return GET_INT_OPTION (in_lto_p) != 0;
+  return GET_INT_OPTION_BY_NAME (in_lto_p) != 0;
 }
     
 /* Compute a numeric value representing the settings/levels of
@@ -802,7 +842,7 @@ compute_GOWall_options (void)
   unsigned int val, i;
 
   /* FIXME: Keep in sync with changes to gcc/flag-types.h:enum debug_info_type.  */
-  val = GET_INT_OPTION (write_symbols);
+  val = GET_INT_OPTION_BY_NAME (write_symbols);
   if (val > VMS_AND_DWARF2_DEBUG)
     {
       annobin_inform (INFORM_VERBOSE, "write_symbols = %d", val);
@@ -810,10 +850,10 @@ compute_GOWall_options (void)
       val = 0;
     }
 
-  if (GET_INT_OPTION (use_gnu_debug_info_extensions))
+  if (GET_INT_OPTION_BY_NAME (use_gnu_debug_info_extensions))
     val |= (1 << 3);
 
-  i = GET_INT_OPTION (debug_info_level);
+  i = GET_INT_OPTION_BY_NAME (debug_info_level);
   if (i > DINFO_LEVEL_VERBOSE)
     {
       annobin_inform (INFORM_VERBOSE, "debug_info_level = %d", i);
@@ -822,7 +862,7 @@ compute_GOWall_options (void)
   else
     val |= (i << 4);
 
-  i = GET_INT_OPTION (dwarf_version);
+  i = GET_INT_OPTION_BY_NAME (dwarf_version);
   if (i < 2)
     {
       /* Apparently it is possible for dwarf_version to be -1.  Not sure how
@@ -848,9 +888,9 @@ compute_GOWall_options (void)
 
   /* FIXME: It should not be possible to enable more than one of -Os/-Of/-Og,
      so the tests below could be simplified.  */
-  if (GET_INT_OPTION (optimize_size))
+  if (GET_INT_OPTION_BY_NAME (optimize_size))
     val |= (1 << 11);
-  if (GET_INT_OPTION (optimize_fast))
+  if (GET_INT_OPTION_BY_NAME (optimize_fast))
     val |= (1 << 12);
   if (annobin_get_optimize_debug ())
     val |= (1 << 13);
@@ -869,11 +909,11 @@ compute_GOWall_options (void)
   /* -Wformat-security is enabled via -Wall, but we record it here because
      it is important, and because LTO compilation does not pass on the -Wall
      flag.  FIXME: Add other important warnings.  */
-  if (GET_INT_OPTION (warn_format_security))
+  if (GET_INT_OPTION_BY_NAME (warn_format_security))
     val|= (1 << 15);
 
   if (annobin_in_lto_p () 
-      || GET_STR_OPTION (flag_lto) != NULL)
+      || GET_STR_OPTION_BY_NAME(flag_lto) != NULL)
     val |= (1 << 16);
   else /* We record the negative so that annocheck can detect that
 	  we definitely have recorded something for this feature.  */
@@ -919,7 +959,7 @@ record_stack_clash_note (bool is_open, annobin_function_info * info)
 {
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%cstack_clash",
-			  annobin_get_gcc_int_option (OPT_fstack_clash_protection) ? BOOL_T : BOOL_F);
+			  GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection) ? BOOL_T : BOOL_F);
 
   annobin_output_note (buffer, len + 1, true, /* The name is ASCII.  */
 		       "bool: -fstack-clash-protection status", is_open, info);
@@ -934,7 +974,7 @@ record_cf_protection_note (bool is_open, annobin_function_info * info)
   unsigned len = sprintf (buffer, "GA%ccf_protection", NUMERIC);
 
   /* We bias the cf_protection enum value by 1 so that we do not get confused by a zero value.  */
-  buffer[++len] = annobin_get_gcc_int_option (OPT_fcf_protection_) + 1;
+  buffer[++len] = GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_) + 1;
   buffer[++len] = 0;
 
   annobin_output_note (buffer, len + 1, false, /* The name is not ASCII.  */
@@ -947,7 +987,7 @@ record_frame_pointer_note (bool is_open, annobin_function_info * info)
 {
   char buffer [128];
   unsigned len;
-  int val = annobin_get_gcc_int_option (OPT_fomit_frame_pointer);
+  int val = GET_INT_OPTION_BY_INDEX (OPT_fomit_frame_pointer);
 
   len = sprintf (buffer, "GA%comit_frame_pointer", val ? BOOL_T : BOOL_F);
 
@@ -1039,7 +1079,7 @@ annobin_emit_function_notes (bool force)
 
   int current_val;
 
-  current_val = annobin_get_gcc_int_option (OPT_fstack_protector);
+  current_val = GET_INT_OPTION_BY_INDEX (OPT_fstack_protector);
   if (current_val != -1
       && (force || global_stack_prot_option != current_val))
     {
@@ -1055,7 +1095,7 @@ annobin_emit_function_notes (bool force)
     }
 
 #ifdef flag_stack_clash_protection
-  current_val = annobin_get_gcc_int_option (OPT_fstack_clash_protection);
+  current_val = GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection);
   if (force || global_stack_clash_option != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording stack clash protection status of %d for %s",
@@ -1067,7 +1107,7 @@ annobin_emit_function_notes (bool force)
 #endif
 
 #ifdef flag_cf_protection
-  current_val = annobin_get_gcc_int_option (OPT_fcf_protection_);
+  current_val = GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_);
   if (force || global_cf_option != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording control flow protection status of %d for %s",
@@ -1078,7 +1118,7 @@ annobin_emit_function_notes (bool force)
     }
 #endif
 
-  current_val = annobin_get_gcc_int_option (OPT_fomit_frame_pointer);
+  current_val = GET_INT_OPTION_BY_INDEX (OPT_fomit_frame_pointer);
   if (force || global_omit_frame_pointer != current_val)
     {
       annobin_inform (INFORM_VERBOSE, "Recording omit_frame_pointer status of %d for %s",
@@ -1106,7 +1146,7 @@ annobin_emit_function_notes (bool force)
       local_info.start_sym = local_info.end_sym = NULL;
     }
 
-  current_val = annobin_get_gcc_int_option (OPT_fshort_enums);
+  current_val = GET_INT_OPTION_BY_INDEX (OPT_fshort_enums);
   if (current_val != -1
       && (force || global_short_enums != current_val))
     {
@@ -1117,7 +1157,7 @@ annobin_emit_function_notes (bool force)
       local_info.start_sym = local_info.end_sym = NULL;
     }
 
-  current_val = annobin_get_gcc_int_option (OPT_fstack_usage);
+  current_val = GET_INT_OPTION_BY_INDEX (OPT_fstack_usage);
   if (annobin_enable_stack_size_notes && current_val)
     {
       if ((unsigned long) current_function_static_stack_size > stack_threshold)
@@ -1243,10 +1283,10 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       current_func.section_name = concat (annobin_get_section_name (current_function_decl), NULL);
     }
 
-  else if (annobin_get_gcc_int_option (OPT_ffunction_sections))
+  else if (GET_INT_OPTION_BY_INDEX (OPT_ffunction_sections))
     {
       /* Special case: at -O2 or higher special functions get a prefix added.  */
-      if (annobin_get_gcc_int_option (OPT_freorder_functions))
+      if (GET_INT_OPTION_BY_INDEX (OPT_freorder_functions))
 	{
           if (startup)
 	    current_func.section_name = concat (STARTUP_SECTION, ".", current_func.asm_name, NULL);
@@ -1266,7 +1306,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	current_func.section_name = concat (CODE_SECTION, ".", current_func.asm_name, NULL);
     }
 
-  else if (annobin_get_gcc_int_option (OPT_freorder_functions) /* && targetm_common.have_named_sections */)
+  else if (GET_INT_OPTION_BY_INDEX (OPT_freorder_functions) /* && targetm_common.have_named_sections */)
     {
       /* Attempt to determine the section into which the code will be placed.
 	 We could call targetm.asm_out_function_section but that ends up calling
@@ -1284,7 +1324,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	}
       else if (startup)
 	{
-	  if (! annobin_in_lto_p () && ! annobin_get_gcc_int_option (OPT_fprofile_values))
+	  if (! annobin_in_lto_p () && ! GET_INT_OPTION_BY_INDEX (OPT_fprofile_values))
 	    current_func.section_name = concat (STARTUP_SECTION, NULL);
 	}
       else if (exit)
@@ -1294,7 +1334,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       else if (likely)
 	{
 	  /* FIXME: Never seen this one, either.  */
-	  if (! annobin_in_lto_p () && ! annobin_get_gcc_int_option (OPT_fprofile_values))
+	  if (! annobin_in_lto_p () && ! GET_INT_OPTION_BY_INDEX (OPT_fprofile_values))
 	    current_func.section_name = concat (HOT_SECTION, NULL);
 	}
     }
@@ -1498,7 +1538,7 @@ emit_queued_attachments (void)
 	{
 	  fprintf (asm_out_file, "\t.pushsection %s\n", name);
 	  fprintf (asm_out_file, "\t.attach_to_group %s", item->group_name);
-	  if (annobin_get_gcc_int_option (OPT_fverbose_asm))
+	  if (GET_INT_OPTION_BY_INDEX (OPT_fverbose_asm))
 	    fprintf (asm_out_file, " %s Add the %s section to the %s group",
 		     ASM_COMMENT_START, name, item->group_name);
 	  fprintf (asm_out_file, "\n");
@@ -1776,14 +1816,14 @@ emit_global_notes (const char * suffix)
   /* Record -fstack-clash-protection option.  */
   record_stack_clash_note (true /* An OPEN note.  */, & info);
   annobin_inform (INFORM_VERBOSE, "Record global stack clash protection setting of %d",
-		  annobin_get_gcc_int_option (OPT_fstack_clash_protection));
+		  GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection));
 #endif
 
 #ifdef flag_cf_protection
   /* Record -fcf-protection option.  */
   record_cf_protection_note (true /* An OPEN note.  */, & info);
   annobin_inform (INFORM_VERBOSE, "Record global cf protection setting of %d",
-		  annobin_get_gcc_int_option (OPT_fcf_protection_));
+		  GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_));
 #endif
 
   record_fortify_level (global_fortify_level, true /* An OPEN note.  */, & info);
@@ -1813,34 +1853,34 @@ emit_global_notes (const char * suffix)
 
      FIXME: At the moment we do not check to see if any of these flags change
      on a per-function basis.  */
-  if (annobin_get_gcc_int_option (OPT_finstrument_functions)
+  if (GET_INT_OPTION_BY_INDEX (OPT_finstrument_functions)
 #ifdef flag_sanitize
-      || GET_INT_OPTION (flag_sanitize)
+      || GET_INT_OPTION_BY_NAME (flag_sanitize)
 #endif
-      || annobin_get_gcc_int_option (OPT_fprofile)
-      || annobin_get_gcc_int_option (OPT_fprofile_arcs))
+      || GET_INT_OPTION_BY_INDEX (OPT_fprofile)
+      || GET_INT_OPTION_BY_INDEX (OPT_fprofile_arcs))
     {
       char buffer[128];
       unsigned int len = sprintf (buffer, "GA%cINSTRUMENT:%u/%u/%u/%u",
 				  GNU_BUILD_ATTRIBUTE_TYPE_STRING,
 #ifdef flag_sanitize
-				  GET_INT_OPTION (flag_sanitize) ? 1 : 0,
+				  GET_INT_OPTION_BY_NAME (flag_sanitize) ? 1 : 0,
 #else
 				  0,
 #endif
-				  annobin_get_gcc_int_option (OPT_finstrument_functions),
-				  annobin_get_gcc_int_option (OPT_fprofile),
-				  annobin_get_gcc_int_option (OPT_fprofile_arcs));
+				  GET_INT_OPTION_BY_INDEX (OPT_finstrument_functions),
+				  GET_INT_OPTION_BY_INDEX (OPT_fprofile),
+				  GET_INT_OPTION_BY_INDEX (OPT_fprofile_arcs));
       annobin_inform (INFORM_VERBOSE,
 		      "Instrumentation options enabled: sanitize: %u, function entry/exit: %u, profiling: %u, profile arcs: %u",
 #ifdef flag_sanitize
-		      GET_INT_OPTION (flag_sanitize) ? 1 : 0,
+		      GET_INT_OPTION_BY_NAME (flag_sanitize) ? 1 : 0,
 #else
 		      0,
 #endif
-		      annobin_get_gcc_int_option (OPT_finstrument_functions),
-		      annobin_get_gcc_int_option (OPT_fprofile),
-		      annobin_get_gcc_int_option (OPT_fprofile_arcs));
+		      GET_INT_OPTION_BY_INDEX (OPT_finstrument_functions),
+		      GET_INT_OPTION_BY_INDEX (OPT_fprofile),
+		      GET_INT_OPTION_BY_INDEX (OPT_fprofile_arcs));
 
       annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
 			   "string: details of profiling enablement",
@@ -1966,20 +2006,20 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     annobin_global_options->x_flag_stack_usage_info = 1;
 
 #ifdef flag_stack_clash_protection
-  global_stack_clash_option = annobin_get_gcc_int_option (OPT_fstack_clash_protection);
+  global_stack_clash_option = GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection);
 #endif
 
 #ifdef flag_cf_protection
-  global_cf_option = annobin_get_gcc_int_option (OPT_fcf_protection_);
+  global_cf_option = GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_);
   if (annobin_active_checks && ((global_cf_option & CF_FULL) == 0))
     error ("-fcf-protection=full needed");
 #endif
 
-  global_stack_prot_option = annobin_get_gcc_int_option (OPT_fstack_protector);
+  global_stack_prot_option = GET_INT_OPTION_BY_INDEX (OPT_fstack_protector);
   global_pic_option = compute_pic_option ();
-  global_short_enums = annobin_get_gcc_int_option (OPT_fshort_enums);
+  global_short_enums = GET_INT_OPTION_BY_INDEX (OPT_fshort_enums);
   global_GOWall_options = compute_GOWall_options ();
-  global_omit_frame_pointer = annobin_get_gcc_int_option (OPT_fomit_frame_pointer);
+  global_omit_frame_pointer = GET_INT_OPTION_BY_INDEX (OPT_fomit_frame_pointer);
 
   if (annobin_active_checks
       && annobin_get_optimize () < 2
@@ -2130,7 +2170,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     }
   
   if (!annobin_in_lto_p ()
-      && GET_STR_OPTION (flag_lto) != NULL)
+      && GET_STR_OPTION_BY_NAME(flag_lto) != NULL)
     {
       bool warned = false;
 
