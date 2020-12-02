@@ -756,6 +756,7 @@ annobin_get_str_option_by_name (const char * name ATTRIBUTE_UNUSED,
 
   for (var = cl_vars; var->name != NULL; var ++)
     if (strmp (var->name, name) == 0)
+      // FIXME: Cache the result ?
       return (const char *) (* (const char **) (((char *) annobin_global_options) + var->var_offset));
 
   annobin_inform (INFORM_VERBOSE, "WARN: gcc variable '%s' not found within cl_vars array", name);
@@ -775,6 +776,7 @@ annobin_get_int_option_by_name (const char * name ATTRIBUTE_UNUSED,
 
   for (var = cl_vars; var->name != NULL; var ++)
     if (strmp (var->name, name) == 0)
+      // FIXME: Cache the result ?
       return (const int) (* (const int **) (((char *) annobin_global_options) + var->var_offset));
 
   annobin_inform (INFORM_VERBOSE, "WARN: gcc variable '%s' not found within cl_vars array", name);
@@ -2265,8 +2267,16 @@ annobin_emit_end_symbol (const char * suffix)
 	 do this, as the arithmetic has to be between symbols defined
 	 in the same section.  Fortunately it appears that gcc does not
 	 perform hot/cold partitioning for the PPC64, and this is the
-	 only target that uses symbol biasing.  */
-      if (target_start_sym_bias == 0)
+	 only target that uses symbol biasing.
+
+	 FIXME: As of GCC 10 however the PPC64 LTO compiler does perform
+	 the partitioning, so we do need the symbol to be in a special
+	 section.  */
+      if (target_start_sym_bias == 0
+#if GCCPLUGIN_VERSION_MAJOR >= 10
+	  || annobin_in_lto_p ()
+#endif
+	  )
 	{
 	  const char * extra_suffix = ".zzz";
 
@@ -2295,8 +2305,15 @@ annobin_emit_end_symbol (const char * suffix)
      the start symbol is after the end symbol.  (If the section is empty).
      Catch that and adjust the start symbol.  This also pacifies eu-elflint
      which complains about the start symbol being placed beyond the end of
-     the section.  */
-  if (target_start_sym_bias)
+     the section.
+
+     FIXME: As of GCC 10 we cannot do this with LTO compilation as we have
+     had to place the end symbol into a different section.  */
+  if (target_start_sym_bias
+#if GCCPLUGIN_VERSION_MAJOR >= 10
+      && ! annobin_in_lto_p ()
+#endif
+      )
     {
       /* Note: we cannot test "start sym > end sym" as these symbols may not have values
 	 yet, (due to the possibility of linker relaxation).  But we are allowed to
