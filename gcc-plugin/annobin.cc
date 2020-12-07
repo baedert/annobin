@@ -752,12 +752,12 @@ annobin_get_str_option_by_name (const char * name ATTRIBUTE_UNUSED,
 #if GCCPLUGIN_VERSION_MAJOR >= 11
   /* GCC version 11 introduced the cl_vars array which provides offsets for
      fields in global_options which are not handled by cl_options.  */
-  struct cl_var * var = cl_vars;
+  const struct cl_var * var = cl_vars;
 
-  for (var = cl_vars; var->name != NULL; var ++)
-    if (strmp (var->name, name) == 0)
+  for (var = cl_vars; var->var_name != NULL; var ++)
+    if (strcmp (var->var_name, name) == 0)
       // FIXME: Cache the result ?
-      return (const char *) (* (const char **) (((char *) annobin_global_options) + var->var_offset));
+      return * (const char **) (((char *) annobin_global_options) + var->var_offset);
 
   annobin_inform (INFORM_VERBOSE, "WARN: gcc variable '%s' not found within cl_vars array", name);
 #endif
@@ -772,12 +772,12 @@ annobin_get_int_option_by_name (const char * name ATTRIBUTE_UNUSED,
 #if GCCPLUGIN_VERSION_MAJOR >= 11
   /* GCC version 11 introduced the cl_vars array which provides offsets for
      fields in global_options which are not handled by cl_options.  */
-  struct cl_var * var = cl_vars;
+  const struct cl_var * var = cl_vars;
 
-  for (var = cl_vars; var->name != NULL; var ++)
-    if (strmp (var->name, name) == 0)
+  for (var = cl_vars; var->var_name != NULL; var ++)
+    if (strcmp (var->var_name, name) == 0)
       // FIXME: Cache the result ?
-      return (const int) (* (const int **) (((char *) annobin_global_options) + var->var_offset));
+      return * (int *) (((char *) annobin_global_options) + var->var_offset);
 
   annobin_inform (INFORM_VERBOSE, "WARN: gcc variable '%s' not found within cl_vars array", name);
 #endif
