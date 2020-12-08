@@ -35,6 +35,7 @@ ulong         verbosity = 0;
 
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
+static const char *     full_progname;
 static const char *     progname;
 static bool             ignore_unknown = true;
 static char *           saved_args = NULL;
@@ -1388,11 +1389,11 @@ process_rpm_file (const char * filename)
   else
     fname = concat (filename, NULL);
 
-  if (progname[0] != '/' && strchr (progname, '/'))
-    pname = concat (cwd, "/", progname, NULL);
+  if (full_progname[0] != '/' && strchr (full_progname, '/'))
+    pname = concat (cwd, "/", full_progname, NULL);
   else
-    pname = concat (progname, NULL);
-    
+    pname = concat (full_progname, NULL);
+
   command = concat (/* Change into the temporary directory.  */
 		    "cd ", dirname,
 		    /* Convert the rpm to cpio format.  */
@@ -1726,7 +1727,13 @@ main (int argc, const char ** argv)
   bool          self_made_tmpdir = false;
 
 
-  component_names[0] = (argv != NULL && argv[0] != NULL) ? lbasename (argv[0]) : "annocheck";
+  if (argv != NULL && argv[0] != NULL)
+    {
+      full_progname = argv[0];
+      component_names[0] = lbasename (argv[0]);
+    }
+  else
+    component_names[0] = full_progname = "annocheck";
 
   if (elf_version (EV_CURRENT) == EV_NONE)
     {

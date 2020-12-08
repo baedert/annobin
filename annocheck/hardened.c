@@ -75,7 +75,9 @@ static struct per_file
   unsigned    run_rel;
 
   enum tool   tool;
-  uint        version;
+  uint        tool_version;
+
+  uint        note_source[256];
 
   enum lang   lang;
 
@@ -402,22 +404,22 @@ set_producer (annocheck_data *     data,
   if (per_file.tool == TOOL_UNKNOWN)
     {
       per_file.tool = tool;
-      per_file.version = version;
+      per_file.tool_version = version;
       einfo (VERBOSE, "%s: info: Set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
     }
   else if (per_file.tool == tool)
     {
-      if (per_file.version != version)
+      if (per_file.tool_version != version)
 	{
 	  if (! per_file.warned_producer)
 	    {
 	      einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
-		     data->filename, version, per_file.version);
+		     data->filename, version, per_file.tool_version);
 	      per_file.warned_producer = true;
 	    }
 
-	  if (per_file.version < version)
-	    per_file.version = version;
+	  if (per_file.tool_version < version)
+	    per_file.tool_version = version;
 	}
     }
   else if ((per_file.tool == TOOL_GAS && is_compiler (tool))
@@ -456,12 +458,12 @@ set_producer (annocheck_data *     data,
       if (per_file.tool != TOOL_CLANG && tool != TOOL_CLANG)
 	{
 	  per_file.tool = TOOL_MIXED;
-	  per_file.version = 0;
+	  per_file.tool_version = 0;
 	}
       else if (tool == TOOL_CLANG)
 	{
 	  per_file.tool = TOOL_CLANG;
-	  per_file.version = version;
+	  per_file.tool_version = version;
 	}
     }
 }
@@ -982,6 +984,30 @@ get_4byte_value (const unsigned char * data)
       | (((ulong) data[0]) << 24);
 }
 
+static void
+report_note_producer (annocheck_data * data,
+		      unsigned char    producer,
+		      const char *     source,
+		      unsigned int     version)
+{
+  if (! BE_VERBOSE)
+    return;
+
+  if (per_file.note_source[producer] == version)
+    return;
+
+  per_file.note_source[producer] = version;
+
+  einfo (PARTIAL, "Hardened: %s: info: Notes produced by %s plugin ", data->filename, source);
+
+  if (version == 0)
+    einfo (PARTIAL, "(version unknown)\n");
+  else if (version > 99 && version < 1000)
+    einfo (PARTIAL, "version %u.%02u\n", version / 100, version % 100);
+  else
+    einfo (PARTIAL, "version %u\n", version);
+}
+
 static bool
 walk_build_notes (annocheck_data *     data,
 		  annocheck_section *  sec,
@@ -1178,16 +1204,29 @@ walk_build_notes (annocheck_data *     data,
 
       /* Check the note per_file.  */
       ++ attr;
-      switch (* attr)
+      char producer = * attr;
+      ++ attr;
+      unsigned int version = 0;
+      if (* attr != 0)
+	version = strtod (attr, NULL);
+      const char * name;
+      switch (producer)
 	{
 	case ANNOBIN_TOOL_ID_ASSEMBLER:
-	case ANNOBIN_TOOL_ID_LINKER:
+	  name = "assembler";
 	  break;
+
+	case ANNOBIN_TOOL_ID_LINKER:
+	  name = "linker";
+	  break;
+
 	case ANNOBIN_TOOL_ID_GCC_HOT:
 	case ANNOBIN_TOOL_ID_GCC_COLD:
 	case ANNOBIN_TOOL_ID_GCC_STARTUP:
 	case ANNOBIN_TOOL_ID_GCC_EXIT:
 	case ANNOBIN_TOOL_ID_GCC:
+	  name = "gcc";
+	  producer = ANNOBIN_TOOL_ID_GCC;
 	  /* FIXME: Add code to check that the version of the
 	     note producer is not greater than our version.  */
 
@@ -1201,14 +1240,24 @@ walk_build_notes (annocheck_data *     data,
 	     version number.  */
 	  per_file.compiled_code_seen = true;
 	  break;
+
 	case ANNOBIN_TOOL_ID_LLVM:
-	case ANNOBIN_TOOL_ID_CLANG:
+	  name = "LLVM";
 	  per_file.compiled_code_seen = true;
 	  break;
+
+	case ANNOBIN_TOOL_ID_CLANG:
+	  name = "Clang";
+	  per_file.compiled_code_seen = true;
+	  break;
+
 	default:
 	  warn (data, "Unrecognised annobin note producer");
+	  name = "unknown";
 	  break;
 	}
+
+      report_note_producer (data, producer, name, version);
       break;
 
     case GNU_BUILD_ATTRIBUTE_TOOL:
@@ -1741,7 +1790,7 @@ walk_build_notes (annocheck_data *     data,
 		{
 		  /* FIXME: At the moment the clang plugin is unable to detect -Wall.
 		     for clang v9+.  */
-		  if (built_by_clang () && per_file.version > 8)
+		  if (built_by_clang () && per_file.tool_version > 8)
 		    ;
 		  else if (built_by_mixed ())
 		    ;
@@ -3039,7 +3088,7 @@ show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
     if (! built_by_gcc ())
       skip (data, "Branch protection.  (Not built by gcc)");
 
-  else if (per_file.version < 9)
+  else if (per_file.tool_version < 9)
     skip (data, "Branch protection.  (Needs gcc 9+)");
 
   else if (results->num_fail > 0)
@@ -3540,7 +3589,7 @@ show_STACK_CLASH (annocheck_data * data, test * results)
   else if (! built_by_gcc ())
     skip (data, "Test for stack clash support.  (Not built by gcc)");
 
-  else if (per_file.version < 7)
+  else if (per_file.tool_version < 7)
     skip (data, "Test for stack clash support.  (Needs gcc 7+)");
 
   else if (results->num_fail > 0)
@@ -3665,7 +3714,7 @@ show_CF_PROTECTION (annocheck_data * data, test * results)
   else if (! built_by_compiler ())
     skip (data, "Test for control flow protection.  (Not built by gcc/clang)");
 
-  else if (built_by_gcc () && per_file.version < 8)
+  else if (built_by_gcc () && per_file.tool_version < 8)
     skip (data, "Test for control flow protection.  (Needs gcc v8+)");
 
   else if (results->num_fail > 0)
