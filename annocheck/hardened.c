@@ -1128,7 +1128,7 @@ walk_build_notes (annocheck_data *     data,
       && note_data->start == note_data->end
       && per_file.tool == TOOL_GCC)
     {
-      einfo (VERBOSE2, "Skipping note because its range is zero");
+      einfo (VERBOSE2, "Skipping note at addr 0x%lx because its range is zero", (long) note_data->start);
       return true;
     }
 
@@ -1687,12 +1687,24 @@ walk_build_notes (annocheck_data *     data,
 
 	    case 0xff:
 	      /* BZ 1824393: We	have not scanned the DWARF notes yet, so we may
-		 not have the full picture as to which tool(s) built this binary.  */
-              report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE not detected on the command line",
-                        data, sec, note_data, prefer_func_name, NULL);
-	      einfo (VERBOSE,    "%s:       This can happen if the source does not use C headers",
-		     data->filename);
- 	      tests[TEST_FORTIFY].num_maybe ++;
+		 not have the full picture as to which tool(s) built this binary.
+		 BZ 1904479: But since we now do scan the DWARF early, we should
+		 have a fuller picture.  */
+	      if (per_file.compiled_code_seen && built_by_compiler())
+		{
+		  report_s (VERBOSE, "%s: FAIL: (%s): -D_FORTIFY_SOURCE was not present on the command line",
+			    data, sec, note_data, prefer_func_name, NULL);
+		  tests[TEST_FORTIFY].num_fail ++;
+		}
+	      else
+		{
+		  report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE not detected on the command line",
+			    data, sec, note_data, prefer_func_name, NULL);
+		  einfo (VERBOSE,    "%s:       This can happen if the source does not use C headers",
+			 data->filename);
+		  tests[TEST_FORTIFY].num_maybe ++;
+		}
+	      
 	      break;
 
 	    case 0:
