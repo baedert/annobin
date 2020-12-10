@@ -1808,6 +1808,14 @@ walk_build_notes (annocheck_data *     data,
 		    ;
 		  else if (built_with_gimple ()) /* Gimple compilation drops all warnings.  */
 		    ;
+		  else if (value & ((1 << 16) | (1 << 17)))
+		    {
+		      /* LTO compilation.  Normally caught by the GIMPLE test
+			 above, but that does not work on stripped binaries.
+			 We increment num_pass here so that show_WARNINGS does
+			 not complain about not finding any information.  */
+		      tests[TEST_WARNINGS].num_pass ++;
+		    }
 		  else if (! skip_check (TEST_WARNINGS, get_component_name (data, sec, note_data, prefer_func_name)))
 		    {
 		      report_i (VERBOSE, "%s: FAIL: (%s): Compiled without either -Wall or -Wformat-security",
