@@ -41,7 +41,7 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello.c
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello2.c 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello3.c 
 
-# Put our assemblt file between C files, so that the gap will be noticed.
+# Put our assembled file between C files, so that the gap will be noticed.
 $GCC -nostartfiles -e 0 hello.o hello2.o gap1.o hello3.o -o assembler-gap-test1.exe \
      -Wl,--defsym,extern_func3=0 \
      -Wl,-z,now -pie

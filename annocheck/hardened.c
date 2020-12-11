@@ -44,6 +44,12 @@ enum tool
   TOOL_RUST
 };
 
+typedef struct tool_info
+{
+  enum tool   tool;
+  uint        version;
+} tool_info;
+  
 enum lang
 {
   LANG_UNKNOWN = 0,
@@ -74,9 +80,7 @@ static struct per_file
   unsigned    run_minor;
   unsigned    run_rel;
 
-  enum tool   tool;
-  uint        tool_version;
-
+  tool_info   tool_info;
   uint        note_source[256];
 
   enum lang   lang;
@@ -218,25 +222,31 @@ is_compiler (enum tool tool)
 static inline bool
 built_by_compiler (void)
 {
-  return is_compiler (per_file.tool);
+  return is_compiler (per_file.tool_info.tool);
+}
+
+static inline bool
+built_by_assembler (void)
+{
+  return per_file.tool_info.tool == TOOL_GAS;
 }
 
 static inline bool
 built_by_gcc (void)
 {
-  return per_file.tool == TOOL_GCC;
+  return per_file.tool_info.tool == TOOL_GCC;
 }
 
 static inline bool
 built_by_clang (void)
 {
-  return per_file.tool == TOOL_CLANG;
+  return per_file.tool_info.tool == TOOL_CLANG;
 }
 
 static inline bool
 built_by_mixed (void)
 {
-  return per_file.tool == TOOL_MIXED;
+  return per_file.tool_info.tool == TOOL_MIXED;
 }
 
 static inline bool
@@ -396,44 +406,53 @@ set_producer (annocheck_data *     data,
 	      unsigned int         version,
 	      const char *         source)
 {
-  einfo (VERBOSE2, "info: Record producer %s version %u source %s", get_tool_name (tool), version, source);
+  einfo (VERBOSE2, "%s: info: Record producer: %s version: %u source: %s",
+	 data->filename, get_tool_name (tool), version, source);
 
   if (tool == TOOL_GIMPLE)
     per_file.has_gimple = true;
 
-  if (per_file.tool == TOOL_UNKNOWN)
+  if (per_file.tool_info.tool == TOOL_UNKNOWN)
     {
-      per_file.tool = tool;
-      per_file.tool_version = version;
+      per_file.tool_info.tool = tool;
+      per_file.tool_info.version = version;
       einfo (VERBOSE, "%s: info: Set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
     }
-  else if (per_file.tool == tool)
+  else if (per_file.tool_info.tool == tool)
     {
-      if (per_file.tool_version != version)
+      if (per_file.tool_info.version != version)
 	{
-	  if (! per_file.warned_producer)
+	  if (! per_file.warned_producer && version > 0)
 	    {
 	      einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
-		     data->filename, version, per_file.tool_version);
+		     data->filename, version, per_file.tool_info.version);
 	      per_file.warned_producer = true;
 	    }
 
-	  if (per_file.tool_version < version)
-	    per_file.tool_version = version;
+	  if (per_file.tool_info.version < version)
+	    per_file.tool_info.version = version;
 	}
     }
-  else if ((per_file.tool == TOOL_GAS && is_compiler (tool))
+  else if ((per_file.tool_info.tool == TOOL_GAS && is_compiler (tool))
 	   || (built_by_compiler () && tool == TOOL_GAS))
     {
       if (! per_file.warned_producer)
 	{
-	  info (data, "Mixed assembler and GCC detected - treating as pure GCC");
+	  /* See BZ 1906171.
+	     In particular glibc creates some object files by using GCC to assemble
+	     some source code and adds the -Wa,--generate-missing-build-notes=yes
+	     option so that there is a note to cover the binary.  Since gcc was
+	     involved the .comment section will set_producer(GCC).  But since the
+	     code is in fact assembler, the usual GCC command line options will
+	     not be present.  So when we see a conflict between GCC and GAS we
+	     choose the lesser.  */
+	  info (data, "Mixed assembler and GCC detected - treating as assembler");
 	  per_file.warned_producer = true;
 	}
 
-      per_file.tool = TOOL_GCC;
+      per_file.tool_info.tool = TOOL_GAS;
     }
-  else if ((per_file.tool == TOOL_GIMPLE && is_compiler (tool))
+  else if ((per_file.tool_info.tool == TOOL_GIMPLE && is_compiler (tool))
 	   || (built_by_compiler () && tool == TOOL_GIMPLE))
     {
       if (! per_file.warned_producer)
@@ -442,7 +461,7 @@ set_producer (annocheck_data *     data,
 	  per_file.warned_producer = true;
 	}
 
-      per_file.tool = TOOL_GCC;
+      per_file.tool_info.tool = TOOL_GCC;
     }
   else if (! built_by_mixed ())
     {
@@ -450,20 +469,20 @@ set_producer (annocheck_data *     data,
 	{
 	  einfo (VERBOSE, "%s: info: This binary was built by more than one tool (%s and %s)",
 		 data->filename,
-		get_tool_name (per_file.tool),
-		get_tool_name (tool));
+		 get_tool_name (per_file.tool_info.tool),
+		 get_tool_name (tool));
 	  per_file.warned_producer = true;
 	}
 
-      if (per_file.tool != TOOL_CLANG && tool != TOOL_CLANG)
+      if (per_file.tool_info.tool != TOOL_CLANG && tool != TOOL_CLANG)
 	{
-	  per_file.tool = TOOL_MIXED;
-	  per_file.tool_version = 0;
+	  per_file.tool_info.tool = TOOL_MIXED;
+	  per_file.tool_info.version = 0;
 	}
       else if (tool == TOOL_CLANG)
 	{
-	  per_file.tool = TOOL_CLANG;
-	  per_file.tool_version = version;
+	  per_file.tool_info.tool = TOOL_CLANG;
+	  per_file.tool_info.version = version;
 	}
     }
 }
@@ -598,7 +617,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       return;
     }
 
-  if (madeby != TOOL_GCC && madeby != TOOL_GIMPLE && per_file.tool == TOOL_UNKNOWN)
+  if (madeby != TOOL_GCC && madeby != TOOL_GIMPLE && per_file.tool_info.tool == TOOL_UNKNOWN)
     einfo (VERBOSE, "%s: Discovered non-gcc code producer (%s), skipping gcc specific checks",
 	   data->filename, get_tool_name (madeby));
 
@@ -1126,7 +1145,7 @@ walk_build_notes (annocheck_data *     data,
      note ranges).  */
   if (per_file.e_type != ET_REL
       && note_data->start == note_data->end
-      && per_file.tool == TOOL_GCC)
+      && per_file.tool_info.tool == TOOL_GCC)
     {
       einfo (VERBOSE2, "Skipping note at addr 0x%lx because its range is zero", (long) note_data->start);
       return true;
@@ -1214,6 +1233,7 @@ walk_build_notes (annocheck_data *     data,
 	{
 	case ANNOBIN_TOOL_ID_ASSEMBLER:
 	  name = "assembler";
+	  set_producer (data, TOOL_GAS, 1, "annobin version note");
 	  break;
 
 	case ANNOBIN_TOOL_ID_LINKER:
@@ -1227,6 +1247,7 @@ walk_build_notes (annocheck_data *     data,
 	case ANNOBIN_TOOL_ID_GCC:
 	  name = "gcc";
 	  producer = ANNOBIN_TOOL_ID_GCC;
+	  set_producer (data, TOOL_GCC, 0, "annobin version note");
 	  /* FIXME: Add code to check that the version of the
 	     note producer is not greater than our version.  */
 
@@ -1234,7 +1255,7 @@ walk_build_notes (annocheck_data *     data,
 	     to assembler or linker generated code).  This means that we
 	     can expect to see notes for -D_FROTIFY_SOURCE and -D_GLIBCXX_ASSERTIONS,
 	     and if they are missing, we can complain.  We do not use
-	     the value of per_file.tool because if the assembler source was
+	     the value of per_file.tool_info.tool because if the assembler source was
 	     built using gcc then it will have debug information associated
 	     with it, with a DW_AT_PRODUCER string that includes the *gcc*
 	     version number.  */
@@ -1244,11 +1265,13 @@ walk_build_notes (annocheck_data *     data,
 	case ANNOBIN_TOOL_ID_LLVM:
 	  name = "LLVM";
 	  per_file.compiled_code_seen = true;
+	  set_producer (data, TOOL_LLVM, 0, "annobin version note");
 	  break;
 
 	case ANNOBIN_TOOL_ID_CLANG:
 	  name = "Clang";
 	  per_file.compiled_code_seen = true;
+	  set_producer (data, TOOL_CLANG, 0, "annobin version note");
 	  break;
 
 	default:
@@ -1301,7 +1324,7 @@ walk_build_notes (annocheck_data *     data,
 	  if (per_file.run_major == 0)
 	    {
 	      per_file.run_major = major;
-	      set_producer (data, t->tool_id, major, "GNU Build Attribute Tool");
+	      set_producer (data, t->tool_id, major, "annobin running-on note");
 	    }
 	  else if (per_file.run_major != major)
 	    {
@@ -1414,7 +1437,7 @@ walk_build_notes (annocheck_data *     data,
 	  report_i (VERBOSE2, "%s: (%s) built-by gcc version %u",
 		    data, sec, note_data, prefer_func_name, version);
 
-	  set_producer (data, TOOL_GCC, version, "GNU Build Attribute");
+	  set_producer (data, TOOL_GCC, version, "annobin built-by note");
 	}
       else
 	report_s (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
@@ -1802,7 +1825,7 @@ walk_build_notes (annocheck_data *     data,
 		{
 		  /* FIXME: At the moment the clang plugin is unable to detect -Wall.
 		     for clang v9+.  */
-		  if (built_by_clang () && per_file.tool_version > 8)
+		  if (built_by_clang () && per_file.tool_info.version > 8)
 		    ;
 		  else if (built_by_mixed ())
 		    ;
@@ -3108,7 +3131,7 @@ show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
     if (! built_by_gcc ())
       skip (data, "Branch protection.  (Not built by gcc)");
 
-  else if (per_file.tool_version < 9)
+  else if (per_file.tool_info.version < 9)
     skip (data, "Branch protection.  (Needs gcc 9+)");
 
   else if (results->num_fail > 0)
@@ -3289,7 +3312,7 @@ show_BIND_NOW (annocheck_data * data, test * results)
     skip (data, "Test for -Wl,-z,now.  (No dynamic segment present)");
   else if (results->num_maybe == 0)
     skip (data, "Test for -Wl,-z-now.  (Dynamic segment present, but no dynamic relocations found)");
-  else if (per_file.tool == TOOL_GO)
+  else if (per_file.tool_info.tool == TOOL_GO)
     /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
     skip (data, "Test for -Wl,-z,now.  (Binary was built by GO)");
   else if (built_by_mixed ())
@@ -3339,7 +3362,7 @@ show_GNU_RELRO (annocheck_data * data, test * results)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic segment present)");
   else if (tests [TEST_BIND_NOW].num_maybe == 0)
     skip (data, "Test for -Wl,-z,relro.  (No dynamic relocations)");
-  else if (per_file.tool == TOOL_GO)
+  else if (per_file.tool_info.tool == TOOL_GO)
     /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
     skip (data, "Test for -Wl,z,relro. (Built by GO)");
   else if (results->num_pass == 0 || results->num_fail > 0)
@@ -3609,7 +3632,7 @@ show_STACK_CLASH (annocheck_data * data, test * results)
   else if (! built_by_gcc ())
     skip (data, "Test for stack clash support.  (Not built by gcc)");
 
-  else if (per_file.tool_version < 7)
+  else if (per_file.tool_info.version < 7)
     skip (data, "Test for stack clash support.  (Needs gcc 7+)");
 
   else if (results->num_fail > 0)
@@ -3734,7 +3757,7 @@ show_CF_PROTECTION (annocheck_data * data, test * results)
   else if (! built_by_compiler ())
     skip (data, "Test for control flow protection.  (Not built by gcc/clang)");
 
-  else if (built_by_gcc () && per_file.tool_version < 8)
+  else if (built_by_gcc () && per_file.tool_info.version < 8)
     skip (data, "Test for control flow protection.  (Needs gcc v8+)");
 
   else if (results->num_fail > 0)
@@ -3909,8 +3932,8 @@ finish (annocheck_data * data)
     {
       if (per_file.e_type == ET_REL)
 	skip (data, "Not checking for gaps (object file)");
-      else if (! built_by_compiler ())
-	skip (data, "Not checking for gaps (non-gcc compiled binary)");
+      else if (! built_by_compiler () && ! built_by_assembler ())
+	skip (data, "Not checking for gaps (binary created by a tool without an annobin plugin)");
       else
 	check_for_gaps (data);
     }
