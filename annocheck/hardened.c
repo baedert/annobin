@@ -1668,23 +1668,41 @@ walk_build_notes (annocheck_data *     data,
 
 	    case 2: /* CF_BRANCH: Branch but not return.  */
 	    case 6: /* CF_BRANCH | CF_SET */
-	      report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=branch",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_CF_PROTECTION].num_fail ++;
+	      if (built_by_compiler ())
+		{
+		  report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=branch",
+			    data, sec, note_data, prefer_func_name, NULL);
+		  tests[TEST_CF_PROTECTION].num_fail ++;
+		}
+	      else
+		report_s (VERBOSE, "%s: skip: (%s): -fcf-protection=branch detected but not all of the binary was built by gcc",
+			  data, sec, note_data, prefer_func_name, NULL);
 	      break;
 
 	    case 3: /* CF_RETURN: Return but not branch.  */
 	    case 7: /* CF_RETURN | CF_SET */
-	      report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=return",
-			data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_CF_PROTECTION].num_fail ++;
+	      if (built_by_compiler ())
+		{
+		  report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=return",
+			    data, sec, note_data, prefer_func_name, NULL);
+		  tests[TEST_CF_PROTECTION].num_fail ++;
+		}
+	      else
+		report_s (VERBOSE, "%s: skip: (%s): -fcf-protection=return detected but not all of the binary was built by gcc",
+			  data, sec, note_data, prefer_func_name, NULL);
 	      break;
 
 	    case 1: /* CF_NONE: No protection. */
 	    case 5: /* CF_NONE | CF_SET */
-	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fcf-protection",
-			data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_CF_PROTECTION].num_fail ++;
+	      if (built_by_compiler ())
+		{
+		  report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fcf-protection",
+			    data, sec, note_data, prefer_func_name, NULL);
+		  tests[TEST_CF_PROTECTION].num_fail ++;
+		}
+	      else
+		report_s (VERBOSE, "%s: skip: (%s): No -fcf-protection option detected but not all of the binary was built by gcc",
+			  data, sec, note_data, prefer_func_name, NULL);
 	      break;
 	    }
 	}
@@ -1983,9 +2001,15 @@ walk_build_notes (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fstack-clash-protection",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_STACK_CLASH].num_fail ++;
+	      if (built_by_gcc ())
+		{
+		  report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fstack-clash-protection",
+			    data, sec, note_data, prefer_func_name, NULL);
+		  tests[TEST_STACK_CLASH].num_fail ++;
+		}
+	      else
+		report_s (VERBOSE, "%s: skip: (%s): -fstack-clash-protection not enabled, but not all of the binary was built by gcc",
+			  data, sec, note_data, prefer_func_name, NULL);
 	      break;
 
 	    case 1:
