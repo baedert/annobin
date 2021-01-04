@@ -301,7 +301,7 @@ The plugins record information appropriate to the compiler that is
 running them.  So the @code{gcc} plugin records information about the
 following options:
 @table @code
-@item -D_FORTIFY_SOURCE=2
+@item -D_FORTIFY_SOURCE=[2|3]
 @item -D_GLIBCXX_ASSERTIONS
 @item -O
 @item -Wall
@@ -346,7 +346,7 @@ LLVM plugin.
 The @code{LLVM} plugin records information on the following command
 line options:
 @table @code
-@item -D_FORTIFY_SOURCE=2
+@item -D_FORTIFY_SOURCE=[2|3]
 @item -O
 @item -Wall
 @item -flto
@@ -857,7 +857,7 @@ Disabled by @option{--ignore-gaps}.
 @item Strong stack protection
 The program must have been compiled with the
 @option{-fstack-protector-strong} option enabled, and with
-@option{-D_FORTIFY_SOURCE=2} specified.  It must also have been
+@option{-D_FORTIFY_SOURCE=[2|3]} specified.  It must also have been
 compiled at at least optimization level 2.
 Disabled by @option{--skip-stack-prot}.
 
@@ -902,7 +902,7 @@ Disabled by @option{--skip-stack-realign}.
 
 @item Source fortification
 The program must have been compiled with the
-@option{-D_FORTIFY_SOURCE=2} command line option specified.
+@option{-D_FORTIFY_SOURCE=[2|3]} command line option specified.
 Disabled by @option{--skip-fortify}.
 
 @item Optimization

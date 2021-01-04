@@ -230,7 +230,7 @@ accept all of these options.  The options are:
    The plugins record information appropriate to the compiler that is
 running them.  So the 'gcc' plugin records information about the
 following options:
-'-D_FORTIFY_SOURCE=2'
+'-D_FORTIFY_SOURCE=[2|3]'
 '-D_GLIBCXX_ASSERTIONS'
 '-O'
 '-Wall'
@@ -271,7 +271,7 @@ LLVM plugin.
 
    The 'LLVM' plugin records information on the following command line
 options:
-'-D_FORTIFY_SOURCE=2'
+'-D_FORTIFY_SOURCE=[2|3]'
 '-O'
 '-Wall'
 '-flto'
@@ -741,8 +741,9 @@ code to support the test.
 'Strong stack protection'
      The program must have been compiled with the
      '-fstack-protector-strong' option enabled, and with
-     '-D_FORTIFY_SOURCE=2' specified.  It must also have been compiled
-     at at least optimization level 2.  Disabled by '--skip-stack-prot'.
+     '-D_FORTIFY_SOURCE=[2|3]' specified.  It must also have been
+     compiled at at least optimization level 2.  Disabled by
+     '--skip-stack-prot'.
 
 'Dynamic data present'
      Dynamic executables must have a dynamic segment.  Disabled by
@@ -779,8 +780,9 @@ code to support the test.
      specified.  Disabled by '--skip-stack-realign'.
 
 'Source fortification'
-     The program must have been compiled with the '-D_FORTIFY_SOURCE=2'
-     command line option specified.  Disabled by '--skip-fortify'.
+     The program must have been compiled with the
+     '-D_FORTIFY_SOURCE=[2|3]' command line option specified.  Disabled
+     by '--skip-fortify'.
 
 'Optimization'
      The program must have been compiled with at least '-O2'
@@ -1908,27 +1910,27 @@ Tag Table:
 Node: Top705
 Node: Introduction1785
 Node: Plugins3834
-Node: Examining11477
-Node: The Version Encoding14206
-Node: The STACK Encoding14597
-Node: The PIC Encoding15195
-Node: The GOW Encoding15823
-Node: The CF Encoding17626
-Node: The ENUM Encoding18698
-Node: The INSTRUMENT Encoding19087
-Node: Annocheck20461
-Node: Built-By22990
-Node: Hardened24520
-Node: Notes30244
-Node: Section-Size30888
-Node: Timing33042
-Node: Configure Options33689
-Node: Legacy Scripts35974
-Node: Who Built Me36749
-Node: ABI Checking39509
-Node: Hardening Checks41623
-Node: Checking Archives45709
-Node: GNU FDL48131
+Node: Examining11485
+Node: The Version Encoding14214
+Node: The STACK Encoding14605
+Node: The PIC Encoding15203
+Node: The GOW Encoding15831
+Node: The CF Encoding17634
+Node: The ENUM Encoding18706
+Node: The INSTRUMENT Encoding19095
+Node: Annocheck20469
+Node: Built-By22998
+Node: Hardened24528
+Node: Notes30270
+Node: Section-Size30914
+Node: Timing33068
+Node: Configure Options33715
+Node: Legacy Scripts36000
+Node: Who Built Me36775
+Node: ABI Checking39535
+Node: Hardening Checks41649
+Node: Checking Archives45735
+Node: GNU FDL48157
 
 End Tag Table
 

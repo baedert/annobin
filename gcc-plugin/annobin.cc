@@ -2181,7 +2181,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	 generate a warning message for the user.  We do not do this for all
 	 input however as there is no way for a plugin to distinguish between
 	 preprocessed input and non-preprocessed input.*/
-      if (global_fortify_level != 2)
+      if (global_fortify_level < 2)
 	{
 	  if (global_fortify_level == -1)
 	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE not defined"));

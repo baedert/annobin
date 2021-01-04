@@ -452,6 +452,7 @@ notes_end_file (annocheck_data * data)
 		case 0:
 		case 1:
 		case 2:
+		case 3:
 		  einfo (PARTIAL, "%d\n", value); break;
 		}
 	    }
