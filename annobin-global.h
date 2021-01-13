@@ -19,7 +19,7 @@ extern "C" {
 /* The version of the package.
    NB/ This number is expected to be in the form "Nnn" where
    "N" is major version number and "nn" is the minor version number.  */
-#define ANNOBIN_VERSION 954
+#define ANNOBIN_VERSION 956
 
 /* The version of the annotation specification supported.  */
 #define SPEC_VERSION  3
@@ -73,6 +73,7 @@ extern "C" {
 #define ANNOBIN_TOOL_ID_GCC_HOT     'h'
 #define ANNOBIN_TOOL_ID_GCC_STARTUP 's'
 #define ANNOBIN_TOOL_ID_GCC_EXIT    'e'
+#define ANNOBIN_TOOL_ID_GCC_LTO     'g'
 
 /* Values used in GNU .note.gnu.property notes (NT_GNU_PROPERTY_TYPE_0).  */
 #define GNU_PROPERTY_STACK_SIZE			1

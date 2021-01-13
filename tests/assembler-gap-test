@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2018-2020 Red Hat.
+# Copyright (c) 2018-2021 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -46,10 +46,10 @@ $GCC -nostartfiles -e 0 hello.o hello2.o gap1.o hello3.o -o assembler-gap-test1.
      -Wl,--defsym,extern_func3=0 \
      -Wl,-z,now -pie
 
-$ANNOCHECK -v -v --enable-builtby --all assembler-gap-test1.exe > assembler-gap-test1.out
+$ANNOCHECK -v assembler-gap-test1.exe > assembler-gap-test1.out
 
 # FAIL if a gap is NOT reported
-grep --silent -e "Gaps were detected" assembler-gap-test1.out
+grep --silent -e "gaps were detected" assembler-gap-test1.out
 if [ $? != 0 ];
 then
     echo "assembler-gap-test: FAIL: GAP *not* found in notes:"
@@ -71,10 +71,10 @@ $GCC -nostartfiles -e 0 hello.o hello2.o gap2.o hello3.o -o assembler-gap-test2.
      -Wl,--defsym,extern_func3=0 \
      -Wl,-z,now -pie
 
-$ANNOCHECK -v assembler-gap-test2.exe > assembler-gap-test2.out
+$ANNOCHECK -v assembler-gap-test2.exe --skip-all --test-notes > assembler-gap-test2.out
 
 # FAIL if a gap is NOT reported
-grep --silent -e "No gaps found" assembler-gap-test2.out
+grep --silent -e "no gaps found" assembler-gap-test2.out
 if [ $? != 0 ];
 then
     echo "assembler-gap-test: FAIL: GAP found in notes:"

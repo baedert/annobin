@@ -973,7 +973,7 @@ follow_debuglink (annocheck_data * data)
 #endif /* HAVE_LIBDEBUGINFOD */
 
   /* Failed to find the file.  */
-  einfo (VERBOSE, "%s: warn: Could not find separate debug file: %s", data->filename, link);
+  einfo (VERBOSE2, "%s: warn: Could not find separate debug file: %s", data->filename, link);
   
   free (canon_dir);
   free (debugfile);

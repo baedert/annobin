@@ -1,13 +1,13 @@
 \input texinfo @c -*-texinfo-*-
 @setfilename annobin.info
-@c Copyright (C) 2018-2020 Red Hat.
+@c Copyright (C) 2018-2021 Red Hat.
 @settitle Annobin
 @setchapternewpage odd
 
 @c man begin INCLUDE
 @set VERSION 9.0
 @set VERSION_PACKAGE (Annobin) 
-@set UPDATED November 2020
+@set UPDATED Januray 2021
 @c man end
 
 @ifnottex
@@ -23,7 +23,7 @@
 This file documents the annobin plugin on the Fedora system.
 
 @c man begin COPYRIGHT
-Copyright @copyright{} 2018 - 2020 Red Hat.
+Copyright @copyright{} 2018 - 2021 Red Hat.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -422,7 +422,41 @@ included in the table below.
 The @code{version} note encodes the version of the Watermark
 specification used and the version of the tool used to generate the
 notes.  Typically the protocol version will be 3 and the plugin
-version will be 5.
+version will be 9.  It also encodes the tool used to generate the
+notes as a single character.  The following characters are used:
+
+@table @code
+@item L
+The notes have been produced by the Clang plugin.
+
+@item V
+The notes have been produced by the LLVM plugin.
+
+@item a
+The notes have been produced by the assembler.
+
+@item c
+The notes have been produced by the gcc plugin for the .text.cold section.
+
+@item e
+The notes have been produced by the gcc plugin for the .text.exit section.
+
+@item g
+The notes have been produced by the gcc plugin when running in LTO mode.
+
+@item h
+The notes have been produced by the gcc plugin for the .text.hot section.
+
+@item l
+The notes have been produced by the linker.
+
+@item p
+The notes have been produced by the gcc plugin.
+
+@item s
+The notes have been produced by the gcc plugin for the .text.startup section.
+
+@end table
 
 @c -----------------------------------------------------------------
 @node The STACK Encoding
@@ -803,6 +837,7 @@ annocheck
   [@b{--test-all}]
   [@b{--test-future}]
   [@b{--ignore-gaps}]
+  [@b{--fixed-format-messages}]
   [@b{--disable-hardened}]
   [@b{--enable-hardened}]
   @var{file}@dots{}
@@ -957,6 +992,28 @@ default.
 
 @item --disable-hardened
 Disable the tool.
+
+@item --ignore-gaps
+Do not complain about gaps in the note data.
+
+@item --fixed-format-messages
+Display messages in a fixed, machine parseable format.  The format is:
+
+@smallexample
+Hardened: <result>: test: <test-name> file: <file-name>
+@end smallexample
+
+Where @code{<result>} is @emph{PASS} or @emph{FAIL} and
+@code{<test-name>} is the name of the test, which is the same as the
+name used in the @option{--test-<test-name>} option.  The
+@code{<filename>} is the name of the input file, but with any special
+characters replaced so that it always fits on one line.
+
+Here is an example:
+
+@smallexample
+  Hardened: FAIL: test: pie file: a.out.
+@end smallexample
 
 @end table
 

@@ -1,5 +1,5 @@
 /* annobin - a gcc plugin for annotating binary files.
-   Copyright (c) 2017 - 2020 Red Hat.
+   Copyright (c) 2017 - 2021 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -815,7 +815,7 @@ annobin_get_optimize_debug (void)
 }
 
 static inline bool
-annobin_in_lto_p (void)
+in_lto (void)
 {
   return GET_INT_OPTION_BY_NAME (in_lto_p) != 0;
 }
@@ -914,8 +914,7 @@ compute_GOWall_options (void)
   if (GET_INT_OPTION_BY_NAME (warn_format_security))
     val|= (1 << 15);
 
-  if (annobin_in_lto_p () 
-      || GET_STR_OPTION_BY_NAME(flag_lto) != NULL)
+  if (in_lto () || GET_STR_OPTION_BY_NAME(flag_lto) != NULL)
     val |= (1 << 16);
   else /* We record the negative so that annocheck can detect that
 	  we definitely have recorded something for this feature.  */
@@ -1326,7 +1325,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	}
       else if (startup)
 	{
-	  if (! annobin_in_lto_p () && ! GET_INT_OPTION_BY_INDEX (OPT_fprofile_values))
+	  if (! in_lto () && ! GET_INT_OPTION_BY_INDEX (OPT_fprofile_values))
 	    current_func.section_name = concat (STARTUP_SECTION, NULL);
 	}
       else if (exit)
@@ -1336,7 +1335,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
       else if (likely)
 	{
 	  /* FIXME: Never seen this one, either.  */
-	  if (! annobin_in_lto_p () && ! GET_INT_OPTION_BY_INDEX (OPT_fprofile_values))
+	  if (! in_lto () && ! GET_INT_OPTION_BY_INDEX (OPT_fprofile_values))
 	    current_func.section_name = concat (HOT_SECTION, NULL);
 	}
     }
@@ -2132,17 +2131,12 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   if (global_fortify_level == -1)
     {
-      if (annobin_in_lto_p ())
+      if (in_lto ())
 	{
 	  /* In LTO mode the preprocessed options are not passed on.
-	     For now, assume that they were present when the original object
-	     files were compiled.
-	 
-	     FIXME: What we should do is examine the input object files and
-	     extract the fortify and glibcxx notes from them.  But I do not
-	     know if one plugin can access the data in another one...  */
-	  global_fortify_level = 2;
-	  annobin_inform (INFORM_VERY_VERBOSE, "Assuming -D_FORTIFY_SOURCE=2 for LTO compilation");
+	     Siganl this to annocheck so that it can decide what to do.  */
+	  global_fortify_level = -2;
+	  annobin_inform (INFORM_VERBOSE, "Setting -D_FORTIFY_SOURCE to unknown-because-of-LTO");
 	}
       /* BZ 1862718: We have no reliable way to determine if the input file
 	 was preprocessed before being passed to gcc.  Plus we do not have
@@ -2163,7 +2157,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
   /* A simplified version of the above if() statement, but for GLIBCXX_ASSERTIONS.  */
   if (global_glibcxx_assertions == -1
-      && (annobin_in_lto_p ()
+      && (in_lto ()
 	  || ends_with (annobin_input_filename, ".i")
 	  || ends_with (annobin_input_filename, ".ii")))
     {
@@ -2171,7 +2165,7 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
       annobin_inform (INFORM_VERY_VERBOSE, "Assuming -D_GLIBCXX_ASSERTIONS for LTO/preprocessed input");
     }
   
-  if (!annobin_in_lto_p ()
+  if (! in_lto ()
       && GET_STR_OPTION_BY_NAME(flag_lto) != NULL)
     {
       bool warned = false;
@@ -2183,10 +2177,23 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	 preprocessed input and non-preprocessed input.*/
       if (global_fortify_level < 2)
 	{
+#if 0
 	  if (global_fortify_level == -1)
 	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE not defined"));
 	  else
 	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
+#else
+	  // FIXME - for some reason the prototype of warning() in diagnostic-core.h
+	  // does not match the implementation.  So we use our own prototype here.
+	  extern bool warning (int, const char *, ...);
+
+	  // FIXME: We should find an OPT_ value to use here so that users can
+	  // disable this warning if they need to.
+	  if (global_fortify_level == -1)
+	    warning (0, _("-D_FORTIFY_SOURCE not defined"));
+	  else
+	    warning (0, _("-D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
+#endif
 	  warned = true;
 	}
 
@@ -2214,31 +2221,32 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      Nevertheless we generate this symbol in the .text section
      as at this point we cannot know which section(s) will be used
      by compiled code.  */
-  annobin_emit_start_sym_and_version_note ("", ANNOBIN_TOOL_ID_GCC);
+  char producer_char = in_lto () ? ANNOBIN_TOOL_ID_GCC_LTO : ANNOBIN_TOOL_ID_GCC;
+  annobin_emit_start_sym_and_version_note ("", producer_char);
   emit_global_notes ("");
 
   /* GCC does not provide any way for a plugin to detect if hot/cold partitioning
      will be performed on a function, and hence a .text.hot and/or .text.unlikely
      section will be created.  So instead we create global notes to cover these
      two sections.  */
-  annobin_emit_start_sym_and_version_note (HOT_SUFFIX, ANNOBIN_TOOL_ID_GCC_HOT);
+  annobin_emit_start_sym_and_version_note (HOT_SUFFIX, producer_char);
   queue_attachment (HOT_SECTION, concat (HOT_SECTION, ANNOBIN_GROUP_NAME, NULL));
   // We have to emit notes for these other sections too, as we do not know
   // which one(s) will actually end up containing any code.  Annocheck will
   // ignore empty note ranges.
   emit_global_notes (HOT_SUFFIX);
 
-  annobin_emit_start_sym_and_version_note (COLD_SUFFIX, ANNOBIN_TOOL_ID_GCC_COLD);
+  annobin_emit_start_sym_and_version_note (COLD_SUFFIX, producer_char);
   queue_attachment (COLD_SECTION, concat (COLD_SECTION, ANNOBIN_GROUP_NAME, NULL));
   emit_global_notes (COLD_SUFFIX);
 
   /* *sigh* As of gcc 9, a .text.startup section can also be created.  */
-  annobin_emit_start_sym_and_version_note (STARTUP_SUFFIX, ANNOBIN_TOOL_ID_GCC_STARTUP);
+  annobin_emit_start_sym_and_version_note (STARTUP_SUFFIX, producer_char);
   queue_attachment (STARTUP_SECTION, concat (STARTUP_SECTION, ANNOBIN_GROUP_NAME, NULL));
   emit_global_notes (STARTUP_SUFFIX);
 
   /* Presumably a .text.exit section can also be created, although I have not seen that yet.  */
-  annobin_emit_start_sym_and_version_note (EXIT_SUFFIX, ANNOBIN_TOOL_ID_GCC_EXIT);
+  annobin_emit_start_sym_and_version_note (EXIT_SUFFIX, producer_char);
   queue_attachment (EXIT_SECTION, concat (EXIT_SECTION, ANNOBIN_GROUP_NAME, NULL));
   emit_global_notes (EXIT_SUFFIX);
 }
@@ -2274,7 +2282,7 @@ annobin_emit_end_symbol (const char * suffix)
 	 section.  */
       if (target_start_sym_bias == 0
 #if GCCPLUGIN_VERSION_MAJOR >= 10
-	  || annobin_in_lto_p ()
+	  || in_lto ()
 #endif
 	  )
 	{
@@ -2311,7 +2319,7 @@ annobin_emit_end_symbol (const char * suffix)
      had to place the end symbol into a different section.  */
   if (target_start_sym_bias
 #if GCCPLUGIN_VERSION_MAJOR >= 10
-      && ! annobin_in_lto_p ()
+      && ! in_lto ()
 #endif
       )
     {

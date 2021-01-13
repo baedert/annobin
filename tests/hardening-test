@@ -73,3 +73,4 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
 # The entry point test (on x86/x86_64) will fail with a MAYBE result because the entry point is 0...
 
 $ANNOCHECK -v --ignore-gaps --skip-entry hardening-test.exe --enable-timing
+

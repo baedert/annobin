@@ -1,5 +1,5 @@
 /* Checks the hardened status of the given file.
-   Copyright (c) 2018 - 2020 Red Hat.
+   Copyright (c) 2018 - 2021 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -18,44 +18,63 @@
 #include "annobin-global.h"
 #include "annocheck.h"
 
-typedef struct hardened_note_data
+#ifndef EM_AARCH64 /* RHEL-6 does not define EM_AARCh64.  */
+#define EM_AARCH64	183	/* ARM 64-bit architecture */
+#endif
+
+#define HARDENED_CHECKER_NAME   "Hardened"
+
+/* Predefined names for all of the sources of information scanned by this checker.  */
+#define SOURCE_ANNOBIN_NOTES    "annobin notes"
+#define SOURCE_DW_AT_PRODUCER   "DW_AT_producer string"
+#define SOURCE_DYNAMIC_SECTION  "dynamic section"
+#define SOURCE_DYNAMIC_SEGMENT  "dynamic segment"
+#define SOURCE_ELF_HEADER       "ELF header"
+#define SOURCE_FINAL_SCAN       "final scan"
+#define SOURCE_PROPERTY_NOTES   "property notes"
+#define SOURCE_SECTION_HEADERS  "section headers"
+#define SOURCE_SEGMENT_CONTENTS "segment contents"
+#define SOURCE_SEGMENT_HEADERS  "segment headers"
+#define SOURCE_STRING_SECTION   "string section"
+
+typedef struct note_range
 {
   ulong         start;
   ulong         end;
-} hardened_note_data;
+} note_range;
 
 /* Set by the constructor.  */
 static bool disabled = false;
 
 /* Can be changed by a command line option.  */
 static bool ignore_gaps = false;
+static bool fixed_format_messages = false;
 
-enum tool
-{
-  TOOL_UNKNOWN = 0,
-  TOOL_MIXED,
-  TOOL_CLANG,
-  TOOL_FORTRAN,
-  TOOL_GAS,
-  TOOL_GCC,
-  TOOL_GIMPLE,
-  TOOL_GO,
-  TOOL_LLVM,
-  TOOL_RUST
-};
+#define FIXED_FORMAT_STRING "%s: test: %s file: %s"
 
-typedef struct tool_info
-{
-  enum tool   tool;
-  uint        version;
-} tool_info;
-  
+#define TOOL_UNKNOWN  	0
+#define TOOL_CLANG	(1 << 0)
+#define TOOL_FORTRAN	(1 << 1)
+#define TOOL_GAS	(1 << 2)
+#define TOOL_GCC	(1 << 3)
+#define TOOL_GIMPLE	(1 << 4)
+#define TOOL_GO		(1 << 5)
+#define TOOL_LLVM	(1 << 6)
+#define TOOL_RUST	(1 << 7)
+
 enum lang
 {
   LANG_UNKNOWN = 0,
   LANG_C,
   LANG_CXX,
   LANG_OTHER
+};
+
+enum short_enum_state
+{
+  SHORT_ENUM_STATE_UNSET = 0,
+  SHORT_ENUM_STATE_SHORT,
+  SHORT_ENUM_STATE_LONG
 };
 
 /* The contents of this structure are used on a per-input-file basis.
@@ -65,28 +84,37 @@ static struct per_file
   Elf64_Half  e_type;
   Elf64_Half  e_machine;
   Elf64_Addr  e_entry;
-  ulong       text_section_name_index;
+
+  ulong       text_section_name_index;  
   ulong       text_section_alignment;
+  note_range  text_section_range;
+
   bool        is_little_endian;
   bool        debuginfo_file;
-  bool        compiled_code_seen;
   bool        build_notes_seen;
   int         num_fails;
   int         num_maybes;
-  unsigned    anno_major;
-  unsigned    anno_minor;
-  unsigned    anno_rel;
-  unsigned    run_major;
-  unsigned    run_minor;
-  unsigned    run_rel;
+  uint        anno_major;
+  uint        anno_minor;
+  uint        anno_rel;
+  uint        run_major;
+  uint        run_minor;
+  uint        run_rel;
 
-  tool_info   tool_info;
+  uint                seen_tools;
+  uint                tool_version;
+  uint                current_tool;
+  const char *        component_name;
+  note_range  note_data;
+
+  enum short_enum_state short_enum_state;
+
   uint        note_source[256];
 
   enum lang   lang;
 
-  bool        has_gimple;
-  bool        warned_producer;
+  bool        gcc_from_comment;
+  bool        warned_asm_not_gcc;
   bool        warned_about_instrumentation;
   bool        warned_version_mismatch;
   bool        warned_command_line;
@@ -94,30 +122,43 @@ static struct per_file
   bool        also_written;
 } per_file;
 
-static hardened_note_data *  ranges = NULL;
-static unsigned              num_allocated_ranges = 0;
-static unsigned              next_free_range = 0;
+/* Extensible array of note ranges  */
+static note_range *  ranges = NULL;
+static uint                  num_allocated_ranges = 0;
+static uint                  next_free_range = 0;
 #define RANGE_ALLOC_DELTA    16
 
 /* Array used to store instruction bytes at entry point.
    Use for verbose reporting when the ENTRY test fails.  */
 static unsigned char entry_bytes[4];
 
-/* This structure defines an individual test.  */
+/* This structure defines an individual test.
+   There are two types of test.  One uses the annobin notes to check that the correct build time options were used.
+   The other checks the properties of the binary itself.
+   The former is dependent upon the tool(s) used to produce the binary and the source language(s) involved.
+   The latter is independent of the tools, languages and notes.  */
+
+enum test_state
+{
+  STATE_UNTESTED = 0,
+  STATE_PASSED,
+  STATE_FAILED,
+  STATE_MAYBE
+};
 
 typedef struct test
 {
   bool	            enabled;	  /* If false then do not run this test.  */
-  unsigned int      num_pass;
-  unsigned int      num_fail;
-  unsigned int      num_maybe;
+  enum test_state   state;
   const char *      name;	  /* Also used as part of the command line option to disable the test.  */
   const char *      description;  /* Used in the --help output to describe the test.  */
-  void (*           show_result)(annocheck_data *, struct test *);
+  bool              result_announced;
 } test;
 
 enum test_index
 {
+  TEST_NOTES = 0,
+  
   TEST_BIND_NOW,
   TEST_BRANCH_PROTECTION,
   TEST_CF_PROTECTION,
@@ -147,39 +188,14 @@ enum test_index
   TEST_MAX
 };
 
-static void show_BIND_NOW           (annocheck_data *, test *);
-static void show_BRANCH_PROTECTION  (annocheck_data *, test *);
-static void show_CF_PROTECTION      (annocheck_data *, test *);
-static void show_DYNAMIC_SEGMENT    (annocheck_data *, test *);
-static void show_DYNAMIC_TAGS       (annocheck_data *, test *);
-static void show_ENTRY              (annocheck_data *, test *);
-static void show_FORTIFY            (annocheck_data *, test *);
-static void show_GLIBCXX_ASSERTIONS (annocheck_data *, test *);
-static void show_GNU_RELRO          (annocheck_data *, test *);
-static void show_GNU_STACK          (annocheck_data *, test *);
-static void show_LTO                (annocheck_data *, test *);
-static void show_OPTIMIZATION       (annocheck_data *, test *);
-static void show_PIC                (annocheck_data *, test *);
-static void show_PIE                (annocheck_data *, test *);
-static void show_PROPERTY_NOTE      (annocheck_data *, test *);
-static void show_RUN_PATH           (annocheck_data *, test *);
-static void show_RWX_SEG            (annocheck_data *, test *);
-static void show_SHORT_ENUM         (annocheck_data *, test *);
-static void show_STACK_CLASH        (annocheck_data *, test *);
-static void show_STACK_PROT         (annocheck_data *, test *);
-static void show_STACK_REALIGN      (annocheck_data *, test *);
-static void show_TEXTREL            (annocheck_data *, test *);
-static void show_THREADS            (annocheck_data *, test *);
-static void show_WARNINGS           (annocheck_data *, test *);
-static void show_WRITEABLE_GOT      (annocheck_data *, test *);
-
 #define TEST(name,upper,description) \
-  [ TEST_##upper ] = { true, 0, 0, 0, #name, description, show_ ## upper }
+  [ TEST_##upper ] = { true, STATE_UNTESTED, #name, description, false }
 
 /* Array of tests to run.  Default to enabling them all.
    The result field is initialised in the start() function.  */
 static test tests [TEST_MAX] =
 {
+  TEST (notes,              NOTES,              "Annobin note coverage"),
   TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
   TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8+ only)"),
@@ -214,45 +230,33 @@ static bool report_future_fail = true;
 #endif
 
 static inline bool
-is_compiler (enum tool tool)
+is_C_compiler (uint tool)
 {
-  return tool == TOOL_GCC || tool == TOOL_CLANG || tool == TOOL_LLVM || tool == TOOL_GIMPLE;
+  return (tool & (TOOL_GCC | TOOL_CLANG | TOOL_LLVM | TOOL_GIMPLE)) != 0;
 }
 
 static inline bool
-built_by_compiler (void)
+includes_assembler (uint mask)
 {
-  return is_compiler (per_file.tool_info.tool);
+  return mask & TOOL_GAS;
 }
 
 static inline bool
-built_by_assembler (void)
+includes_gcc (uint mask)
 {
-  return per_file.tool_info.tool == TOOL_GAS;
+  return mask & TOOL_GCC;
 }
 
 static inline bool
-built_by_gcc (void)
+includes_clang (uint mask)
 {
-  return per_file.tool_info.tool == TOOL_GCC;
+  return mask & TOOL_CLANG;
 }
 
 static inline bool
-built_by_clang (void)
+includes_gimple (uint mask)
 {
-  return per_file.tool_info.tool == TOOL_CLANG;
-}
-
-static inline bool
-built_by_mixed (void)
-{
-  return per_file.tool_info.tool == TOOL_MIXED;
-}
-
-static inline bool
-built_with_gimple (void)
-{
-  return per_file.has_gimple;
+  return mask & TOOL_GIMPLE;
 }
 
 static void
@@ -263,17 +267,25 @@ warn (annocheck_data * data, const char * message)
   einfo (VERBOSE, "%s: WARN: %s", data->filename, message);
 }
 
-static void
-info (annocheck_data * data, const char * message)
+static inline bool
+is_x86 (void)
 {
-  einfo (VERBOSE, "%s: info: %s", data->filename, message);
+  return per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64;
+}
+
+static inline bool
+is_executable (void)
+{
+  return per_file.e_type == ET_EXEC || per_file.e_type == ET_DYN;
 }
 
 static bool
-skip_check (enum test_index check, const char * component_name)
+skip_check (enum test_index check)
 {
   if (check < TEST_MAX && ! tests[check].enabled)
     return true;
+
+  const char * component_name = per_file.component_name;
 
   if (component_name == NULL)
     return false;
@@ -340,25 +352,6 @@ skip_check (enum test_index check, const char * component_name)
 }
 
 static const char *
-get_tool_name (enum tool tool)
-{
-  switch (tool)
-    {
-    default:           return "<unrecognised>";
-    case TOOL_UNKNOWN: return "<unknown>";
-    case TOOL_MIXED:   return "<mixed>";
-    case TOOL_CLANG:   return "Clang";
-    case TOOL_FORTRAN: return "Fortran";
-    case TOOL_GAS:     return "gas";
-    case TOOL_GCC:     return "GCC";
-    case TOOL_GIMPLE:  return "gimple";
-    case TOOL_GO:      return "GO";
-    case TOOL_LLVM:    return "LLVM";
-    case TOOL_RUST:    return "Rust";
-    }
-}
-
-static const char *
 get_lang_name (enum lang lang)
 {
   switch (lang)
@@ -378,7 +371,7 @@ set_lang (annocheck_data *  data,
 {
   if (per_file.lang == LANG_UNKNOWN)
     {
-      einfo (VERBOSE2, "%s: info: Written in %s (source: %s)",
+      einfo (VERBOSE2, "%s: info: written in %s (source: %s)",
 	     data->filename, get_lang_name (lang), source);
 
       per_file.lang = lang;
@@ -400,120 +393,102 @@ set_lang (annocheck_data *  data,
     }
 }
 
-static void
-set_producer (annocheck_data *     data,
-	      enum tool            tool,
-	      unsigned int         version,
-	      const char *         source)
+static const char *
+get_tool_name (uint tool)
 {
-  einfo (VERBOSE2, "%s: info: Record producer: %s version: %u source: %s",
-	 data->filename, get_tool_name (tool), version, source);
-
-  if (tool == TOOL_GIMPLE)
-    per_file.has_gimple = true;
-
-  if (per_file.tool_info.tool == TOOL_UNKNOWN)
+  switch (tool)
     {
-      per_file.tool_info.tool = tool;
-      per_file.tool_info.version = version;
-      einfo (VERBOSE, "%s: info: Set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
-    }
-  else if (per_file.tool_info.tool == tool)
-    {
-      if (per_file.tool_info.version != version)
-	{
-	  if (! per_file.warned_producer && version > 0)
-	    {
-	      einfo (VERBOSE, "%s: warn: Multiple versions of a tool were used to build this file (%u %u) - using highest version",
-		     data->filename, version, per_file.tool_info.version);
-	      per_file.warned_producer = true;
-	    }
-
-	  if (per_file.tool_info.version < version)
-	    per_file.tool_info.version = version;
-	}
-    }
-  else if ((per_file.tool_info.tool == TOOL_GAS && is_compiler (tool))
-	   || (built_by_compiler () && tool == TOOL_GAS))
-    {
-      if (! per_file.warned_producer)
-	{
-	  /* See BZ 1906171.
-	     In particular glibc creates some object files by using GCC to assemble
-	     some source code and adds the -Wa,--generate-missing-build-notes=yes
-	     option so that there is a note to cover the binary.  Since gcc was
-	     involved the .comment section will set_producer(GCC).  But since the
-	     code is in fact assembler, the usual GCC command line options will
-	     not be present.  So when we see a conflict between GCC and GAS we
-	     choose the lesser.  */
-	  info (data, "Mixed assembler and GCC detected - treating as assembler");
-	  per_file.warned_producer = true;
-	}
-
-      per_file.tool_info.tool = TOOL_GAS;
-    }
-  else if ((per_file.tool_info.tool == TOOL_GIMPLE && is_compiler (tool))
-	   || (built_by_compiler () && tool == TOOL_GIMPLE))
-    {
-      if (! per_file.warned_producer)
-	{
-	  info (data, "Mixed Gimple and GCC detected - treating as pure GCC");
-	  per_file.warned_producer = true;
-	}
-
-      per_file.tool_info.tool = TOOL_GCC;
-    }
-  else if (! built_by_mixed ())
-    {
-      if (! per_file.warned_producer)
-	{
-	  einfo (VERBOSE, "%s: info: This binary was built by more than one tool (%s and %s)",
-		 data->filename,
-		 get_tool_name (per_file.tool_info.tool),
-		 get_tool_name (tool));
-	  per_file.warned_producer = true;
-	}
-
-      if (per_file.tool_info.tool != TOOL_CLANG && tool != TOOL_CLANG)
-	{
-	  per_file.tool_info.tool = TOOL_MIXED;
-	  per_file.tool_info.version = 0;
-	}
-      else if (tool == TOOL_CLANG)
-	{
-	  per_file.tool_info.tool = TOOL_CLANG;
-	  per_file.tool_info.version = version;
-	}
+    default:           return "<unrecognised>";
+    case TOOL_UNKNOWN: return "<unknown>";
+    case TOOL_CLANG:   return "Clang";
+    case TOOL_FORTRAN: return "Fortran";
+    case TOOL_GAS:     return "Gas";
+    case TOOL_GCC:     return "GCC";
+    case TOOL_GIMPLE:  return "Gimple";
+    case TOOL_GO:      return "GO";
+    case TOOL_LLVM:    return "LLVM";
+    case TOOL_RUST:    return "Rust";
     }
 }
 
-struct tool_string
-{
-  const char * lead_in;
-  const char * tool_name;
-  enum tool    tool_id;
-};
+#define COMMENT_SECTION "comment section"
 
-typedef struct tool_id
+static void
+add_producer (annocheck_data *  data,
+	      uint              tool,
+	      uint              version,
+	      const char *      source,
+	      bool              update_current_file)
 {
-  const char *  producer_string;
-  enum tool     tool_type;
-} tool_id;
+  einfo (VERBOSE2, "%s: info: record producer: %s version: %u source: %s",
+	 data->filename, get_tool_name (tool), version, source);
 
-static const tool_id tools[] =
-{
- /* { "GNU C++", TOOL_GXX }, */
-  { "GNU C", TOOL_GCC },
-  { "GNU Fortran", TOOL_FORTRAN },
-  { "rustc version", TOOL_RUST },
-  { "clang version", TOOL_CLANG },
-  { "clang LLVM", TOOL_CLANG }, /* Is this right ?  */
-  { "GNU Fortran", TOOL_FORTRAN },
-  { "GNU GIMPLE", TOOL_GIMPLE },
-  { "Go cmd/compile", TOOL_GO },
-  { "GNU AS", TOOL_GAS },
-  { NULL, 0 }
-};
+  if (update_current_file)
+    {
+      per_file.current_tool = tool;
+      if (version)
+	per_file.tool_version = version;
+      return;
+    }
+
+  if (per_file.seen_tools == TOOL_UNKNOWN)
+    {
+      per_file.seen_tools = tool;
+      per_file.tool_version = version;  /* FIXME: Keep track of version numbers on a per-tool basis.  */
+      if (! fixed_format_messages)
+	{
+	  if (version)
+	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
+	  else
+	    einfo (VERBOSE, "%s: info: set binary producer to %s", data->filename, get_tool_name (tool));
+	}
+
+      if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
+	per_file.gcc_from_comment = streq (source, COMMENT_SECTION);      
+    }
+  else if (per_file.seen_tools & tool)
+    {
+      if (per_file.tool_version != version && version > 0)
+	{
+	  if (per_file.tool_version < version)
+	    per_file.tool_version = version;
+	}
+    }
+  else
+    {
+      per_file.seen_tools |= tool;
+
+      /* See BZ 1906171.
+	 Specifically glibc creates some object files by using GCC to assemble hand
+	 written source code and adds the -Wa,--generate-missing-build-notes=yes
+	 option so that there is a note to cover the binary.  Since gcc was involved
+	 the .comment section will add_producer(GCC).  But since the code is in fact
+	 assembler, the usual GCC command line options will not be present.  So when
+	 we see this conflict we choose GAS.  */
+      if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
+	per_file.gcc_from_comment = streq (source, COMMENT_SECTION);
+      else if (tool == TOOL_GAS && per_file.gcc_from_comment)
+	{
+	  if (! per_file.warned_asm_not_gcc)
+	    {
+	      if (! fixed_format_messages)
+		einfo (VERBOSE, "%s: info: assembler built by GCC detected - treating as pure assembler",
+		       data->filename);
+	      per_file.warned_asm_not_gcc = true;
+	    }
+
+	  per_file.seen_tools &= ~ TOOL_GCC;
+	}
+
+      if (! fixed_format_messages)
+	{
+	  if (version)
+	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
+	  else
+	    einfo (VERBOSE, "%s: info: set binary producer to %s", data->filename, get_tool_name (tool));
+	}
+    }
+}
 
 static void
 parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
@@ -526,8 +501,6 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
       return;
     }
   
-  einfo (VERBOSE2, "%s: DW_AT_language = %x", data->filename, (int) val);
-
   switch (val)
     {
     case DW_LANG_C89:
@@ -543,7 +516,8 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
     case DW_LANG_C_plus_plus_03:
     case DW_LANG_C_plus_plus_11:
     case DW_LANG_C_plus_plus_14:
-      einfo (VERBOSE, "%s: Written in C++", data->filename);
+      if (! fixed_format_messages)
+	einfo (VERBOSE, "%s: Written in C++", data->filename);
       set_lang (data, LANG_CXX, "DW_AT_language");
       break;
 
@@ -570,6 +544,215 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
     }
 }
 
+typedef struct tool_id
+{
+  const char *  producer_string;
+  uint          tool_type;
+} tool_id;
+
+static const tool_id tools[] =
+{
+  { "GNU C",          TOOL_GCC },
+  { "GNU Fortran",    TOOL_FORTRAN },
+  { "rustc version",  TOOL_RUST },
+  { "clang version",  TOOL_CLANG },
+  { "clang LLVM",     TOOL_CLANG }, /* Is this right ?  */
+  { "GNU Fortran",    TOOL_FORTRAN },
+  { "GNU GIMPLE",     TOOL_GIMPLE },
+  { "Go cmd/compile", TOOL_GO },
+  { "GNU AS",         TOOL_GAS },
+  { NULL,             TOOL_UNKNOWN }
+};
+
+struct tool_string
+{
+  const char * lead_in;
+  const char * tool_name;
+  uint         tool_id;
+};
+
+/* Ensure that NAME will not use more than one line.  */
+static const char *
+sanitize_filename (const char * name)
+{
+  const char * n;
+
+  for (n = name; *n != 0; n++)
+    if (iscntrl (*n))
+      break;
+  if (*n == 0)
+    return name;
+
+  char * new_name;
+  char * p;
+
+  p = new_name = xmalloc (strlen (name) + 1);
+
+  for (n = name; *n != 0; n++)
+    *p++ = iscntrl (*n) ? ' ' : *n;
+
+  *p = 0;
+  return new_name;  
+}
+
+static void
+pass (annocheck_data * data, uint testnum, const char * source, const char * reason)
+{
+  assert (testnum < TEST_MAX);
+
+  if (! tests[testnum].enabled)
+    return;
+
+  /* If we have already seen a FAIL then do not also report a PASS.  */
+  if (tests[testnum].state == STATE_FAILED)
+    return;
+
+  if (tests[testnum].state == STATE_UNTESTED)
+    tests[testnum].state = STATE_PASSED;
+
+  if (tests[testnum].result_announced)
+    return;
+
+  tests[testnum].result_announced = true;
+
+  if (fixed_format_messages)
+    einfo (INFO, FIXED_FORMAT_STRING, "PASS", tests[testnum].name, sanitize_filename (data->filename));
+  else
+    {
+      if (! BE_VERBOSE)
+	return;
+
+      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+      einfo (PARTIAL, "PASS: %s test ", tests[testnum].name);
+      if (reason)
+	einfo (PARTIAL, "because %s ", reason);
+      if (BE_VERY_VERBOSE)
+	einfo (PARTIAL, " (source: %s)\n", source);
+      else
+	einfo (PARTIAL, "\n");
+    }
+}
+
+static void
+skip (annocheck_data * data, uint testnum, const char * source, const char * reason)
+{
+  assert (testnum < TEST_MAX);
+
+  if (! tests[testnum].enabled)
+    return;
+
+  if (tests[testnum].state == STATE_UNTESTED)
+    tests[testnum].state = STATE_MAYBE; /* FIXME - this is to stop final() from complaining that the test was not seen.  Maybe use a new state ?  */
+  
+  if (fixed_format_messages)
+    return;
+
+  if (! BE_VERBOSE)
+    return;
+
+  einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+  einfo (PARTIAL, "skip: %s test ", tests[testnum].name);
+  if (reason)
+    einfo (PARTIAL, "because %s ", reason);
+  if (BE_VERY_VERBOSE)
+    einfo (PARTIAL, " (source: %s)\n", source);
+  else
+    einfo (PARTIAL, "\n");
+}
+
+static void
+fail (annocheck_data * data,
+      uint             testnum,
+      const char *     source,
+      const char *     reason)
+{
+  assert (testnum < TEST_MAX);
+
+  if (! tests[testnum].enabled)
+    return;
+
+  per_file.num_fails ++;
+
+  if (fixed_format_messages)
+    einfo (INFO, FIXED_FORMAT_STRING, "FAIL", tests[testnum].name, sanitize_filename (data->filename));
+  else if (tests[testnum].state != STATE_FAILED || BE_VERBOSE)
+    {
+      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+      einfo (PARTIAL, "FAIL: %s test ", tests[testnum].name);
+      if (reason)
+	einfo (PARTIAL, "because %s ", reason);
+
+      const char * name = per_file.component_name;
+      if (name && BE_VERBOSE)
+	{
+	  if (const_strneq (name, "component: "))
+	    einfo (PARTIAL, "(function: %s) ", name + strlen ("component: "));
+	  else
+	    einfo (PARTIAL, "(%s) ", name);
+	}
+      if (BE_VERY_VERBOSE)
+	einfo (PARTIAL, "(source: %s)\n", source);
+      else
+	einfo (PARTIAL, "\n");
+    }
+
+  tests[testnum].state = STATE_FAILED;
+}
+
+static void
+maybe (annocheck_data * data,
+       uint             testnum,
+       const char *     source,
+       const char *     reason)
+{
+  assert (testnum < TEST_MAX);
+
+  if (! tests[testnum].enabled)
+    return;
+
+  per_file.num_maybes ++;
+
+  if (fixed_format_messages)
+    einfo (INFO, FIXED_FORMAT_STRING, "MAYB", tests[testnum].name, sanitize_filename (data->filename));
+  else if (tests[testnum].state == STATE_UNTESTED || BE_VERBOSE)
+    {
+      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+      einfo (PARTIAL, "MAYB: test: %s ", tests[testnum].name);
+      if (reason)
+	einfo (PARTIAL, "because %s ", reason);
+      if (per_file.component_name)
+	einfo (PARTIAL, "(function: %s) ", per_file.component_name);
+      if (BE_VERY_VERBOSE)
+	einfo (PARTIAL, " (source: %s)\n", source);
+      else
+	einfo (PARTIAL, "\n");
+    }
+
+  if (tests[testnum].state != STATE_FAILED)
+    tests[testnum].state = STATE_MAYBE;
+}
+
+static void
+info (annocheck_data * data, uint testnum, const char * source, const char * extra)
+{
+  assert (testnum < TEST_MAX);
+
+  if (! tests[testnum].enabled)
+    return;
+
+  if (fixed_format_messages)
+    return;
+
+  einfo (VERBOSE2, "%s: info: %s %s (source %s)",
+	 data->filename, tests[testnum].name, extra, source);
+}
+
+static inline bool
+is_object_file (void)
+{
+  return per_file.e_type == ET_REL;
+}
+
 static void
 parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 {
@@ -577,7 +760,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 
   if (string == NULL)
     {
-      unsigned int form = dwarf_whatform (attr);
+      uint form = dwarf_whatform (attr);
 
       if (form == DW_FORM_GNU_strp_alt)
 	warn (data, "DW_FORM_GNU_strp_alt not yet handled");
@@ -592,8 +775,8 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
   /* See if we can determine exactly which tool did produce this binary.  */
   const tool_id *  tool;
   const char *     where;
-  enum tool        madeby = TOOL_UNKNOWN;
-  unsigned int     version = 0;
+  uint             madeby = TOOL_UNKNOWN;
+  uint             version = 0;
 
   for (tool = tools; tool->producer_string != NULL; tool ++)
     if ((where = strstr (string, tool->producer_string)) != NULL)
@@ -610,18 +793,14 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
     {
       /* FIXME: This can happen for object files because the DWARF data
 	 has not been relocated.  Find out how to handle this using libdwarf.  */
-      if (per_file.e_type == ET_REL)
+      if (is_object_file ())
 	warn (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
       else
 	warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
       return;
     }
 
-  if (madeby != TOOL_GCC && madeby != TOOL_GIMPLE && per_file.tool_info.tool == TOOL_UNKNOWN)
-    einfo (VERBOSE, "%s: Discovered non-gcc code producer (%s), skipping gcc specific checks",
-	   data->filename, get_tool_name (madeby));
-
-  set_producer (data, madeby, version, "DW_AT_producer");
+  add_producer (data, madeby, version, "DW_AT_producer", true);
 
   /* The DW_AT_producer string may also contain some of the command
      line options that were used to compile the binary.  This happens
@@ -634,83 +813,49 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
     {
     default:
       break;
-
+      
     case TOOL_CLANG:
       /* Try to determine if there are any command line options recorded in the
 	 DW_AT_producer string.  FIXME: This is not a very good heuristic.  */
       if (strstr (string, "-f") || strstr (string, "-g") || strstr (string, "-O"))
 	{
-	  if (! skip_check (TEST_OPTIMIZATION, NULL))
-	    {
-	      if (strstr (string, " -O2") || strstr (string, " -O3"))
-		{
-		  tests[TEST_OPTIMIZATION].num_pass ++;
-		  einfo (VERBOSE2, "%s: PASS: Compiled with sufficient optimization", data->filename);
-		}
-	      else if (strstr (string, " -O0") || strstr (string, " -O1"))
-		{
-		  /* FIXME: This may not be a failure.  GCC needs -O2 or
-		     better for -D_FORTIFY_SOURCE to work properly, but
-		     other compilers may not.  */
-		  tests[TEST_OPTIMIZATION].num_fail ++;
-		  einfo (VERBOSE, "%s: FAIL: Built with insufficient optimization", data->filename);
-		}
-	      else
-		einfo (VERBOSE2, "%s: MAYB: Optimization level not found in DW_AT_producer string", data->filename);
-	    }
+	  if (strstr (string, " -O2") || strstr (string, " -O3"))
+	    pass (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, NULL);
+	  else if (strstr (string, " -O0") || strstr (string, " -O1"))
+	    /* FIXME: This may not be a failure.  GCC needs -O2 or
+	       better for -D_FORTIFY_SOURCE to work properly, but
+	       other compilers may not.  */
+	    fail (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "optimization level too low");
+	  else
+	    info (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "not found in string");
 
-	  if (! skip_check (TEST_PIC, NULL))
-	    {
-	      if (strstr (string, " -fpic") || strstr (string, " -fPIC")
-		  || strstr (string, " -fpie") || strstr (string, " -fPIE"))
-		{
-		  tests[TEST_PIC].num_pass ++;
-		  einfo (VERBOSE2, "%s: PASS: Compiled with -fpic/-fpie", data->filename);
-		}
-	      else
-		einfo (VERBOSE2, "%s: MAYB: -fPIC/-fPIE not found in DW_AT_producer string", data->filename);
-	    }
+	  if (strstr (string, " -fpic") || strstr (string, " -fPIC")
+	      || strstr (string, " -fpie") || strstr (string, " -fPIE"))
+	    pass (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, NULL);
+	  else
+	    info (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, "-fpic/-fpie not found in string");
 
-	  if (! skip_check (TEST_STACK_PROT, NULL))
-	    {
-	      if (strstr (string, "-fstack-protector-strong")
-		  || strstr (string, "-fstack-protector-all"))
-		{
-		  tests[TEST_STACK_PROT].num_pass ++;
-		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient stack protection", data->filename);
-		}
-	      else if (strstr (string, "-fstack-protector"))
-		{
-		  tests[TEST_STACK_PROT].num_fail ++;
-		  einfo (VERBOSE, "%s: FAIL: Compiled with insufficient stack protection", data->filename);
-		}
-	      else
-		einfo (VERBOSE2, "%s: MAYB: -fstack-protector not found in DW_AT_producer string", data->filename);
-	    }
+	  if (strstr (string, "-fstack-protector-strong")
+	      || strstr (string, "-fstack-protector-all"))
+	    pass (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, NULL);
+	  else if (strstr (string, "-fstack-protector"))
+	    fail (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "insufficient protection enabled");
+	  else
+	    info (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "not found in string");
 
-	  if (! skip_check (TEST_WARNINGS, NULL))
-	    {
-	      if (strstr (string, "-Wall")
-		  || strstr (string, "-Wformat-security")
-		  || strstr (string, "-Werror=format-security"))
-		{
-		  tests[TEST_WARNINGS].num_pass ++;
-		  einfo (VERBOSE, "%s: PASS: Compiled with sufficient warning enablement", data->filename);
-		}
-	      else if (! built_with_gimple ()) /* Gimple compilation drops all warnings.  */
-		einfo (VERBOSE2, "%s: MAYB: -Wall/-Wformat-security not found in DW_AT_producer string", data->filename);
-	    }
+	  if (strstr (string, "-Wall")
+	      || strstr (string, "-Wformat-security")
+	      || strstr (string, "-Werror=format-security"))
+	    pass (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, NULL);
+	  else
+	    info (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, "not found in string");
 
-	  if ((per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64)
-	      && ! skip_check (TEST_CF_PROTECTION, NULL))
+	  if (is_x86 ())
 	    {
 	      if (strstr (string, "-fcf-protection"))
-		{
-		  tests[TEST_CF_PROTECTION].num_pass ++;
-		  einfo (VERBOSE, "%s: PASS: Compiled with control flow protection enabled", data->filename);
-		}
+		pass (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, NULL);
 	      else
-		einfo (VERBOSE2, "%s: MAYB: -fcf-protection not found in DW_AT_producer string", data->filename);
+		info (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, "not found in string");
 	    }
 	}
       else if (! per_file.warned_command_line)
@@ -726,10 +871,10 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 /* Look for DW_AT_producer and DW_AT_language attributes.  */
 
 static bool
-hardened_dwarf_walker (annocheck_data *  data,
-		       Dwarf *           dwarf ATTRIBUTE_UNUSED,
-		       Dwarf_Die *       die,
-		       void *            ptr ATTRIBUTE_UNUSED)
+dwarf_attribute_checker (annocheck_data *  data,
+			 Dwarf *           dwarf ATTRIBUTE_UNUSED,
+			 Dwarf_Die *       die,
+			 void *            ptr ATTRIBUTE_UNUSED)
 {
   Dwarf_Attribute  attr;
 
@@ -754,9 +899,8 @@ start (annocheck_data * data)
 
   for (i = 0; i < TEST_MAX; i++)
     {
-      tests [i].num_pass = 0;
-      tests [i].num_fail = 0;
-      tests [i].num_maybe = 0;
+      tests [i].state = STATE_UNTESTED;
+      tests [i].result_announced = false;
     }
 
   /* Initialise other per-file variables.  */
@@ -791,12 +935,14 @@ start (annocheck_data * data)
 
   /* We do not expect to find ET_EXEC binaries.  These days all binaries
      should be ET_DYN, even executable programs.  */
-  if (per_file.e_type == ET_EXEC && tests[TEST_PIE].enabled)
-    tests[TEST_PIE].num_fail ++;
-
+  if (per_file.e_type == ET_EXEC)
+    fail (data, TEST_PIE, SOURCE_ELF_HEADER, "not linked with -Wl,-pie");
+  else
+    pass (data, TEST_PIE, SOURCE_ELF_HEADER, NULL);
+    
   /* Check to see if something other than gcc produced parts
      of this binary.  */
-  (void) annocheck_walk_dwarf (data, hardened_dwarf_walker, NULL);
+  (void) annocheck_walk_dwarf (data, dwarf_attribute_checker, NULL);
 
   return true;
 }
@@ -819,32 +965,46 @@ interesting_sec (annocheck_data *     data,
       if (sec->shdr.sh_type == SHT_NOBITS && sec->shdr.sh_size > 0)
 	per_file.debuginfo_file = true;
 
-      per_file.text_section_name_index = sec->shdr.sh_name;
-      per_file.text_section_alignment = sec->shdr.sh_addralign;
+      per_file.text_section_name_index  = sec->shdr.sh_name;
+      per_file.text_section_alignment   = sec->shdr.sh_addralign;
+      per_file.text_section_range.start = sec->shdr.sh_addr;
+      per_file.text_section_range.end   = sec->shdr.sh_addr + sec->shdr.sh_size;
+      
       return false; /* We do not actually need to scan the contents of the .text section.  */
     }
-  else if (per_file.debuginfo_file)
+
+  if (per_file.debuginfo_file)
     return false;
 
   /* If the file has a stack section then check its permissions.  */
   if (streq (sec->secname, ".stack"))
     {
-      if ((sec->shdr.sh_flags & (SHF_WRITE | SHF_EXECINSTR)) == SHF_WRITE)
-	++ tests[TEST_GNU_STACK].num_pass;
+      if ((sec->shdr.sh_flags & (SHF_WRITE | SHF_EXECINSTR)) != SHF_WRITE)
+	fail (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, ".stack section has permissions other than just WRITE");
+      else if (tests[TEST_GNU_STACK].state == STATE_PASSED)
+	maybe (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "multiple stack sections detected");
       else
-	++ tests[TEST_GNU_STACK].num_fail;
+	pass (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, NULL);
 
       return false;
     }
 
   /* Note the permissions on GOT/PLT relocation sections.  */
-  if (streq  (sec->secname, ".rel.got")
+  if (streq  (sec->secname,    ".rel.got")
       || streq  (sec->secname, ".rela.got")
       || streq  (sec->secname, ".rel.plt")
       || streq  (sec->secname, ".rela.plt"))
     {
       if (sec->shdr.sh_flags & SHF_WRITE)
-	++ tests[TEST_WRITEABLE_GOT].num_fail;
+	{
+	  if (is_object_file ())
+	    skip (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, "Object file");
+	  else
+	    fail (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, NULL);
+	}
+      else
+	pass (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, NULL);
+	
       return false;
     }
 
@@ -882,7 +1042,7 @@ align (unsigned long val, unsigned long alignment)
 static const char *
 get_component_name (annocheck_data *       data,
 		    annocheck_section *    sec,
-		    hardened_note_data *   note_data,
+		    note_range *   note_data,
 		    bool                   prefer_func_symbol)
 {
   static char *  buffer = NULL;
@@ -912,20 +1072,6 @@ get_component_name (annocheck_data *       data,
   return NULL;
 }
 
-static const char *
-stack_prot_type (uint value)
-{
-  switch (value)
-    {
-    case 0: return "-fno-stack-protector";
-    case 1: return "-fstack-protector";
-    case 2: return "-fstack-protector-all";
-    case 3: return "-fstack-protector-strong";
-    case 4: return "-fstack-protector-explicit";
-    default: return "<unknown>";
-    }
-}
-
 static void
 record_range (ulong start, ulong end)
 {
@@ -951,43 +1097,6 @@ record_range (ulong start, ulong end)
   next_free_range ++;
 }
 
-/* Wrapper for einfo that avoids calling get_component_name()
-   unless we know that the string will be needed.  */
-
-static void
-report_i (einfo_type           type,
-	  const char *         format,
-	  annocheck_data *     data,
-	  annocheck_section *  sec,
-	  hardened_note_data * note,
-	  bool                 prefer_func,
-	  uint                 value)
-{
-  if (type == VERBOSE2 && ! BE_VERY_VERBOSE)
-    return;
-  if (type == VERBOSE && ! BE_VERBOSE)
-    return;
-
-  einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
-}
-
-static void
-report_s (einfo_type           type,
-	  const char *         format,
-	  annocheck_data *     data,
-	  annocheck_section *  sec,
-	  hardened_note_data * note,
-	  bool                 prefer_func,
-	  const char *         value)
-{
-  if (type == VERBOSE2 && ! BE_VERY_VERBOSE)
-    return;
-  if (type == VERBOSE && ! BE_VERBOSE)
-    return;
-
-  einfo (type, format, data->filename, get_component_name (data, sec, note, prefer_func), value);
-}
-
 static ulong
 get_4byte_value (const unsigned char * data)
 {
@@ -1007,7 +1116,7 @@ static void
 report_note_producer (annocheck_data * data,
 		      unsigned char    producer,
 		      const char *     source,
-		      unsigned int     version)
+		      uint             version)
 {
   if (! BE_VERBOSE)
     return;
@@ -1017,7 +1126,11 @@ report_note_producer (annocheck_data * data,
 
   per_file.note_source[producer] = version;
 
-  einfo (PARTIAL, "Hardened: %s: info: Notes produced by %s plugin ", data->filename, source);
+  if (fixed_format_messages)
+    return;
+
+  einfo (PARTIAL, "%s: %s: info: notes produced by %s plugin ",
+	 HARDENED_CHECKER_NAME, data->filename, source);
 
   if (version == 0)
     einfo (PARTIAL, "(version unknown)\n");
@@ -1028,17 +1141,17 @@ report_note_producer (annocheck_data * data,
 }
 
 static bool
-walk_build_notes (annocheck_data *     data,
-		  annocheck_section *  sec,
-		  GElf_Nhdr *          note,
-		  size_t               name_offset,
-		  size_t               data_offset,
-		  void *               ptr)
+build_note_checker (annocheck_data *     data,
+		    annocheck_section *  sec,
+		    GElf_Nhdr *          note,
+		    size_t               name_offset,
+		    size_t               data_offset,
+		    void *               ptr ATTRIBUTE_UNUSED)
 {
-  bool                  prefer_func_name;
-  hardened_note_data *  note_data;
+  bool          prefer_func_name;
+  note_range *  note_data;
 
-  if (note->n_type != NT_GNU_BUILD_ATTRIBUTE_OPEN
+  if (note->n_type    != NT_GNU_BUILD_ATTRIBUTE_OPEN
       && note->n_type != NT_GNU_BUILD_ATTRIBUTE_FUNC)
     {
       einfo (FAIL, "%s: Unrecognised annobin note type %d", data->filename, note->n_type);
@@ -1046,7 +1159,7 @@ walk_build_notes (annocheck_data *     data,
     }
 
   prefer_func_name = note->n_type == NT_GNU_BUILD_ATTRIBUTE_FUNC;
-  note_data = (hardened_note_data *) ptr;
+  note_data = & per_file.note_data;
 
   if (note->n_namesz < 3)
     {
@@ -1059,9 +1172,6 @@ walk_build_notes (annocheck_data *     data,
       ulong start = 0;
       ulong end = 0;
       const unsigned char * descdata = sec->data->d_buf + data_offset;
-
-      /* FIXME: Should we add support for earlier versions of
-	 the annobin notes which did not include an end symbol ?  */
 
       if (note->n_descsz == 16)
 	{
@@ -1128,26 +1238,43 @@ walk_build_notes (annocheck_data *     data,
 	    }
 	}
 
-      note_data->start = start;
-      note_data->end   = end;
-
-      if (per_file.e_type != ET_REL && ! ignore_gaps)
+      if (! is_object_file () && ! ignore_gaps)
 	{
 	  /* Notes can occur in any order and may be spread across multiple note
 	     sections.  So we record the range covered here and then check for
 	     gaps once we have examined all of the notes.  */
 	  record_range (start, end);
 	}
+
+      if (start != per_file.note_data.start
+	  || end != per_file.note_data.end)
+	{
+	  /* The range has changed.  Check the old range.  If it was non-zero
+	     in length then record the last known producer for code in that region.  */
+	  if (per_file.note_data.start != per_file.note_data.end)
+	    add_producer (data, per_file.current_tool, per_file.tool_version, SOURCE_ANNOBIN_NOTES, false);
+
+	  /* If the new range is valid, get a component name for it.  */
+	  if (start != end)
+	    per_file.component_name = get_component_name (data, sec, note_data, prefer_func_name);
+
+	  /* Update the saved range.  */
+	  per_file.note_data.start = start;
+	  per_file.note_data.end = end;
+	}
     }
 
-  /* We skip notes for empty ranges unless we are dealing with unrelocated
-     object files, or files not produced by gcc (where we cannot guarantee
-     note ranges).  */
-  if (per_file.e_type != ET_REL
-      && note_data->start == note_data->end
-      && per_file.tool_info.tool == TOOL_GCC)
+  /* We skip notes with empty ranges unless we are dealing with unrelocated
+     object files.  */
+  if (! is_object_file ()
+      && note_data->start == note_data->end)
     {
-      einfo (VERBOSE2, "Skipping note at addr 0x%lx because its range is zero", (long) note_data->start);
+      static ulong last_reported_addr = 0;
+      if (note_data->start != last_reported_addr)
+	{
+	  einfo (VERBOSE2, "skip notes for zero-length range at %#lx", note_data->start);
+	  last_reported_addr = note_data->start;
+	}
       return true;
     }
 
@@ -1225,15 +1352,17 @@ walk_build_notes (annocheck_data *     data,
       ++ attr;
       char producer = * attr;
       ++ attr;
-      unsigned int version = 0;
+
+      uint version = 0;
       if (* attr != 0)
 	version = strtod (attr, NULL);
+
       const char * name;
       switch (producer)
 	{
 	case ANNOBIN_TOOL_ID_ASSEMBLER:
 	  name = "assembler";
-	  set_producer (data, TOOL_GAS, 1, "annobin version note");
+	  add_producer (data, TOOL_GAS, 2, SOURCE_ANNOBIN_NOTES, true);
 	  break;
 
 	case ANNOBIN_TOOL_ID_LINKER:
@@ -1247,31 +1376,36 @@ walk_build_notes (annocheck_data *     data,
 	case ANNOBIN_TOOL_ID_GCC:
 	  name = "gcc";
 	  producer = ANNOBIN_TOOL_ID_GCC;
-	  set_producer (data, TOOL_GCC, 0, "annobin version note");
+	  if (version > 99)
+	    add_producer (data, TOOL_GCC, version / 100, SOURCE_ANNOBIN_NOTES, true);
+	  else
+	    add_producer (data, TOOL_GCC, 0, SOURCE_ANNOBIN_NOTES, true);
 	  /* FIXME: Add code to check that the version of the
 	     note producer is not greater than our version.  */
+	  break;
 
-	  /* Note that we have seen compiler generated code.  (As opposed
-	     to assembler or linker generated code).  This means that we
-	     can expect to see notes for -D_FROTIFY_SOURCE and -D_GLIBCXX_ASSERTIONS,
-	     and if they are missing, we can complain.  We do not use
-	     the value of per_file.tool_info.tool because if the assembler source was
-	     built using gcc then it will have debug information associated
-	     with it, with a DW_AT_PRODUCER string that includes the *gcc*
-	     version number.  */
-	  per_file.compiled_code_seen = true;
+	case ANNOBIN_TOOL_ID_GCC_LTO:
+	  name = "lto";
+	  if (version > 99)
+	    add_producer (data, TOOL_GIMPLE, version / 100, SOURCE_ANNOBIN_NOTES, true);
+	  else
+	    add_producer (data, TOOL_GIMPLE, 0, SOURCE_ANNOBIN_NOTES, true);
 	  break;
 
 	case ANNOBIN_TOOL_ID_LLVM:
 	  name = "LLVM";
-	  per_file.compiled_code_seen = true;
-	  set_producer (data, TOOL_LLVM, 0, "annobin version note");
+	  if (version > 99)
+	    add_producer (data, TOOL_LLVM, version / 100, SOURCE_ANNOBIN_NOTES, true);
+	  else
+	    add_producer (data, TOOL_LLVM, 0, SOURCE_ANNOBIN_NOTES, true);
 	  break;
 
 	case ANNOBIN_TOOL_ID_CLANG:
 	  name = "Clang";
-	  per_file.compiled_code_seen = true;
-	  set_producer (data, TOOL_CLANG, 0, "annobin version note");
+	  if (version > 99)
+	    add_producer (data, TOOL_CLANG, version / 100, SOURCE_ANNOBIN_NOTES, true);
+	  else
+	    add_producer (data, TOOL_CLANG, 0, SOURCE_ANNOBIN_NOTES, true);
 	  break;
 
 	default:
@@ -1291,7 +1425,7 @@ walk_build_notes (annocheck_data *     data,
 	}
 
       /* Parse the tool attribute looking for the version of gcc used to build the component.  */
-      unsigned major, minor, rel;
+      uint major, minor, rel;
 
       /* As of version 8.80 there are two BUILT_ATTRIBUTE_TOOL version strings,
 	 one for the compiler that built the annobin plugin and one for the
@@ -1318,13 +1452,16 @@ walk_build_notes (annocheck_data *     data,
 	      continue;
 	    }
 
-	  einfo (VERBOSE2, "%s: info: Detected information created by an annobin plugin running on %s version %u.%u.%u",
+	  einfo (VERBOSE2, "%s: info: detected information created by an annobin plugin running on %s version %u.%u.%u",
 		 data->filename, t->tool_name, major, minor, rel);
+
+	  /* Make a note of the producer in case there has not been any version notes.  */
+	  if (t->tool_id != TOOL_GCC || per_file.current_tool != TOOL_GIMPLE)
+	    add_producer (data, t->tool_id, major, SOURCE_ANNOBIN_NOTES, true);
 
 	  if (per_file.run_major == 0)
 	    {
 	      per_file.run_major = major;
-	      set_producer (data, t->tool_id, major, "annobin running-on note");
 	    }
 	  else if (per_file.run_major != major)
 	    {
@@ -1347,6 +1484,7 @@ walk_build_notes (annocheck_data *     data,
 
 	  per_file.run_minor = minor;
 	  per_file.run_rel = rel;
+
 	  if ((per_file.anno_minor != 0 && per_file.anno_minor != minor)
 	      || (per_file.anno_rel != 0 && per_file.anno_rel != rel))
 	    {
@@ -1384,7 +1522,7 @@ walk_build_notes (annocheck_data *     data,
 	      continue;
 	    }
 
-	  einfo (VERBOSE2, "%s: info: Detected information stored by an annobin plugin built by %s version %u.%u.%u",
+	  einfo (VERBOSE2, "%s: info: detected information stored by an annobin plugin built by %s version %u.%u.%u",
 		 data->filename, t->tool_name, major, minor, rel);
 
 	  if (per_file.anno_major == 0)
@@ -1432,22 +1570,18 @@ walk_build_notes (annocheck_data *     data,
       if (gcc != NULL)
 	{
 	  /* FIXME: This assumes that the tool string looks like: "gcc 7.x.x......"  */
-	  unsigned int version = (unsigned int) strtoul (gcc + 4, NULL, 10);
+	  uint version = (uint) strtoul (gcc + 4, NULL, 10);
 
-	  report_i (VERBOSE2, "%s: (%s) built-by gcc version %u",
-		    data, sec, note_data, prefer_func_name, version);
-
-	  set_producer (data, TOOL_GCC, version, "annobin built-by note");
+	  einfo (VERBOSE2, "%s: (%s) built-by gcc version %u",
+		 data->filename, per_file.component_name, version);
 	}
       else
-	report_s (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
-		  data, sec, note_data, prefer_func_name, attr);
+	einfo (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
+	       data->filename, per_file.component_name, attr);
       break;
 
     case GNU_BUILD_ATTRIBUTE_PIC:
-      if (value < 3
-	  && (value < 1 || per_file.e_type == ET_EXEC)
-	  && skip_check (TEST_PIC, get_component_name (data, sec, note_data, prefer_func_name)))
+      if (skip_check (TEST_PIC))
 	break;
 
       /* Convert the pic value into a pass/fail result.  */
@@ -1455,64 +1589,35 @@ walk_build_notes (annocheck_data *     data,
 	{
 	case -1:
 	default:
-	  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for PIC note (%x)",
-		    data, sec, note_data, prefer_func_name, value);
-	  tests[TEST_PIC].num_maybe ++;
+	  maybe (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "unexpected value");
+	  einfo (VERBOSE2, "debug: PIC note value: %x", value);
 	  break;
 
 	case 0:
-	  report_s (VERBOSE, "%s: FAIL: (%s): compiled without -fPIC/-fPIE",
-		    data, sec, note_data, prefer_func_name, NULL);
-	  tests[TEST_PIC].num_fail ++;
+	  fail (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "-fpic/-fpie not enabled");
 	  break;
 
 	case 1:
 	case 2:
 	  /* Compiled wth -fpic not -fpie.  */
-	  if (per_file.e_type == ET_EXEC)
-	    {
-#if 0 /* Suppressed because ET_EXEC will already generate a failure...  */
-	      /* Building an executable with -fPIC rather than -fPIE is a bad thing
-		 as it means that the executable is located at a known address that
-		 can be exploited by an attacker.  Linking against shared libraries
-		 compiled with -fPIC is OK, since they expect to have their own
-		 address space, but linking against static libraries compiled with
-		 -fPIC is still bad.  But ... compiling with -fPIC but then linking
-		 with -fPIE is OK.  It is the final result that matters.  However
-		 we have already checked the e_type above and know that it is ET_EXEC,
-		 ie, not a PIE executable, so this result is a FAIL.  */
-	      report_s (VERBOSE, "%s: FAIL: (%s): compiled with -fPIC rather than -fPIE",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_PIC].num_fail ++;
-#endif
-	    }
-	  else
-	    {
-	      report_s (VERBOSE2, "%s: PASS: (%s): compiled with -fPIC/-fPIE",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_PIC].num_pass ++;
-	    }
+	  pass (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, NULL);
 	  break;
 
 	case 3:
 	case 4:
-	  report_s (VERBOSE2, "%s: PASS: (%s): compiled with -fPIE",
-		    data, sec, note_data, prefer_func_name, NULL);
-	  tests[TEST_PIC].num_pass ++;
+	  pass (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, NULL);
 	  break;
 	}
       break;
 
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
-      if (value != 2 && value != 3
-	  && skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
+      if (skip_check (TEST_STACK_PROT))
 	break;
 
       /* We can get stack protection notes without tool notes.  See BZ 1703788 for an example.  */
-      if (value != 2 && value != 3 && ! built_by_compiler ())
+      if (per_file.current_tool == TOOL_GO)
 	{
-	  report_s (VERBOSE, "%s: skip: (%s): Insufficient stack protection (%s) - ignoring because not in compiled code",
-		    data, sec, note_data, prefer_func_name, stack_prot_type (value));
+	  skip (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "GO code does not support stack protection");
 	  break;
 	}
 
@@ -1520,251 +1625,198 @@ walk_build_notes (annocheck_data *     data,
 	{
 	case -1:
 	default:
-	  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for stack protection note (%x)",
-		  data, sec, note_data, prefer_func_name, value);
-	  tests[TEST_STACK_PROT].num_maybe ++;
+	  maybe (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	  einfo (VERBOSE2, "debug: stack prot note value: %x", value);
 	  break;
 
 	case 0: /* NONE */
-	  report_s (VERBOSE, "%s: FAIL: (%s): No stack protection enabled",
-		    data, sec, note_data, prefer_func_name, NULL);
-	  tests[TEST_STACK_PROT].num_fail ++;
+	  fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "no protection enabled");
 	  break;
 
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
 	case 4: /* EXPLICIT */
-	  report_s (VERBOSE, "%s: FAIL: (%s): Insufficient stack protection: %s",
-		    data, sec, note_data, prefer_func_name, stack_prot_type (value));
-	  tests[TEST_STACK_PROT].num_fail ++;
+	  fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "only some functions protected");
 	  break;
 
 	case 2: /* ALL */
 	case 3: /* STRONG */
-	  report_s (VERBOSE2, "%s: PASS: (%s): %s enabled",
-		    data, sec, note_data, prefer_func_name, stack_prot_type (value));
-	  tests[TEST_STACK_PROT].num_pass ++;
+	  pass (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, NULL);
 	  break;
 	}
       break;
 
     case GNU_BUILD_ATTRIBUTE_SHORT_ENUM:
-#if 0 /* There is no valid reason to skip this test.  */
-      if (skip_check (TEST_SHORT_ENUM, get_component_name (data, sec, note_data, prefer_func_name)))
-	break;
-#endif
-      if (value == 1)
-	{
-	  tests[TEST_SHORT_ENUM].num_fail ++;
+      {
+	enum short_enum_state state = value ? SHORT_ENUM_STATE_SHORT : SHORT_ENUM_STATE_LONG;
 
-	  if (tests[TEST_SHORT_ENUM].num_pass)
-	    report_i (VERBOSE, "%s: FAIL: (%s): different -fshort-enum option used",
-		      data, sec, note_data, prefer_func_name, value);
-	}
-      else if (value == 0)
-	{
-	  tests[TEST_SHORT_ENUM].num_pass ++;
-
-	  if (tests[TEST_SHORT_ENUM].num_fail)
-	    report_i (VERBOSE, "%s: FAIL: (%s): different -fshort-enum option used",
-		      data, sec, note_data, prefer_func_name, value);
-	}
-      else
-	{
-	  report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for short-enum note (%x)",
-		    data, sec, note_data, prefer_func_name, value);
-	  tests[TEST_SHORT_ENUM].num_maybe ++;
-	}
+	if (value < 0 || value > 1)
+	  {
+	    maybe (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	    einfo (VERBOSE2, "debug: enum note value: %x", value);
+	  }
+	else if (per_file.short_enum_state == SHORT_ENUM_STATE_UNSET)
+	  per_file.short_enum_state = state;
+	else if (per_file.short_enum_state != state)
+	  fail (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "both short and long enums supported");
+      }
       break;
 
     case 'b':
       if (const_strneq (attr, "branch_protection:"))
 	{
-#ifdef EM_AARCH64 /* RHEL-6 does not define EM_AARCh64.  */
 	  if (per_file.e_machine != EM_AARCH64)
 	    break;
-#endif
+
+	  if (skip_check (TEST_BRANCH_PROTECTION))
+	    break;
+
 	  attr += strlen ("branch_protection:");
 	  if (* attr == 0
 	      || streq (attr, "(null)")
 	      || streq (attr, "default"))
-	    {
-	      if (skip_check (TEST_BRANCH_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
-		break;
-
-	      /* FIXME: Turn into a FAIL once -mbranch-protection is required by the security spec.  */
-	      report_s (VERBOSE, "%s: info: (%s): Compiled without -mbranch-protection",
-			data, sec, note_data, prefer_func_name, NULL);
-	      /* tests[TEST_BRANCH_PROTECTION].num_fail ++; */
-	      break;
-	    }
+	    /* FIXME: Turn into a FAIL once -mbranch-protection is required by the security spec.  */
+	    info (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
 	  else if (streq (attr, "bti+pac-ret")
 		   || (streq (attr, "standard"))
 		   || const_strneq (attr, "pac-ret+bti"))
-	    {
-	      report_s (VERBOSE2, "%s: PASS: (%s): branch-protection enabled (%s)",
-			data, sec, note_data, prefer_func_name, attr);
-	      tests[TEST_BRANCH_PROTECTION].num_pass ++;
-	    }
+	    pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, NULL);
 	  else if (streq (attr, "bti")
 		   || const_strneq (attr, "pac-ret"))
-	    {
-	      report_s (VERBOSE2, "%s: FAIL: (%s): Only partial branch-protection is enabled (%s)",
-			data, sec, note_data, prefer_func_name, attr);
-	      tests[TEST_BRANCH_PROTECTION].num_fail ++;
-	    }
+	    fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially enabled");
 	  else if (streq (attr, "none"))
-	    {
-	      if (skip_check (TEST_BRANCH_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
-		break;
-
-	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled with -mbranch-protection=none",
-			data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_BRANCH_PROTECTION].num_fail ++;
-	      break;
-	    }
+	    fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection disabled");
 	  else
 	    {
-	      if (skip_check (TEST_BRANCH_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
-		break;
-
-	      report_s (VERBOSE, "%s: MAYB: (%s): unexpected value for branch-protection note (%s)",
-			data, sec, note_data, prefer_func_name, attr);
-	      tests[TEST_BRANCH_PROTECTION].num_maybe ++;
-	      break;
+	      maybe (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: stack prot note value: %s", attr);
 	    }
 	}
       else
-	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
+	einfo (VERBOSE2, "Unsupported annobin note '%s' - ignored", attr);
       break;
 
     case 'c':
       if (streq (attr, "cf_protection"))
 	{
-	  if (per_file.e_machine != EM_386 && per_file.e_machine != EM_X86_64)
+	  if (! is_x86 ())
 	    break;
 
-	  if (value != 4 && value != 8
-	      && skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
+	  if (skip_check (TEST_CF_PROTECTION))
 	    break;
+	  
+	  if (! is_C_compiler (per_file.current_tool))
+	    {
+	      skip (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "not built by gcc/clang");
+	      break;
+	    }
 
+	  if (includes_gcc (per_file.current_tool) && per_file.tool_version < 8)
+	    {
+	      skip (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "needs gcc v8+");
+	      break;
+	    }
+
+	  /* Note - the annobin plugin adds one to the value of gcc's flag_cf_protection,
+	     thus a setting of CF_FULL (3) is actually recorded as 4, and so on.  */
 	  switch (value)
 	    {
 	    case -1:
 	    default:
-	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for cf-protection note (%x)",
-		      data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_CF_PROTECTION].num_maybe ++;
+	      maybe (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: cf prot note value: %x", value);
 	      break;
-
-	      /* Note - the annobin plugin adds one to the value of gcc's flag_cf_protection,
-		 thus a setting of CF_FULL (3) is actually recorded as 4, and so on.  */
 
 	    case 4: /* CF_FULL.  */
 	    case 8: /* CF_FULL | CF_SET */
-	      report_i (VERBOSE2, "%s: PASS: (%s): cf-protection enabled (%x)",
-		      data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_CF_PROTECTION].num_pass ++;
+	      pass (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, NULL);
 	      break;
 
 	    case 2: /* CF_BRANCH: Branch but not return.  */
 	    case 6: /* CF_BRANCH | CF_SET */
-	      if (built_by_compiler ())
-		{
-		  report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=branch",
-			    data, sec, note_data, prefer_func_name, NULL);
-		  tests[TEST_CF_PROTECTION].num_fail ++;
-		}
-	      else
-		report_s (VERBOSE, "%s: skip: (%s): -fcf-protection=branch detected but not all of the binary was built by gcc",
-			  data, sec, note_data, prefer_func_name, NULL);
+	      fail (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "only branch protection enabled");
 	      break;
 
 	    case 3: /* CF_RETURN: Return but not branch.  */
 	    case 7: /* CF_RETURN | CF_SET */
-	      if (built_by_compiler ())
-		{
-		  report_s (VERBOSE, "%s: FAIL: (%s): Only compiled with -fcf-protection=return",
-			    data, sec, note_data, prefer_func_name, NULL);
-		  tests[TEST_CF_PROTECTION].num_fail ++;
-		}
-	      else
-		report_s (VERBOSE, "%s: skip: (%s): -fcf-protection=return detected but not all of the binary was built by gcc",
-			  data, sec, note_data, prefer_func_name, NULL);
+	      fail (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "only return protection enabled");
 	      break;
 
 	    case 1: /* CF_NONE: No protection. */
 	    case 5: /* CF_NONE | CF_SET */
-	      if (built_by_compiler ())
-		{
-		  report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fcf-protection",
-			    data, sec, note_data, prefer_func_name, NULL);
-		  tests[TEST_CF_PROTECTION].num_fail ++;
-		}
-	      else
-		report_s (VERBOSE, "%s: skip: (%s): No -fcf-protection option detected but not all of the binary was built by gcc",
-			  data, sec, note_data, prefer_func_name, NULL);
+	      fail (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "no protection enabled");
 	      break;
 	    }
 	}
       else
-	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
+	einfo (VERBOSE2, "Unsupported annobin note '%s' - ignored", attr);
       break;
 
     case 'F':
       if (streq (attr, "FORTIFY"))
 	{
-	  if (value < 2
-	      && skip_check (TEST_FORTIFY, get_component_name (data, sec, note_data, prefer_func_name)))
+	  if (skip_check (TEST_FORTIFY))
 	    break;
 
+	  if (! is_C_compiler (per_file.current_tool))
+	    {
+	      skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "not built by gcc/clang");
+	      break;
+	    }
+	    
 	  switch (value)
 	    {
 	    case -1:
 	    default:
-	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for fortify note (%x)",
-		      data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_FORTIFY].num_maybe ++;
+	      maybe (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: fortify note value: %x", value);
+	      break;
+
+	    case 0xfe:
+	      /* Note - in theory this should be a MAYBE result because we do not
+		 know the fortify level that was used when the original sources were
+		 compiled.  But in practice doing this would generate MAYBE results
+		 for all code compiled with -flto, even if -D_FORTIFY_SOURCE=2 was
+		 used, and this would annoy a lot of users.  (Especially since
+		 LTO and FORTIFY are now enabled by the rpm build macros).  So we
+		 SKIP this test instead.
+		 
+		 In theory we could search to see if un-fortified versions of specific
+		 functions are present in the executable's symbol table.  eg memcpy
+		 instead of memcpy_chk.  This would help catch some cases where the
+		 correct FORTIFY level was not set, but it would not work for test
+		 cases which are intended to verify annocheck's ability to detect
+		 this problem, but which do not call any sensitive functions.  (This
+		 is done by QE).  It also fails for code which cannot be protected
+		 by FORTIFY_SOURCE.  Such code will still use the unenhanced functions
+		 but could well have been compiled with -D_FORTIFY_SOURCE=2.
+
+		 Note - the annobin plugin for GCC will generate a compile time
+		 warning if -D_FORTIFY_SOURCE is undefined or set to 0 or 1, but
+		 only when compiling with -flto enabled, and not when compiling
+		 pre-processed sources.  */
+	      skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
 	      break;
 
 	    case 0xff:
-	      /* BZ 1824393: We	have not scanned the DWARF notes yet, so we may
-		 not have the full picture as to which tool(s) built this binary.
-		 BZ 1904479: But since we now do scan the DWARF early, we should
-		 have a fuller picture.  */
-	      if (per_file.compiled_code_seen && built_by_compiler())
-		{
-		  report_s (VERBOSE, "%s: FAIL: (%s): -D_FORTIFY_SOURCE was not present on the command line",
-			    data, sec, note_data, prefer_func_name, NULL);
-		  tests[TEST_FORTIFY].num_fail ++;
-		}
+	      if (per_file.current_tool == TOOL_GIMPLE)
+		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
 	      else
-		{
-		  report_s (VERBOSE, "%s: MAYB: (%s): -D_FORTIFY_SOURCE not detected on the command line",
-			    data, sec, note_data, prefer_func_name, NULL);
-		  einfo (VERBOSE,    "%s:       This can happen if the source does not use C headers",
-			 data->filename);
-		  tests[TEST_FORTIFY].num_maybe ++;
-		}
-	      
+		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-D_FORTIFY_SOURCE=2 was not present on command line");
 	      break;
 
 	    case 0:
 	    case 1:
-	      report_i (VERBOSE, "%s: FAIL: (%s): Insufficient value for -D_FORTIFY_SOURCE: %d",
-		      data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_FORTIFY].num_fail ++;
+	      fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-O level is too low");
 	      break;
 
-	    case 3:
 	    case 2:
-	      report_s (VERBOSE2, "%s: PASS: (%s): -D_FORTIFY_SOURCE=[2|3]",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_FORTIFY].num_pass ++;
+	    case 3:
+	      pass (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, NULL);
 	      break;
 	    }
 	}
       else
-	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
+	einfo (VERBOSE2, "Unsupported annobin note '%s' - ignored", attr);
       break;
 
     case 'G':
@@ -1772,171 +1824,128 @@ walk_build_notes (annocheck_data *     data,
 	{
 	  if (value == -1)
 	    {
-	      report_i (VERBOSE, "%s: FAIL: (%s): unexpected value for optimize note (%x)",
-			data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_LTO].num_maybe ++;
-	      tests[TEST_OPTIMIZATION].num_maybe ++;
+	      maybe (data, TEST_OPTIMIZATION, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: optimization note value: %x", value);
+	      break;
+	    }
+
+	  
+	  if (skip_check (TEST_OPTIMIZATION))
+	    ;
+	  else if (value & (1 << 13))
+	    {
+	      /* Compiled with -Og rather than -O2.
+		 Treat this as a flag to indicate that the package developer is
+		 intentionally not compiling with -O2, so suppress warnings about it.  */
+	      skip (data, TEST_OPTIMIZATION, SOURCE_ANNOBIN_NOTES, "Compiled with -Og");
+
+	      /* Add a pass result so that we do not complain about lack of optimization information.  */
+	      if (tests[TEST_OPTIMIZATION].state == STATE_UNTESTED)
+		tests[TEST_OPTIMIZATION].state = STATE_PASSED;
 	    }
 	  else
 	    {
-	      if (value & (1 << 13))
-		{
-		  /* Compiled with -Og rather than -O2.
-		     Treat this as a flag to indicate that the package developer is
-		     intentionally not compiling with -O2, so suppress warnings about it.  */
-		  report_i (VERBOSE, "%s: skip: (%s): compiled with -Og, so ignoring test for -O2+",
-			    data, sec, note_data, prefer_func_name, value);
-		  /* Add a pass result so that we do not complain about lack of optimization information.  */
-		  tests[TEST_OPTIMIZATION].num_pass ++;
-		}
-	      else
-		{
-		  uint opt = (value >> 9) & 3;
+	      uint opt = (value >> 9) & 3;
 
-		  if (opt == 0 || opt == 1)
-		    {
-		      if (! skip_check (TEST_OPTIMIZATION, get_component_name (data, sec, note_data, prefer_func_name)))
-			{
-			  report_i (VERBOSE, "%s: FAIL: (%s): Insufficient optimization level: -O%d",
-				    data, sec, note_data, prefer_func_name, opt);
-			  tests[TEST_OPTIMIZATION].num_fail ++;
-			}
-		    }
-		  else /* opt == 2 || opt == 3 */
-		    {
-		      report_i (VERBOSE2, "%s: PASS: (%s): Sufficient optimization level: -O%d",
-				data, sec, note_data, prefer_func_name, opt);
-		      tests[TEST_OPTIMIZATION].num_pass ++;
-		    }
-		}
-
-	      if (value & (1 << 14))
-		{
-		  /* Compiled with -Wall.  */
-		  if (value & (1 << 15))
-		    {
-		      report_i (VERBOSE2, "%s: PASS: (%s): Compiled with -Wall and -Wformat-security",
-				data, sec, note_data, prefer_func_name, value);
-		      tests[TEST_WARNINGS].num_pass ++;
-		    }
-		  else
-		    {
-		      /* Compiled without -Wformat-security.
-			 Not a failure because parts of glibc are compiled with way
-			 and because recording of -Wformat-security only started with annobin v8.84.  */
-		      report_i (VERBOSE2, "%s: PASS: (%s): Compiled with -Wall",
-				data, sec, note_data, prefer_func_name, value);
-		      tests[TEST_WARNINGS].num_pass ++;
-		    }
-		}
-	      else if (value & (1 << 15))
-		{
-		  /* Compiled with -Wformat-security but not -Wall.
-		     FIXME: We allow this for now, but really would should check for
-		     any warnings enabled by -Wall that are important.  (Missing -Wall
-		     itself is not bad - this happens with LTO compilation - but we
-		     still want important warnings enabled).  */
-		  report_i (VERBOSE2, "%s: PASS: (%s): Compiled with -Wformat-security (but not -Wall)",
-			    data, sec, note_data, prefer_func_name, value);
-		  tests[TEST_WARNINGS].num_pass ++;
-		}
-	      else
-		{
-		  /* FIXME: At the moment the clang plugin is unable to detect -Wall.
-		     for clang v9+.  */
-		  if (built_by_clang () && per_file.tool_info.version > 8)
-		    ;
-		  else if (built_by_mixed ())
-		    ;
-		  else if (built_with_gimple ()) /* Gimple compilation drops all warnings.  */
-		    ;
-		  else if (value & ((1 << 16) | (1 << 17)))
-		    {
-		      /* LTO compilation.  Normally caught by the GIMPLE test
-			 above, but that does not work on stripped binaries.
-			 We increment num_pass here so that show_WARNINGS does
-			 not complain about not finding any information.  */
-		      tests[TEST_WARNINGS].num_pass ++;
-		    }
-		  else if (! skip_check (TEST_WARNINGS, get_component_name (data, sec, note_data, prefer_func_name)))
-		    {
-		      report_i (VERBOSE, "%s: FAIL: (%s): Compiled without either -Wall or -Wformat-security",
-				data, sec, note_data, prefer_func_name, value);
-		      tests[TEST_WARNINGS].num_fail ++;
-		    }
-		}
-
-	      if (! skip_check (TEST_LTO, get_component_name (data, sec, note_data, prefer_func_name)))
-		{
-		  if (value & (1 << 16))
-		    {
-		      if (value & (1 << 17))
-			{
-			  report_i (VERBOSE, "%s: BUG!: (%s): Compiled with -flto and -fno-lto",
-				    data, sec, note_data, prefer_func_name, value);
-			  tests[TEST_LTO].num_fail ++;
-			}
-		      else
-			{
-			  /* Compiled with -flto.  */
-			  report_i (VERBOSE2, "%s: PASS: (%s): Compiled with -flto",
-				    data, sec, note_data, prefer_func_name, value);
-			  tests[TEST_LTO].num_pass ++;
-			}
-		    }
-		  else if (value & (1 << 17))
-		    {
-		      /* Compiled without -flto.
-			 Not a failure because we are still bringing up universal LTO enabledment.  */
-		      if (! report_future_fail)
-			report_i (VERBOSE2, "%s: look: (%s): Compiled without -flto",
-				  data, sec, note_data, prefer_func_name, value);
-		      else
-			report_i (VERBOSE, "%s: look: (%s): Compiled without -flto",
-				  data, sec, note_data, prefer_func_name, value);
-			
-		      /* tests[TEST_LTO].num_fail ++; */
-		    }
-		  else
-		    {
-		      report_i (VERBOSE2, "%s: UNKW: (%s): LTO compilation status not recorded",
-				data, sec, note_data, prefer_func_name, value);
-		    }
-		}
+	      if (opt == 0 || opt == 1)
+		fail (data, TEST_OPTIMIZATION, SOURCE_ANNOBIN_NOTES, "level too low");
+	      else /* opt == 2 || opt == 3 */
+		pass (data, TEST_OPTIMIZATION, SOURCE_ANNOBIN_NOTES, NULL);
 	    }
+
+	  
+	  if (skip_check (TEST_WARNINGS))
+	    ;
+	  else if (value & (1 << 14))
+	    {
+	      /* Compiled with -Wall.  */
+	      pass (data, TEST_WARNINGS, SOURCE_ANNOBIN_NOTES, NULL);
+	    }
+	  else if (value & (1 << 15))
+	    {
+	      /* Compiled with -Wformat-security but not -Wall.
+		 FIXME: We allow this for now, but really would should check for
+		 any warnings enabled by -Wall that are important.  (Missing -Wall
+		 itself is not bad - this happens with LTO compilation - but we
+		 still want important warnings enabled).  */
+	      pass (data, TEST_WARNINGS, SOURCE_ANNOBIN_NOTES, NULL);
+	    }
+	  /* FIXME: At the moment the clang plugin is unable to detect -Wall.
+	     for clang v9+.  */
+	  else if (per_file.current_tool == TOOL_CLANG && per_file.tool_version > 8)
+	    skip (data, TEST_WARNINGS, SOURCE_ANNOBIN_NOTES, "Warning setting not detectable in newer versions of Clang");
+	  /* Gimple compilation discards warnings.  */
+	  else if (per_file.current_tool == TOOL_GIMPLE)
+	    skip (data, TEST_WARNINGS, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
+	  else if (value & ((1 << 16) | (1 << 17)))
+	    {
+	      /* LTO compilation.  Normally caught by the GIMPLE test
+		 above, but that does not work on stripped binaries.
+		 We set STATE_PASSED here so that show_WARNINGS does
+		 not complain about not finding any information.  */
+	      if (tests[TEST_WARNINGS].state == STATE_UNTESTED)
+		tests[TEST_WARNINGS].state = STATE_PASSED;
+	    }
+	  else
+	    fail (data, TEST_WARNINGS, SOURCE_ANNOBIN_NOTES, "compiled without either -Wall or -Wformat-security");
+
+	  
+	  if (skip_check (TEST_LTO))
+	    ;
+	  else if (value & (1 << 16))
+	    {
+	      if (value & (1 << 17))
+		fail (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, "compiled with both -flto and -fno-lto");
+	      else
+		pass (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, NULL);
+	    }
+	  else if (value & (1 << 17))
+	    {
+	      /* Compiled without -flto.
+		 Not a failure because we are still bringing up universal LTO enabledment.  */
+	      if (report_future_fail)
+		info (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, "compiled without -flto");
+	    }
+	  else
+	    {
+	      info (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, " -flto status not recorded in notes");
+	    }
+
+	  break;
 	}
       else if (streq (attr, "GLIBCXX_ASSERTIONS"))
 	{
-	  if (value != 1
-	      && skip_check (TEST_GLIBCXX_ASSERTIONS, get_component_name (data, sec, note_data, prefer_func_name)))
+	  if (skip_check (TEST_GLIBCXX_ASSERTIONS))
 	    break;
+
+	  if (per_file.lang != LANG_UNKNOWN && per_file.lang != LANG_CXX)
+	    {
+	      skip (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_ANNOBIN_NOTES, "source language not C++");
+	      break;
+	    }
+	  
+	  if (! is_C_compiler (per_file.current_tool))
+	    {
+	      skip (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_ANNOBIN_NOTES, "current tool not gcc/clang");
+	      break;
+	    }
 
 	  switch (value)
 	    {
 	    case 0:
-	      if (per_file.lang == LANG_UNKNOWN || per_file.lang == LANG_CXX)
-		{
-		  report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -D_GLIBCXX_ASSERTIONS",
-			    data, sec, note_data, prefer_func_name, NULL);
-		  tests[TEST_GLIBCXX_ASSERTIONS].num_fail ++;
-		}
+	      if (per_file.current_tool == TOOL_GIMPLE)
+		skip (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
 	      else
-		{
-		  report_s (VERBOSE, "%s: skip: (%s): Compiled without -D_GLIBCXX_ASSERTIONS, but not written in C++",
-			    data, sec, note_data, prefer_func_name, NULL);
-		}
+		fail (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_ANNOBIN_NOTES, "compiled without -D_GLIBCXX_ASSERTIONS");
 	      break;
 
 	    case 1:
-	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with -D_GLIBCXX_ASSERTIONS",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_GLIBCXX_ASSERTIONS].num_pass ++;
+	      pass (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_ANNOBIN_NOTES, NULL);
 	      break;
 
 	    default:
-	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for glibcxx_assertions note (%x)",
-			data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_GLIBCXX_ASSERTIONS].num_maybe ++;
+	      maybe (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: assertion note value: %x", value);
 	      break;
 	    }
 	}
@@ -1949,39 +1958,36 @@ walk_build_notes (annocheck_data *     data,
 	{
 	  if (! per_file.warned_about_instrumentation)
 	    {
-	      report_s (INFO, "%s: WARN: (%s): Instrumentation enabled - this is probably a mistake for production binaries",
-			data, sec, note_data, prefer_func_name, NULL);
-	      per_file.warned_about_instrumentation = false;
+	      einfo (INFO, "%s: WARN: (%s): Instrumentation enabled - this is probably a mistake for production binaries",
+		     data->filename, per_file.component_name);
+
+	      per_file.warned_about_instrumentation = true;
 
 	      if (BE_VERBOSE)
 		{
-		  unsigned int sanitize, instrument, profile, arcs;
+		  uint sanitize, instrument, profile, arcs;
 
 		  attr += strlen ("INSTRUMENT:");
 		  if (sscanf (attr, "%u/%u/%u/%u", & sanitize, & instrument, & profile, & arcs) != 4)
 		    {
-		      report_s (VERBOSE, "%s: ICE:  (%s): Unable to extract details from instrumentation note",
-				data, sec, note_data, prefer_func_name, NULL);
+		      einfo (VERBOSE2, "%s: ICE:  (%s): Unable to extract details from instrumentation note",
+			     data->filename, per_file.component_name);
 		    }
 		  else
 		    {
 		      einfo (VERBOSE, "%s: info: (%s):  Details: -fsanitize=...: %s",
-			     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
-			     sanitize ? "enabled" : "disabled");
+			     data->filename, per_file.component_name, sanitize ? "enabled" : "disabled");
 		      einfo (VERBOSE, "%s: info: (%s):  Details: -finstrument-functions: %s",
-			     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
-			     instrument ? "enabled" : "disabled");
+			     data->filename, per_file.component_name, instrument ? "enabled" : "disabled");
 		      einfo (VERBOSE, "%s: info: (%s):  Details: -p and/or -pg: %s",
-			     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
-			     profile ? "enabled" : "disabled");
+			     data->filename, per_file.component_name, profile ? "enabled" : "disabled");
 		      einfo (VERBOSE, "%s: info: (%s):  Details: -fprofile-arcs: %s",
-			     data->filename, get_component_name (data, sec, note_data, prefer_func_name),
-			     arcs ? "enabled" : "disabled");
+			     data->filename, per_file.component_name, arcs ? "enabled" : "disabled");
 		    }
 		}
 	      else
-		report_s (INFO, "%s: info: (%s):  Run with -v for more information",
-			  data, sec, note_data, prefer_func_name, NULL);
+		einfo (INFO, "%s: info: (%s):  Run with -v for more information",
+		       data->filename, per_file.component_name);
 	    }
 	}
       else
@@ -1994,34 +2000,34 @@ walk_build_notes (annocheck_data *     data,
 	  if (per_file.e_machine == EM_ARM)
 	    break;
 
-	  if (value != 1
-	      && skip_check (TEST_STACK_CLASH, get_component_name (data, sec, note_data, prefer_func_name)))
+	  if (skip_check (TEST_STACK_CLASH))
 	    break;
+
+	  if (! includes_gcc (per_file.current_tool))
+	    {
+	      skip (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "not compiled by gcc");
+	      break;
+	    }
+	  
+	  if (per_file.tool_version < 7)
+	    {
+	      skip (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "needs gcc 7+");
+	      break;
+	    }
 
 	  switch (value)
 	    {
 	    case 0:
-	      if (built_by_gcc ())
-		{
-		  report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fstack-clash-protection",
-			    data, sec, note_data, prefer_func_name, NULL);
-		  tests[TEST_STACK_CLASH].num_fail ++;
-		}
-	      else
-		report_s (VERBOSE, "%s: skip: (%s): -fstack-clash-protection not enabled, but not all of the binary was built by gcc",
-			  data, sec, note_data, prefer_func_name, NULL);
+	      fail (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "-fstack-clash-protection not enabled");
 	      break;
 
 	    case 1:
-	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with -fstack-clash-protection",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_STACK_CLASH].num_pass ++;
+	      pass (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, NULL);
 	      break;
 
 	    default:
-	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for stack-clash note (%x)",
-		      data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_STACK_CLASH].num_maybe ++;
+	      maybe (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: stack clash note vbalue: %x", value);
 	      break;
 	    }
 	}
@@ -2030,81 +2036,57 @@ walk_build_notes (annocheck_data *     data,
 	  if (per_file.e_machine != EM_386)
 	    break;
 
-	  if (value != 2
-	      && skip_check (TEST_STACK_REALIGN, get_component_name (data, sec, note_data, prefer_func_name)))
+	  if (skip_check (TEST_STACK_REALIGN))
 	    break;
+
+	  if (! includes_gcc (per_file.current_tool))
+	    {
+	      skip (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "Not built by gcc");
+	      break;
+	    }
 
 	  switch (value)
 	    {
-	    case -1:
-	      report_i (VERBOSE, "%s: MAYB: (%s): unexpected value for stack realign note (%x)",
-		      data, sec, note_data, prefer_func_name, value);
-	      tests[TEST_STACK_REALIGN].num_maybe ++;
+	    default:
+	      maybe (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: stack realign note vbalue: %x", value);
 	      break;
 
 	    case 0:
-	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled without -fstack-realign",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_STACK_REALIGN].num_fail ++;
+	      fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-fstack-realign not enabled");
 	      break;
 
 	    case 1:
-	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with -fstack-realign",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_STACK_REALIGN].num_pass ++;
+	      pass (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, NULL);
 	      break;
 	    }
 	}
       else if (streq (attr, "sanitize_cfi"))
 	{
-	  if (value < 1
-	      && skip_check (TEST_CF_PROTECTION, get_component_name (data, sec, note_data, prefer_func_name)))
-	    break;
-
-	  if (! built_by_clang() && ! built_by_mixed ())
-	    report_s (VERBOSE, "%s: WARN: (%s): Control flow sanitization note found, but the compiler is not clang",
-		      data, sec, note_data, prefer_func_name, NULL);
-
-	  if (value < 1)
-	    {
-	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled with insufficient Control Flow sanitization",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_CF_PROTECTION].num_fail ++;
-	    }
+	  if (skip_check (TEST_CF_PROTECTION))
+	    ;
+	  else if (! includes_clang (per_file.current_tool))
+	    skip (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "not built by clang");
+	  else if (value < 1)
+	    fail (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "insufficient Control Flow sanitization");
 	  else /* FIXME: Should we check that specific sanitizations are enabled ?  */
-	    {
-	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with sufficient Control Flow sanitization",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_CF_PROTECTION].num_pass ++;
-	    }
+	    pass (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, NULL);
 	  break;
 	}
       else if (streq (attr, "sanitize_safe_stack"))
 	{
-	  if (value < 1
-	      && skip_check (TEST_STACK_PROT, get_component_name (data, sec, note_data, prefer_func_name)))
-	    break;
-
-	  if (! built_by_clang() && ! built_by_mixed ())
-	    report_s (VERBOSE, "%s: WARN: (%s): Stack protection sanitization note found, but the compiler is not clang",
-		      data, sec, note_data, prefer_func_name, NULL);
-
-	  if (value < 1)
-	    {
-	      report_s (VERBOSE, "%s: FAIL: (%s): Compiled with insufficient Stack Safe sanitization",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_STACK_PROT].num_fail ++;
-	    }
+	  if (skip_check (TEST_STACK_PROT))
+	    ;
+	  else if (! includes_clang (per_file.current_tool))
+	    skip (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "not built by clang");
+	  else if (value < 1)
+	    fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "insufficient Stack Safe sanitization");
 	  else
-	    {
-	      report_s (VERBOSE2, "%s: PASS: (%s): Compiled with sufficient Stack Safe sanitization",
-		      data, sec, note_data, prefer_func_name, NULL);
-	      tests[TEST_STACK_PROT].num_pass ++;
-	    }
+	    pass (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, NULL);
 	  break;
 	}
       else
-	einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
+	einfo (VERBOSE2, "Unsupported annobin note '%s' - ignored", attr);
       break;
 
     case 'o':
@@ -2114,7 +2096,7 @@ walk_build_notes (annocheck_data *     data,
       /* Fall through.  */
 
     default:
-      einfo (VERBOSE2, "Unsupport annobin note '%s' - ignored", attr);
+      einfo (VERBOSE2, "Unsupported annobin note '%s' - ignored", attr);
       break;
 
     case GNU_BUILD_ATTRIBUTE_RELRO:
@@ -2149,23 +2131,23 @@ vfuture_fail (annocheck_data * data, const char * message)
   ffail (data, message, VERBOSE);
 }
 
-static bool
+static const char *
 handle_ppc64_property_note (annocheck_data *      data,
 			    annocheck_section *   sec,
 			    ulong                 type,
 			    ulong                 size,
 			    const unsigned char * notedata)
 {
-  einfo (VERBOSE, "PPC64 property note handler not yet written...\n");
-  return true;
+  einfo (VERBOSE2, "PPC64 property note handler not yet written...\n");
+  return NULL;
 }
 
-static bool
-handle_aarch64_property_note (annocheck_data *     data,
-			  annocheck_section *  sec,
-			  ulong                type,
-			  ulong                size,
-			  const unsigned char * notedata)
+static const char *
+handle_aarch64_property_note (annocheck_data *      data,
+			      annocheck_section *   sec,
+			      ulong                 type,
+			      ulong                 size,
+			      const unsigned char * notedata)
 {
   /* These are not defined in the RHEL-7 build environment.  */
 #ifndef GNU_PROPERTY_AARCH64_FEATURE_1_AND
@@ -2177,42 +2159,41 @@ handle_aarch64_property_note (annocheck_data *     data,
   if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
     {
       einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
-      return true;
+      return NULL;
     }
 
   if (size != 4)
     {
-      einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
-      einfo (VERBOSE2, "debugging: data note at offset %lx has size %lu, expected 4",
+      einfo (VERBOSE2, "debug: data note at offset %lx has size %lu, expected 4",
 	     (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
-      return false;
+      return "Property note data has invalid size";
     }
 
   ulong property = get_4byte_value (notedata);
 
   if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_BTI) == 0)
     {
+      einfo (VERBOSE2, "debug: property bits = %lx", property);
       vfuture_fail (data, "The BTI property is not enabled");
-      einfo (VERBOSE2, "debugging: property bits = %lx", property);
-      return false;
+      return NULL;
     }
 
   if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_PAC) == 0)
     {
+      einfo (VERBOSE2, "debug: property bits = %lx", property);
       vfuture_fail (data, "The PAC property is not enabled");
-      einfo (VERBOSE2, "debugging: property bits = %lx", property);
-      return false;
+      return NULL;
     }
 
-  einfo (INFO, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", data->filename);
-  return true;
+  einfo (VERBOSE2, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", data->filename);
+  return NULL;
 }
 
-static bool
-handle_x86_property_note (annocheck_data *     data,
-			  annocheck_section *  sec,
-			  ulong                type,
-			  ulong                size,
+static const char *
+handle_x86_property_note (annocheck_data *      data,
+			  annocheck_section *   sec,
+			  ulong                 type,
+			  ulong                 size,
 			  const unsigned char * notedata)
 {
   /* These are not defined in the RHEL-7 build environment.  */
@@ -2226,49 +2207,48 @@ handle_x86_property_note (annocheck_data *     data,
   if (type != GNU_PROPERTY_X86_FEATURE_1_AND)
     {
       einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
-      return true;
+      return NULL;
     }
 
   if (size != 4)
     {
-      einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
-      einfo (VERBOSE2, "debugging: data note at offset %lx has size %lu, expected 4",
+      einfo (VERBOSE2, "debug: data note at offset %lx has size %lu, expected 4",
 	     (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
-      return false;
+      return "Property note data has invalid size";
     }
 
   ulong property = get_4byte_value (notedata);
 
   if ((property & GNU_PROPERTY_X86_FEATURE_1_IBT) == 0)
     {
-      einfo (VERBOSE, "%s: FAIL: The IBT property is not enabled", data->filename);
-      einfo (VERBOSE2, "debugging: property bits = %lx", property);
-      return false;
+      einfo (VERBOSE2, "debug: property bits = %lx", property);
+      return "The IBT property is not enabled";
     }
 
   if ((property & GNU_PROPERTY_X86_FEATURE_1_SHSTK) == 0)
     {
-      einfo (VERBOSE, "%s: FAIL: The SHSTK property is not enabled", data->filename);
-      einfo (VERBOSE2, "debugging: property bits = %lx", property);
-      return false;
+      einfo (VERBOSE2, "debug: property bits = %lx", property);
+      return "The SHSTK property is not enabled";
     }
 
-  einfo (VERBOSE2, "%s: PASS: Both the IBT and SHSTK properties are present in the GNU Property note", data->filename);
-  return true;
+  pass (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, NULL);
+  return NULL;
 }
 
 static bool
-walk_property_notes (annocheck_data *     data,
-		     annocheck_section *  sec,
-		     GElf_Nhdr *          note,
-		     size_t               name_offset,
-		     size_t               data_offset,
-		     void *               ptr)
+property_note_checker (annocheck_data *     data,
+		       annocheck_section *  sec,
+		       GElf_Nhdr *          note,
+		       size_t               name_offset,
+		       size_t               data_offset,
+		       void *               ptr)
 {
-  if (skip_check (TEST_PROPERTY_NOTE, NULL))
+  const char * reason = NULL;
+
+  if (skip_check (TEST_PROPERTY_NOTE))
     return true;
 
-  bool (* handler) (annocheck_data *, annocheck_section *, ulong, ulong, const unsigned char *);
+  const char * (* handler) (annocheck_data *, annocheck_section *, ulong, ulong, const unsigned char *);
   switch (per_file.e_machine)
     {
     case EM_X86_64:
@@ -2285,24 +2265,23 @@ walk_property_notes (annocheck_data *     data,
       break;
 
     default:
-      /* FIXME: ICE here ?  */
+      einfo (VERBOSE2, "%s: WARN: Property notes for architecture %d not handled", data->filename, per_file.e_machine);
       return true;
     }
   
   if (note->n_type != NT_GNU_PROPERTY_TYPE_0)
     {
-      einfo (VERBOSE, "%s: FAIL: Unexpected GNU Property note type", data->filename);
-      einfo (VERBOSE2, "debugging: note type is %x, expected %x", note->n_type, NT_GNU_PROPERTY_TYPE_0);
-      goto fail;
+      einfo (VERBOSE2, "%s: info: unexpected GNU Property note type %x", data->filename, note->n_type);
+      return true;
     }
 
-  if (per_file.e_type == ET_EXEC || per_file.e_type == ET_DYN)
+  if (is_executable ())
     {
       /* More than one note in an executable is an error.  */
-      if (tests[TEST_PROPERTY_NOTE].num_pass)
+      if (tests[TEST_PROPERTY_NOTE].state == STATE_PASSED)
 	{
 	  /* The loader will only process the first note, so having more than one is an error.  */
-	  einfo (VERBOSE, "%s: FAIL: More than one GNU Property note", data->filename);
+	  reason = "More than one GNU Property note";
 	  goto fail;
 	}
     }
@@ -2310,22 +2289,22 @@ walk_property_notes (annocheck_data *     data,
   if (note->n_namesz != sizeof ELF_NOTE_GNU
       || strncmp ((char *) sec->data->d_buf + name_offset, ELF_NOTE_GNU, strlen (ELF_NOTE_GNU)) != 0)
     {
-      einfo (VERBOSE, "%s: FAIL: Property note does not have expected name", data->filename);
-      einfo (VERBOSE2, "debugging: Expected name %s, got %.*s", ELF_NOTE_GNU,
+      reason = "Property note does not have expected name";
+      einfo (VERBOSE2, "debug: Expected name '%s', got '%.*s'", ELF_NOTE_GNU,
 	     (int) strlen (ELF_NOTE_GNU), (char *) sec->data->d_buf + name_offset);
       goto fail;
     }
 
-  unsigned int expected_quanta = data->is_32bit ? 4 : 8;
+  uint expected_quanta = data->is_32bit ? 4 : 8;
   if (note->n_descsz < 8 || (note->n_descsz % expected_quanta) != 0)
     {
-      einfo (VERBOSE, "%s: FAIL: Property note data has the wrong size", data->filename);
-      einfo (VERBOSE2, "debugging: Expected data size to be a multiple of %d but the size is 0x%x",
+      reason = "Property note data has the wrong size";
+      einfo (VERBOSE2, "debug: Expected data size to be a multiple of %d but the size is 0x%x",
 	     expected_quanta, note->n_descsz);
       goto fail;
     }
 
-  unsigned int remaining = note->n_descsz;
+  uint remaining = note->n_descsz;
   const unsigned char * notedata = sec->data->d_buf + data_offset;
   while (remaining)
     {
@@ -2336,24 +2315,24 @@ walk_property_notes (annocheck_data *     data,
       notedata  += 8;
       if (size > remaining)
 	{
-	  einfo (VERBOSE, "%s: FAIL: Property note data has invalid size", data->filename);
-	  einfo (VERBOSE2, "debugging: data size for note at offset %lx is %lu but remaining data is only %u",
+	  reason = "Property note data has invalid size";
+	  einfo (VERBOSE2, "debug: data size for note at offset %lx is %lu but remaining data is only %u",
 		 (long)(notedata - (const unsigned char *) sec->data->d_buf), size, remaining);
 	  goto fail;
 	}
 
-      if (! handler (data, sec, type, size, notedata))
+      if ((reason = handler (data, sec, type, size, notedata)) != NULL)
 	goto fail;
 
       notedata  += ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
       remaining -= ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
     }
 
-  tests[TEST_PROPERTY_NOTE].num_pass ++;
+  pass (data, TEST_PROPERTY_NOTE, SOURCE_PROPERTY_NOTES, NULL);
   return true;
 
  fail:
-  tests[TEST_PROPERTY_NOTE].num_fail ++;
+  fail (data, TEST_PROPERTY_NOTE, SOURCE_PROPERTY_NOTES, reason);
   return false;
 }
 
@@ -2362,7 +2341,9 @@ supports_property_notes (int e_machine)
 {
   return e_machine == EM_X86_64
     || e_machine == EM_AARCH64
+#if 0
     || e_machine == EM_PPC64
+#endif
     || e_machine == EM_386;
 }
 
@@ -2378,24 +2359,28 @@ check_note_section (annocheck_data *    data,
 
   if (const_strneq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
     {
-      hardened_note_data hard_data;
-
-      hard_data.start = 0;
-      hard_data.end = 0;
+      bool res;
 
       per_file.build_notes_seen = true;
-      return annocheck_walk_notes (data, sec, walk_build_notes, (void *) & hard_data);
+      per_file.note_data.start = per_file.note_data.end = 0;
+      per_file.seen_tools = TOOL_UNKNOWN;
+
+      res = annocheck_walk_notes (data, sec, build_note_checker, NULL);
+
+      per_file.component_name = NULL;
+      if (per_file.note_data.start != per_file.note_data.end)
+	add_producer (data, per_file.current_tool, 0, "annobin notes", false);
+      return res;
     }
 
-  if (supports_property_notes (per_file.e_machine)
-      && streq (sec->secname, ".note.gnu.property"))
+  if (streq (sec->secname, ".note.gnu.property"))
     {
-      return annocheck_walk_notes (data, sec, walk_property_notes, NULL);
+      return annocheck_walk_notes (data, sec, property_note_checker, NULL);
     }
 
   if (streq (sec->secname, ".note.go.buildid"))
     {
-      set_producer (data, TOOL_GO, 0, ".note.go.buildid");
+      add_producer (data, TOOL_GO, 0, ".note.go.buildid", true);
     }
 
   return true;
@@ -2409,7 +2394,7 @@ check_string_section (annocheck_data *    data,
      This is not as accurate as checking for a function symbol with this name,
      but it is a lot faster.  */
   if (strstr ((const char *) sec->data->d_buf, "__pthread_register_cancel"))
-    tests[TEST_THREADS].num_fail ++;
+    fail (data, TEST_THREADS, SOURCE_STRING_SECTION, "not compiled with -fexceptions");
 
   return true;
 }
@@ -2437,21 +2422,20 @@ static bool
 check_dynamic_section (annocheck_data *    data,
 		       annocheck_section * sec)
 {
+  bool dynamic_relocs_seen = false;
+  bool aarch64_bti_plt_seen = false;
+  bool aarch64_pac_plt_seen = false;
+
   if (sec->shdr.sh_size == 0 || sec->shdr.sh_entsize == 0)
     {
       einfo (VERBOSE, "%s: WARN: Dynamic section %s is empty - ignoring", data->filename, sec->secname);
       return true;
     }
 
-  if (tests[TEST_DYNAMIC_SEGMENT].num_pass == 0)
-    {
-      tests[TEST_DYNAMIC_SEGMENT].num_pass = 1;
-    }
-  else
-    {
-      einfo (VERBOSE, "%s: FAIL: contains multiple dynamic sections", data->filename);
-      tests[TEST_DYNAMIC_SEGMENT].num_fail ++;
-    }
+  if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_UNTESTED)
+    pass (data, TEST_DYNAMIC_SEGMENT, SOURCE_DYNAMIC_SECTION, NULL);
+  else if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_PASSED)
+    fail (data, TEST_DYNAMIC_SEGMENT, SOURCE_DYNAMIC_SECTION, "multiple dynamic sections detected");
 
   size_t num_entries = sec->shdr.sh_size == 0 / sec->shdr.sh_entsize;
 
@@ -2467,52 +2451,92 @@ check_dynamic_section (annocheck_data *    data,
       switch (dyn->d_tag)
 	{
 	case DT_BIND_NOW:
-	  tests[TEST_BIND_NOW].num_pass ++;
+	  pass (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, NULL);
 	  break;
 
 	case DT_FLAGS:
 	  if (dyn->d_un.d_val & DF_BIND_NOW)
-	    tests[TEST_BIND_NOW].num_pass ++;
+	    pass (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, NULL);
 	  break;
 
 	case DT_RELSZ:
 	case DT_RELASZ:
-	  if (dyn->d_un.d_val > 0)
-	    tests[TEST_BIND_NOW].num_maybe ++;
+	  if (dyn->d_un.d_val == 0)
+	    skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "no dynamic relocations");
+	  else
+	    dynamic_relocs_seen = true;
 	  break;
 
 	case DT_TEXTREL:
-	  tests[TEST_TEXTREL].num_fail ++;
+	  if (is_object_file ())
+	    skip (data, TEST_TEXTREL, SOURCE_DYNAMIC_SECTION, "Object files are allowed text relocations");
+	  else
+	    fail (data, TEST_TEXTREL, SOURCE_DYNAMIC_SECTION, NULL);
 	  break;
 
 	case DT_RPATH:
 	case DT_RUNPATH:
 	  {
-	    if (skip_check (TEST_RUN_PATH, NULL))
+	    if (skip_check (TEST_RUN_PATH))
 	      break;
 
 	    const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
 
 	    if (not_rooted_at_usr (path))
-	      {
-		einfo (VERBOSE, "%s: FAIL: Bad runpath: %s", data->filename, path);
-		tests[TEST_RUN_PATH].num_fail ++;
-	      }
+	      fail (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, NULL);
+	    else
+	      pass (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, NULL);
 	  }
 	  break;
 
 	case DT_AARCH64_BTI_PLT:
-	  if (per_file.e_machine == EM_AARCH64)
-	    tests[TEST_DYNAMIC_TAGS].num_pass |= 1;
+	  aarch64_bti_plt_seen = true;
 	  break;
 
 	case DT_AARCH64_PAC_PLT:
-	  if (per_file.e_machine == EM_AARCH64)
-	    tests[TEST_DYNAMIC_TAGS].num_pass |= 2;
+	  aarch64_pac_plt_seen = true;
 	  break;
 
 	default:
 	  break;
+	}
+    }
+
+  if (dynamic_relocs_seen && tests[TEST_BIND_NOW].state != STATE_PASSED)
+    {
+      if (! is_executable ())
+	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "Not an executable");
+      else if (per_file.seen_tools & TOOL_GO)
+	/* FIXME: Should be changed once GO supports PIE & BIND_NOW.  */
+	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "Binary was built by GO");
+      else
+	fail (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "Not linked with -Wl,-z,now");
+    }
+
+  if (per_file.e_machine == EM_AARCH64)
+    {
+      if (is_object_file ())
+	skip (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "Not needed in object files");
+      else
+	{
+	  uint res = aarch64_bti_plt_seen ? 1 : 0;
+
+	  res += aarch64_pac_plt_seen ? 2 : 0;
+	  switch (res)
+	  {
+	  case 0:
+	    future_fail (data, "BTI_PLT and PAC_PLT tags missing from dynamic tags");
+	    break;
+	  case 1:
+	    future_fail (data, "PAC_PLT tag is missing from dynamic tags");
+	    break;
+	  case 2:
+	    future_fail (data, "BTI_PLT tag is missing from dynamic tags");
+	    break;
+	  case 3:
+	    pass (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, NULL);
+	    break;
+	  }
 	}
     }
 
@@ -2541,22 +2565,22 @@ check_code_section (annocheck_data *     data,
       static const char * gcc_prefix = "GCC: (GNU) ";
       static const char * clang_prefix = "clang version ";
       static const char * lld_prefix = "Linker: LLD ";
-      unsigned int version;
+      uint version;
       const char * where;
 
       if ((where = strstr (tool, gcc_prefix)) != NULL)
 	{
 	  /* FIXME: This assumes that the gcc identifier looks like: "GCC: (GNU) 8.1.1""  */
-	  version = (unsigned int) strtod (where + strlen (gcc_prefix), NULL);
-	  set_producer (data, TOOL_GCC, version, "comment section");
+	  version = (uint) strtod (where + strlen (gcc_prefix), NULL);
+	  add_producer (data, TOOL_GCC, version, COMMENT_SECTION, true);
 	  einfo (VERBOSE2, "%s: built by gcc version %u (extracted from '%s' in comment section)",
 		 data->filename, version, where);
 	}
       else if ((where = strstr (tool, clang_prefix)) != NULL)
 	{
 	  /* FIXME: This assumes that the clang identifier looks like: "clang version 7.0.1""  */
-	  version = (unsigned int) strtod (where + strlen (clang_prefix), NULL);
-	  set_producer (data, TOOL_CLANG, version, "comment section");
+	  version = (uint) strtod (where + strlen (clang_prefix), NULL);
+	  add_producer (data, TOOL_CLANG, version, COMMENT_SECTION, true);
 	  einfo (VERBOSE2, "%s: built by clang version %u (extracted from '%s' in comment section)",
 		 data->filename, version, where);
 	}
@@ -2601,72 +2625,64 @@ interesting_seg (annocheck_data *    data,
   if (disabled)
     return false;
 
-  if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R)
-      && ! skip_check (TEST_RWX_SEG, NULL))
+  if (! skip_check (TEST_RWX_SEG))
     {
-      if (seg->phdr->p_type == PT_GNU_STACK)
+      if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R))
 	{
-	  einfo (VERBOSE, "%s: FAIL: The GNU stack segment is executable\n",
-		 data->filename);
-	  tests[TEST_GNU_STACK].num_fail ++;
-	}
-      else
-	{
-	  einfo (VERBOSE, "%s: FAIL: seg %d has Read, Write and eXecute flags\n",
-		 data->filename, seg->number);
-	  tests[TEST_RWX_SEG].num_fail ++;
+	  /* Object files should not have segments.  */
+	  assert (! is_object_file ());
+	  fail (data, TEST_RWX_SEG, SOURCE_SEGMENT_HEADERS, "Segment has Read, Write and eXecute flags set");
+	  einfo (VERBOSE2, "RWX segment number: %d", seg->number);
 	}
     }
 
   switch (seg->phdr->p_type)
     {
+#if 0
     case PT_INTERP:
-      tests[TEST_ENTRY].num_maybe ++;
+      /* Signal the code in check_seg() that this is interpreted code.  */
+      tests[TEST_ENTRY].state = STATE_MAYBE;
+      skip (data, TEST_ENTRY, SOURCE_SEGMENT_HEADERS, "interpreted code");
       break;
-
+#endif
     case PT_GNU_RELRO:
-      tests[TEST_GNU_RELRO].num_pass ++;
+      pass (data, TEST_GNU_RELRO, SOURCE_SEGMENT_HEADERS, NULL);
       break;
 
     case PT_GNU_STACK:
-      if ((seg->phdr->p_flags & (PF_W | PF_R)) != (PF_W | PF_R))
+      if (! skip_check (TEST_GNU_STACK))
 	{
-	  einfo (VERBOSE, "%s: FAIL: The GNU stack segment does not have both read & write permissions\n",
-		 data->filename);
-	  tests[TEST_GNU_STACK].num_fail ++;
+	  if ((seg->phdr->p_flags & (PF_W | PF_R)) != (PF_W | PF_R))
+	    fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "The GNU stack segment does not have both read & write permissions");
+	  /* If the segment has the PF_X flag set it will have been reported as a failure above.  */
+	  else if ((seg->phdr->p_flags & PF_X) == 0)
+	    pass (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, NULL);
 	}
-      /* If the segment has the PF_X flag set it will have been reported as a failure above.  */
-      else if ((seg->phdr->p_flags & PF_X) == 0)
-	tests[TEST_GNU_STACK].num_pass ++;
       break;
 
     case PT_DYNAMIC:
-      if (tests[TEST_DYNAMIC_SEGMENT].num_pass < 2)
-	/* 0 means it had no dynamic sections, 1 means it had a dynamic section.  */
-	tests[TEST_DYNAMIC_SEGMENT].num_pass = 2;
-      else
-	{
-	  einfo (VERBOSE, "FAIL: %s: contains multiple dynamic segments.", data->filename);
-	  tests[TEST_DYNAMIC_SEGMENT].num_fail ++;
-	}
+      pass (data, TEST_DYNAMIC_SEGMENT, SOURCE_SEGMENT_HEADERS, NULL);
+      /* FIXME: We do not check to see if there is a second dynamic segment.
+	 Checking is complicated by the fact that there can be both a dynamic
+	 segment and a dynamic section.  */
       break;
 
     case PT_NOTE:
-      if (skip_check (TEST_PROPERTY_NOTE, NULL))
+      if (skip_check (TEST_PROPERTY_NOTE))
 	break;
-      /* We true if we want to examine the note segments.  */
+      /* We return true if we want to examine the note segments.  */
       return supports_property_notes (per_file.e_machine);
 
     case PT_LOAD:
       /* If we are checking the entry point instruction then we need to load
 	 the segment.  We check segments rather than sections because executables
 	 do not have to have sections.  */
-      if ((per_file.e_type == ET_EXEC || per_file.e_type == ET_DYN)
-	  && (per_file.e_machine == EM_386 || per_file.e_machine == EM_X86_64)
+      if (per_file.e_type == ET_DYN
+	  && is_x86 ()
 	  && seg->phdr->p_memsz > 0
 	  && seg->phdr->p_vaddr <= per_file.e_entry
 	  && seg->phdr->p_vaddr + seg->phdr->p_memsz > per_file.e_entry
-	  && ! skip_check (TEST_ENTRY, NULL))
+	  && ! skip_check (TEST_ENTRY))
 	return true;
       break;
 
@@ -2695,16 +2711,24 @@ check_seg (annocheck_data *    data,
       assert (entry_point + 3 < seg->data->d_size);
       memcpy (entry_bytes, seg->data->d_buf + entry_point, sizeof entry_bytes);
 
-      if (per_file.e_machine == EM_386)
+      if (tests[TEST_ENTRY].state == STATE_MAYBE)
+	; /* A signal from interesting_seg() that this is interpreted code.  */
+      else if (per_file.e_machine == EM_386)
 	{
 	  /* Look for ENDBR32: 0xf3 0x0f 0x1e 0xfb. */
 	  if (   entry_bytes[0] == 0xf3
 	      && entry_bytes[1] == 0x0f
 	      && entry_bytes[2] == 0x1e
 	      && entry_bytes[3] == 0xfb)
-	    tests[TEST_ENTRY].num_pass ++;
+	    pass (data, TEST_ENTRY, SOURCE_SEGMENT_CONTENTS, NULL);
 	  else
-	    tests[TEST_ENTRY].num_fail ++;
+	    {
+	      fail (data, TEST_ENTRY, SOURCE_SEGMENT_CONTENTS, "instruction at entry is not ENDBR32");
+
+	      einfo (VERBOSE, "%s: info: entry address: %#lx.  Bytes at this address: %x %x %x %x",
+		     data->filename, (long) per_file.e_entry,
+		     entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
+	    }
 	}
       else /* per_file.e_machine == EM_X86_64 */
 	{
@@ -2713,18 +2737,30 @@ check_seg (annocheck_data *    data,
 	      && entry_bytes[1] == 0x0f
 	      && entry_bytes[2] == 0x1e
 	      && entry_bytes[3] == 0xfa)
-	    tests[TEST_ENTRY].num_pass ++;
+	    pass (data, TEST_ENTRY, SOURCE_SEGMENT_CONTENTS, NULL);
 	  else
-	    tests[TEST_ENTRY].num_fail ++;
+	    {
+	      fail (data, TEST_ENTRY, SOURCE_SEGMENT_CONTENTS, "instruction at entry is not ENDBR64");
+
+	      einfo (VERBOSE, "%s: info: entry address: %#lx.  Bytes at this address: %x %x %x %x",
+		     data->filename, (long) per_file.e_entry,
+		     entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
+	    }
 	}
 
       return true;
     }
 
+  if (seg->phdr->p_type != PT_NOTE)
+    return true;
+    
   if (per_file.e_machine != EM_X86_64)
     return true;
 
-  /* FIXME: Only run these checks if the note section is missing ??  */
+  if (skip_check (TEST_PROPERTY_NOTE))
+    return true;
+
+  /* FIXME: Only run these checks if the note section is missing ?  */
 
   GElf_Nhdr  note;
   size_t     name_off;
@@ -2737,68 +2773,31 @@ check_seg (annocheck_data *    data,
     {
       if (seg->phdr->p_align != 4)
 	{
-	  einfo (VERBOSE, "%s: warn: Note segment not 4 or 8 byte aligned (alignment: %ld)",
-		 data->filename, (long) seg->phdr->p_align);
-	  tests[TEST_PROPERTY_NOTE].num_fail ++;
+	  fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "Note segment not 4 or 8 byte aligned");
+	  einfo (VERBOSE2, "debug: note segment alignment: %ld", (long) seg->phdr->p_align);
 	}
-
-      if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
+      else if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
 	{
-	  warn (data, "GNU Property note segment not 8 byte aligned");
-	  tests[TEST_PROPERTY_NOTE].num_fail ++;
+	  fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "GNU Property note segment not 8 byte aligned");
 	}
     }
 
   if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
     {
       if (offset != 0)
-	{
-	  warn (data, "More than one GNU Property note in note segment");
-	  tests[TEST_PROPERTY_NOTE].num_fail ++;
-	}
+	fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "More than one GNU Property note in note segment");
       else
-	tests[TEST_PROPERTY_NOTE].num_pass ++;
+	/* FIXME: We should check the contents of the note.  */
+	pass (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, NULL);
     }
 
   return true;
 }
 
-static void
-fail (annocheck_data * data, const char * message)
-{
-  einfo (INFO, "%s: FAIL: %s", data->filename, message);
-  ++ per_file.num_fails;
-}
-
-static void
-maybe (annocheck_data * data, const char * message)
-{
-  einfo (INFO, "%s: MAYB: %s", data->filename, message);
-  ++ per_file.num_maybes;
-}
-
-static void
-pass (annocheck_data * data, const char * message)
-{
-  einfo (VERBOSE, "%s: PASS: %s", data->filename, message);
-}
-
-static void
-skip (annocheck_data * data, const char * message)
-{
-  einfo (VERBOSE, "%s: skip: %s", data->filename, message);
-}
-
-static void
-look (annocheck_data * data, const char * message)
-{
-  future_fail (data, message);
-}
-
 /* Returns true if GAP is one that can be ignored.  */
 
 static bool
-ignore_gap (annocheck_data * data, hardened_note_data * gap)
+ignore_gap (annocheck_data * data, note_range * gap)
 {
   Elf_Scn * addr1_scn = NULL;
   Elf_Scn * addr2_scn = NULL;
@@ -2934,8 +2933,8 @@ ignore_gap (annocheck_data * data, hardened_note_data * gap)
 static signed int
 compare_range (const void * r1, const void * r2)
 {
-  hardened_note_data * n1 = (hardened_note_data *) r1;
-  hardened_note_data * n2 = (hardened_note_data *) r2;
+  note_range * n1 = (note_range *) r1;
+  note_range * n2 = (note_range *) r2;
 
   if (n1->end < n2->start)
     return -1;
@@ -2973,8 +2972,13 @@ skip_gap_sym (const char * sym)
 
   /* If the symbol is for a function/file that we know has special
      reasons for not being proplerly annotated then we skip it.  */
-  if (skip_check (TEST_MAX, sym))
-    return true;
+  per_file.component_name = sym;
+  if (skip_check (TEST_MAX))
+    {
+      per_file.component_name = NULL;
+      return true;
+    }
+  per_file.component_name = NULL;
 
   if (per_file.e_machine == EM_386)
     {
@@ -3020,13 +3024,13 @@ check_for_gaps (annocheck_data * data)
   /* Sort the ranges array.  */
   qsort (ranges, next_free_range, sizeof ranges[0], compare_range);
 
-  hardened_note_data current = ranges[0];
+  note_range current = ranges[0];
 
   /* Scan the ranges array.  */
   bool gap_found = false;
-  unsigned i;
+  uint i;
   for (i = 1; i < next_free_range; i++)
-    {
+    {      
       if (ranges[i].start <= current.end)
 	{
 	  if (ranges[i].start < current.start)
@@ -3044,7 +3048,7 @@ check_for_gaps (annocheck_data * data)
 	}
       else
 	{
-	  hardened_note_data gap;
+	  note_range gap;
 
 	  gap.start = current.end;
 	  gap.end   = ranges[i].start;
@@ -3138,782 +3142,65 @@ check_for_gaps (annocheck_data * data)
     }
 
   if (! gap_found)
-    pass (data, "No gaps found");
-  else if (! BE_VERBOSE)
-    fail (data, "Gaps were detected in the annobin coverage.  Run with -v to list");
+    pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
   else
-    fail (data, "Gaps were detected in the annobin coverage");
-}
+    fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "gaps were detected in the annobin coverage");
 
-static void
-show_BRANCH_PROTECTION  (annocheck_data * data, test * results)
-{
-#ifdef EM_AARCH64 /* RHEL-6 does not define EM_AARCH64.  */
-  if (per_file.e_machine != EM_AARCH64)
-    skip (data, "Branch protection.  (Not an AArch64 binary)");
-  else
-#endif
-    if (! built_by_gcc ())
-      skip (data, "Branch protection.  (Not built by gcc)");
-
-  else if (per_file.tool_info.version < 9)
-    skip (data, "Branch protection.  (Needs gcc 9+)");
-
-  else if (results->num_fail > 0)
+  /* Now check to see that the notes covered the whole of the .text section.  */
+  /* FIXME: We should actually do this for an executable section.  */
+  
+  /* Scan forward through the ranges array looking for overlaps with the start of the .text section.  */
+  if (per_file.text_section_range.end != 0)
     {
-      if (results->num_pass > 0 || results->num_maybe > 0)
+      for (i = 0; i < next_free_range; i++)
 	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without (sufficient) branch protection");
-	  else
-	    fail (data, "Parts of the binary were compiled without branch protection.  Run with -v to see where");
-	}
-      else
-	fail (data, "The binary was compiled without -mbranch-protection");
-    }
-  else if (results->num_maybe > 0)
-    {
-      if (BE_VERBOSE)
-	maybe (data, "Unknown string used with -mbranch-protection=");
-      else
-	maybe (data, "Unknown string used with -mbranch-protection=  run with -v to see where");
-    }
-  else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with sufficient -mbranch-protection");
-    }
-  else
-    {
-      /* FIXME: Only inform the user for now.  Once -mbranch-protection has
-	 been added to the rpm macros then change this result to a maybe().  */
-      /* maybe (data, "The -mbranch-protection setting was not recorded");  */
-      look (data, "The -mbranch-protection setting was not recorded");
-    }
-}
-
-static void
-show_ENTRY (annocheck_data * data, test * results)
-{
-  if (per_file.e_machine != EM_386 && per_file.e_machine != EM_X86_64)
-    skip (data, "Entry point instruction is ENDBR.  (Not an x86 binary)");
-  else if (per_file.e_type != ET_DYN && per_file.e_type != ET_EXEC)
-    skip (data, "Entry point instruction is ENDBR.  (Not a dynamic executable)");
-  else if (results->num_maybe == 0) /* Ie there was no PT_INTERP segment.  */
-    skip (data, "Entry point instruction is ENDBR.  (Not an executable)");
-  else if (! per_file.compiled_code_seen)
-    skip (data, "Entry point not ENDBR, but code not produced by a known compiler");
-  else if (per_file.e_entry == 0)
-    maybe (data, "Entry point address is zero");
-  else if (results->num_fail > 0)
-    {
-      if (per_file.e_machine == EM_386)
-	fail (data, "Entry point instruction is not ENDBR32");
-      else
-	fail (data, "Entry point instruction is not ENDBR64");
-
-      if (BE_VERBOSE)
-	einfo (VERBOSE, "%s:      (Entry Address: %#lx.  Bytes at this address: %x %x %x %x)",
-	       data->filename, (long) per_file.e_entry,
-	       entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
-    }
-  else
-    pass (data, "Entry point instruction is ENDBR");
-}
-
-static void
-show_SHORT_ENUM (annocheck_data * data, test * results)
-{
-  if (results->num_fail > 0 && results->num_pass > 0)
-    {
-      if (BE_VERBOSE)
-	fail (data, "Linked with different -fshort-enum settings");
-      else
-	fail (data, "Linked with different -fshort-enum settings.  Run with -v to see where");
-    }
-  else if (results->num_maybe > 0)
-    maybe (data, "Corrupt notes on the -fshort-enum setting detected");
-  else if (results->num_fail > 0 || results->num_pass > 0)
-    pass (data, "Consistent use of the -fshort-enum option");
-  else if (! built_by_gcc ())
-    skip (data, "Test of enum size.  (Not built by gcc)");
-  else
-    /* Use SKIP rather than MAYBE here as this is not critical.  */
-    skip (data, "No data about the use of -fshort-enum available");
-}
-
-static void
-show_WARNINGS (annocheck_data * data, test * results)
-{
-  if (results->num_fail > 0)
-    {
-      if (built_with_gimple ())
-	skip (data, "Checking for warning options.  (Gimple compilation drops warnings)");
-      else if (BE_VERBOSE)
-	fail (data, "Compiled without using either the -Wall or -Wformat-security options");
-      else
-	fail (data, "Compiled without using either the -Wall or -Wformat-security options. Run with -v to see where");
-    }
-  else if (results->num_maybe > 0)
-    {
-      maybe (data, "Corrupted warning data encountered");
-    }
-  else if (results->num_pass == 0)
-    {
-      if (built_with_gimple ())
-	skip (data, "Checking for warning options.  (Built by gimple)");
-      else if (! built_by_compiler ())
-	skip (data, "Checking for warning options.  (Not built by gcc)");
-      else
-	maybe (data, "No data about compilation warnings found");
-    }
-  else
-    pass (data, "Compiled with either -Wall and/or -Wformat-security");
-}
-
-static void
-show_PROPERTY_NOTE (annocheck_data * data, test * results)
-{
-  if (! supports_property_notes (per_file.e_machine))
-    skip (data, "GNU Property note check.  (Only useful on x86_64 and aarch64 binaries)");
-
-  else if (results->num_fail > 0)
-    {
-      if (per_file.e_machine == EM_AARCH64)
-	look (data, "Bad GNU Property note(s)");
-      else if (BE_VERBOSE)
-	fail (data, "Bad GNU Property note(s)");
-      else
-	fail (data, "Bad GNU Property note(s).  Run with -v to see what is wrong");
-    }
-
-  else if (results->num_maybe > 0)
-    maybe (data, "Corrupt GNU Property note");
-
-  else if (results->num_pass > 0)
-    pass (data, "Good GNU Property note");
-
-  else
-    {
-      switch (per_file.e_machine)
-	{
-	case EM_X86_64:
-	case EM_386:
-	  if (tests[TEST_CF_PROTECTION].enabled && tests[TEST_CF_PROTECTION].num_pass > 0)
+	  if (ranges[i].start <= per_file.text_section_range.start
+	      && ranges [i].end > per_file.text_section_range.start)
+	    /* We have found a note range the occludes the start of the text section.
+	       Move the start up to the end of this note, aligned to 16 bytes.  */
 	    {
-	      if (! built_by_compiler ())
-		skip (data, "Control flow protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that Intel's control flow protection technology (CET) will *not* be enabled for any part of the binary");
-	      else
-		fail (data, "Control flow protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global control flow protection cannot be enabled");
+	      per_file.text_section_range.start = align (ranges[i].end, 16);
+	      if (per_file.text_section_range.start >= per_file.text_section_range.end)
+		{
+		  per_file.text_section_range.start = per_file.text_section_range.end = 0;
+		  break;
+		}
 	    }
-	  break;
+	}
+    }
 
-	case EM_AARCH64:
-	  if (tests[TEST_BRANCH_PROTECTION].enabled && tests[TEST_BRANCH_PROTECTION].num_pass > 0)
+  /* Now scan backwards through the ranges array looking for overlaps with the end of the .text section.  */
+  if (per_file.text_section_range.end != 0)
+    {
+      for (i = next_free_range; i--;)
+	{
+	  if (ranges[i].start < per_file.text_section_range.end
+	      && align (ranges [i].end, 16) >= per_file.text_section_range.end)
+	    /* We have found a note range the occludes the end of the text section.
+	       Move the end up to the start of this note, aligned to 16 bytes.  */
 	    {
-	      if (! built_by_compiler ())
-		skip (data, "Branch protection is enabled, but some parts of the binary have been created by a tool other than GCC or CLANG, and so do not have the necessary markup.  This means that the BTI/PAC protection will *not* be enabled for any part of the binary");
-	      else
-		look (data, "branch protection has been enabled for only some parts of the binary.  Other parts (probably assembler sources) are missing the protection, and without it global BTI/PAC protection cannot be enabled");
+	      per_file.text_section_range.end = align (ranges[i].start - 15, 16);
+	      if (per_file.text_section_range.start >= per_file.text_section_range.end)
+		{
+		  per_file.text_section_range.start = per_file.text_section_range.end = 0;
+		  break;
+		}
 	    }
-	  break;
-
-	case EM_PPC64:
-	  look (data, "Missing GNU Property note (specific to PowerPC)");
-	  break;
-
-	default:
-	  fail (data, "ICE: property notes for this architecture not handled");
-	  break;
 	}
+    }
+
+  if (per_file.text_section_range.end > 0)
+    {
+      /* This test does not account for ranges that occlude part
+	 of the .text section, so make it an INFO result for now.
+	 Nor does it allow for linker generated code that have no notes.  */
+      einfo (VERBOSE, "%s: info: not all of the .text section is covered by notes",
+	     data->filename);
+      einfo (VERBOSE, "%s: info: addr range not covered: %lx..%lx",
+	     data->filename, per_file.text_section_range.start, per_file.text_section_range.end);
     }
 }
 
-static void
-show_BIND_NOW (annocheck_data * data, test * results)
-{
-  if (per_file.e_type != ET_EXEC && per_file.e_type != ET_DYN)
-    skip (data, "Test for -Wl,-z,now.  (Only needed for executables)");
-  else if (tests[TEST_DYNAMIC_SEGMENT].num_pass == 0)
-    skip (data, "Test for -Wl,-z,now.  (No dynamic segment present)");
-  else if (results->num_maybe == 0)
-    skip (data, "Test for -Wl,-z-now.  (Dynamic segment present, but no dynamic relocations found)");
-  else if (per_file.tool_info.tool == TOOL_GO)
-    /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
-    skip (data, "Test for -Wl,-z,now.  (Binary was built by GO)");
-  else if (built_by_mixed ())
-    /* FIXME: Should be changed once GO supports PIE & BIND_NOW.  */
-    skip (data, "Test for -Wl,-z,now.  (Binary was built by different compilers)");
-  else if (results->num_pass == 0 || results->num_fail > 0)
-    fail (data, "Not linked with -Wl,-z,now");
-  else
-    pass (data, "Linked with -Wl,-z,now");
-}
-
-static void
-show_DYNAMIC_SEGMENT (annocheck_data * data, test * results)
-{
-  if (results->num_fail > 0)
-    fail (data, "Multiple dynamic sections/segments found");
-  else if (results->num_pass == 0)
-    pass (data, "No dynamic sections/segments found");
-  else
-    pass (data, "One dynamic section/segment found");
-}
-
-static void
-show_DYNAMIC_TAGS (annocheck_data * data, test * results)
-{
-  if (per_file.e_machine != EM_AARCH64)
-    skip (data, "Test of dynamic tags.  (AArch64 specific)");
-  else if (per_file.e_type == ET_REL)
-    skip (data, "Test of dynamic tags.  (Not needed in object files)");
-  else if (results->num_pass == 3)
-    pass (data, "Both PAC and BTI dynamic tags are present");
-  else if (results->num_pass == 2)
-    look (data, "The BTI dynamic tags is missing");
-  else if (results->num_pass == 1)
-    look (data, "The PAC dynamic tags is missing");
-  else
-    look (data, "The BTI and PAC dynamic tags are missing");
-}
-
-static void
-show_GNU_RELRO (annocheck_data * data, test * results)
-{
-  /* Relocateable object files are not yet linked.  */
-  if (per_file.e_type == ET_REL)
-    skip (data, "Test for -Wl,-z,relro.  (Not needed in object files)");
-  else if (tests[TEST_DYNAMIC_SEGMENT].num_pass == 0)
-    skip (data, "Test for -Wl,-z,relro.  (No dynamic segment present)");
-  else if (tests [TEST_BIND_NOW].num_maybe == 0)
-    skip (data, "Test for -Wl,-z,relro.  (No dynamic relocations)");
-  else if (per_file.tool_info.tool == TOOL_GO)
-    /* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
-    skip (data, "Test for -Wl,z,relro. (Built by GO)");
-  else if (results->num_pass == 0 || results->num_fail > 0)
-    fail (data, "Not linked with -Wl,-z,relro");
-  else
-    pass (data, "Linked with -Wl,-z,relro");
-}
-
-static void
-show_GNU_STACK (annocheck_data * data, test * results)
-{
-  /* Relocateable object files do not have a stack segment.  */
-  if (per_file.e_type == ET_REL)
-    skip (data, "Test of stack segment.  (Object files do not have segments)");
-  else if (results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "The GNU stack segment has the wrong permissions");
-  else if (results->num_pass > 1)
-    maybe (data, "Multiple GNU stack segments found!");
-  else if (results->num_pass == 1)
-    pass (data, "Stack not executable");
-  else
-    pass (data, "No stack section found");
-}
-
-static void
-show_RWX_SEG (annocheck_data * data, test * results)
-{
-  if (per_file.e_type == ET_REL)
-    skip (data, "Check for RWX segments.  (Object files do not have segments)");
-  else if (results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "A segment with RWX permissions was found");
-  else
-    pass (data, "No RWX segments found");
-}
-
-static void
-show_TEXTREL (annocheck_data * data, test * results)
-{
-  if (per_file.e_type == ET_REL)
-    skip (data, "Object files are allowed text relocations");
-  else if (results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "Text relocations found");
-  else
-    pass (data, "No text relocations found");
-}
-
-static void
-show_RUN_PATH (annocheck_data * data, test * results)
-{
-  if (per_file.e_type == ET_REL)
-    skip (data, "Test of runpath.  (Object files do not have one)");
-  else if (results->num_fail > 0 || results->num_maybe > 0)
-    {
-      if (BE_VERBOSE)
-	fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr");
-      else
-	fail (data, "DT_RPATH/DT_RUNPATH contains directories not starting with /usr.  Run with -v for details.");
-    }
-  else
-    pass (data, "DT_RPATH/DT_RUNPATH absent or rooted at /usr");
-}
-
-static void
-show_THREADS (annocheck_data * data, test * results)
-{
-  if (results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "Thread cancellation not hardened.  (Compiled without -fexceptions)");
-  else
-    pass (data, "No thread cancellation problems");
-}
-
-static void
-show_WRITEABLE_GOT (annocheck_data * data, test * results)
-{
-  if (per_file.e_type == ET_REL)
-    skip (data, "Test for writeable GOT.  (Object files do not have a GOT)");
-  else if (results->num_fail > 0 || results->num_maybe > 0)
-    fail (data, "Relocations for the GOT/PLT sections are writeable");
-  else
-    pass (data, "GOT/PLT relocations are read only");
-}
-
-static void
-show_OPTIMIZATION (annocheck_data * data, test * results)
-{
-  if (results->num_fail > 0)
-    {
-      if (results->num_pass > 0 || results->num_maybe > 0)
-	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without sufficient optimization");
-	  else
-	    fail (data, "Parts of the binary were compiled without sufficient optimization.  Run with -v to see where");
-	}
-      else
-	fail (data, "The binary was compiled without sufficient optimization");
-    }
-  else if (results->num_maybe > 0)
-    {
-      if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record their optimization setting.  Run with -v to see where");
-	  else
-	    maybe (data, "Some parts of the binary do not record their optimization setting");
-	}
-      else
-	maybe (data, "The optimization setting was not recorded");
-    }
-  else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with sufficient optimization");
-    }
-  else if (! built_by_compiler ())
-    {
-      skip (data, "Test of optimization level.  (Not built by gcc/clang)");
-    }
-  else
-    {
-      maybe (data, "The optimization setting was not recorded");
-    }
-}
-
-static void
-show_LTO (annocheck_data * data, test * results)
-{
-  /* FIXME: For now these checks are soft fails.  */
-  if (results->num_fail > 0)
-    {
-      if (results->num_pass > 0 || results->num_maybe > 0)
-	{
-	  if (BE_VERBOSE)
-	    look (data, "Parts of the binary were compiled without LTO enabled");
-	  else
-	    look (data, "Parts of the binary were compiled without LTO enabled.  Run with -v to see where");
-	}
-      else
-	look (data, "The binary was compiled without LTO enabled");
-    }
-  else if (results->num_maybe > 0)
-    {
-      if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    fail (data, "Some parts of the binary had corrupt LTO data.  Run with -v to see where");
-	  else
-	    fail (data, "Some parts of the binary had corrupt LTO data");
-	}
-      else
-	fail (data, "The LTO data was corrupt");
-    }
-  else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with LTO enabled");
-    }
-  else if (! built_by_compiler ())
-    {
-      skip (data, "Test of LTO enablement.  (Not built by gcc/clang)");
-    }
-  else
-    {
-      skip (data, "The LTO setting was not recorded (probably due to the use of an old version of the annobin plugin)");
-    }
-}
-
-static void
-show_PIC (annocheck_data * data, test * results)
-{
-  if (results->num_fail > 0)
-    {
-      if (results->num_pass > 0 || results->num_maybe > 0)
-	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without the proper PIC/PIE option");
-	  else
-	    fail (data, "Parts of the binary were compiled without the proper PIC/PIE option.  Run with -v to see where");
-	}
-      else
-	fail (data, "The binary was compiled without -fPIC/-fPIE specified");
-    }
-  else if (results->num_maybe > 0)
-    {
-      if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record the PIC/PIE setting.  Run with -v to see where");
-	  else
-	    maybe (data, "Some parts of the binary do not record the PIC/PIE setting");
-	}
-      else
-	maybe (data, "The PIC/PIE setting was not recorded");
-    }
-  else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with PIC/PIE");
-    }
-  else if (! built_by_compiler ())
-    {
-      skip (data, "Test for PIC compilation.  (Not built by gcc/clang)");
-    }
-  else
-    {
-      maybe (data, "The PIC/PIE setting was not recorded");
-    }
-}
-
-static void
-show_PIE (annocheck_data * data, test * results)
-{
-  if (! built_by_compiler ())
-    skip (data, "Test for -pie.  (Not built with gcc/clang)");
-
-  else if (results->num_fail > 0)
-    fail (data, "Not linked as a position independent executable (ie need to add '-pie' to link command line)");
-
-  else /* Ignore maybe results - they should not happen.  */
-    pass (data, "Compiled as a position independent binary");
-}
-
-static void
-show_STACK_PROT (annocheck_data * data, test * results)
-{
-  if (results->num_fail > 0)
-    {
-      if (results->num_pass > 0 || results->num_maybe > 0)
-	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without a suffcient -fstack-protector setting");
-	  else
-	    fail (data, "Parts of the binary were compiled without a suffcient -fstack-protector setting.  Run with -v to see where");
-	}
-      else
-	fail (data, "The binary was compiled without -fstack-protector-strong");
-    }
-  else if (results->num_maybe > 0)
-    {
-      if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record the -fstack-protector setting.  Run with -v to see where");
-	  else
-	    maybe (data, "Some parts of the binary do not record the -fstack-protector setting");
-	}
-      else
-	maybe (data, "The -fstack-protector setting was not recorded");
-    }
-  else if (results->num_pass > 0)
-    {
-      pass (data, "Compiled with sufficient stack protection");
-    }
-  else if (! built_by_compiler ())
-    {
-      skip (data, "Test for stack protection.  (Not built by gcc/clang)");
-    }
-  else
-    {
-      maybe (data, "The -fstack-protector setting was not recorded");
-    }
-}
-
-static void
-show_STACK_CLASH (annocheck_data * data, test * results)
-{
-  if (per_file.e_machine == EM_ARM)
-    skip (data, "Test for stack clash support.  (Not enabled on the ARM)");
-
-  else if (! built_by_gcc ())
-    skip (data, "Test for stack clash support.  (Not built by gcc)");
-
-  else if (per_file.tool_info.version < 7)
-    skip (data, "Test for stack clash support.  (Needs gcc 7+)");
-
-  else if (results->num_fail > 0)
-    {
-      if (results->num_pass > 0 || results->num_maybe > 0)
-	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without stack clash protection");
-	  else
-	    fail (data, "Parts of the binary were compiled without stack clash protection.  Run with -v to see where");
-	}
-      else
-	fail (data, "The binary was compiled without -fstack-clash-protection");
-    }
-  else if (results->num_maybe > 0)
-    {
-      if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record -fstack-clash-protection.  Run with -v to see where");
-	  else
-	    maybe (data, "Some parts of the binary do not record -fstack-clash-protection");
-	}
-      else
-	maybe (data, "The stack clash protection setting was not recorded");
-    }
-
-  else if (results->num_pass > 0)
-    pass (data, "Compiled with -fstack-clash-protection");
-
-  else if (per_file.compiled_code_seen)
-    maybe (data, "The -fstack-clash-protection setting was not recorded");
-
-  else
-    skip (data, "Test for stack clash support.  (No GCC compiled object files)");
-}
-
-static void
-show_FORTIFY (annocheck_data * data, test * results)
-{
-  if (! built_by_compiler ())
-    skip (data, "Test for -D_FORTIFY_SOURCE=[2|3].  (Not built by gcc/clang)");
-
-  else if (results->num_fail > 0)
-    {
-      if (tests[TEST_LTO].num_pass > 0)
-	/* FIXME: This is wrong.  It only applies if -flto was used in the parts
-	   of the binary where -D_FORTIFY_SOURCE was not detected.  We ought
-	   to be checking this.  */
-	skip (data, "The -D_FORTIFY_SOURCE=[2|3] option was not seen (which happens when compiling with LTO enabled)");
-
-      else if (per_file.e_type == ET_REL)
-	{
-	  if (per_file.lang == LANG_OTHER || per_file.lang == LANG_UNKNOWN)
-	    skip (data, "Could not determine if -D_FORTIFY_SOURCE=[2|3] was used, but this may be because this is an object file compiled from a language that does not use C headers");
-	  else
-	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=[2|3] was used");	    
-	}
-
-      else if (results->num_pass > 0 || results->num_maybe > 0)
-	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=[2|3]");
-	  else
-	    fail (data, "Parts of the binary were compiled without -D_FORTIFY_SOURCE=[2|3].  Run with -v to see where");
-	}
-
-      else
-	fail (data, "The binary was compiled without -D_FORTIFY_SOURCE=[2|3]");
-    }
-
-  else if (results->num_maybe > 0)
-    {
-      if (per_file.e_type == ET_REL)
-	{
-	  if (per_file.lang == LANG_OTHER || per_file.lang == LANG_UNKNOWN)
-	    skip (data, "Could not determine if -D_FORTIFY_SOURCE=[2|3] was used, but this may be because this is an object file compiled from a language that does not use C headers");
-	  else
-	    maybe (data, "Could not determine if -D_FORTIFY_SOURCE=[2|3] was used");
-	}
-
-      else if (tests[TEST_LTO].num_pass > 0)
-	skip (data, "The -D_FORTIFY_SOURCE=[2|3] option was not seen (which happens when compiling with LTO enabled)");
-
-      /* If we know that we have seen -D_GLIBCXX_ASSERTIONS then we
-	 should also have seen -D_FORTIFY_SOURCE.  Hence its absence
-	 is a failure.  */
-      else if (tests[TEST_GLIBCXX_ASSERTIONS].num_pass > 0)
-	fail (data, "Some parts of the binary were compiled without -D_FORTIFY_SOURCE=[2|3] but with -D_GLIBCXX_ASSERTIONS");
-
-      else if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    fail (data, "Some parts of the binary were not compiled with -D_FORTIFY_SOURCE=[2|3].  Run with -v to see where");
-	  else
-	    fail (data, "Some parts of the binary were not compiled with -D_FORTIFY_SOURCE=[2|3]");
-	}
-
-      else
-	maybe (data, "The -D_FORTIFY_SOURCE=[2|3] option was not seen");
-    }
-
-  else if (results->num_pass > 0)
-    pass (data, "Compiled with -D_FORTIFY_SOURCE=[2|3]");
-
-  else if (tests[TEST_LTO].num_pass > 0)
-    skip (data, "The -D_FORTIFY_SOURCE=[2|3] option was not seen (which happens when compiling with LTO enabled)");
-
-  else if (per_file.compiled_code_seen)
-    maybe (data, "The -D_FORTIFY_SOURCE=[2|3] option was not seen");
-
-  else
-    skip (data, "Test for -D_FORTIFY_SOURCE.  (No GCC compiled object files)");
-}
-
-static void
-show_CF_PROTECTION (annocheck_data * data, test * results)
-{
-  if (per_file.e_machine != EM_386 && per_file.e_machine != EM_X86_64)
-    skip (data, "Test for control flow protection.  (Only supported on x86 binaries)");
-
-  else if (! built_by_compiler ())
-    skip (data, "Test for control flow protection.  (Not built by gcc/clang)");
-
-  else if (built_by_gcc () && per_file.tool_info.version < 8)
-    skip (data, "Test for control flow protection.  (Needs gcc v8+)");
-
-  else if (results->num_fail > 0)
-    {
-      if (results->num_pass > 0 || results->num_maybe > 0)
-	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without sufficient -fcf-protection");
-	  else
-	    fail (data, "Parts of the binary were compiled without sufficient -fcf-protection.  Run with -v to see where");
-	}
-      else
-	fail (data, "The binary was compiled without sufficient -fcf-protection");
-    }
-
-  else if (results->num_maybe > 0)
-    {
-      if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record whether -fcf-protection was used.  Run with -v to see where");
-	  else
-	    maybe (data, "Some parts of the binary do not record whether -fcf-protection was used");
-	}
-      else
-	maybe (data, "The -fcf-protection option was not seen");
-    }
-
-  else if (results->num_pass > 0)
-    pass (data, "Compiled with -fcf-protection");
-
-  else
-    maybe (data, "The -fcf-protection option was not seen");
-}
-
-static void
-show_GLIBCXX_ASSERTIONS (annocheck_data * data, test * results)
-{
-  if (results->num_fail > 0)
-    {
-      if (results->num_pass > 0 || results->num_maybe > 0 || ! built_by_compiler ())
-	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS");
-	  else
-	    fail (data, "Parts of the binary were compiled without -D_GLIBCXX_ASSRTIONS.  Run with -v to see where");
-	}
-      else if (per_file.lang == LANG_CXX || per_file.lang == LANG_UNKNOWN)
-	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
-      else
-	skip (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS but it is not written in C++");
-    }
-
-  else if (! built_by_compiler ())
-    skip (data, "Test for -D_GLIBCXX_ASSERTONS.  (Not built by gcc/clang)");
-
-  else if (results->num_maybe > 0)
-    {
-      if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record whether -D_GLIBCXX_ASSERTIONS was used.  Run with -v to see where");
-	  else
-	    maybe (data, "Some parts of the binary do not record whether -D_GLIBCXX_ASSERTIONS was used");
-	}
-
-      /* If we know that we have seen -D_FORTIFY_SOURCE then we should also
-	 have seen -D_GLIBCXX_ASSERTIONS.  Hence its absence is a failure.  */
-      else if (tests[TEST_FORTIFY].num_pass > 0)
-	fail (data, "The binary was compiled without -D_GLIBCXX_ASSERTIONS");
-
-      else if (tests[TEST_LTO].num_pass > 0)
-	skip (data, "The -D_GLIBCXX_ASSERTIONS option was not seen (which happens when compiling with LTO enabled)");
-
-      else
-	maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
-    }
-
-  else if (results->num_pass > 0)
-    pass (data, "Compiled with -D_GLIBCXX_ASSERTIONS");
-
-  else if (tests[TEST_LTO].num_pass > 0)
-    skip (data, "The -D_GLIBCXX_ASSERTIONS option was not seen (which happens when compiling with LTO enabled)");
-
-  else if (per_file.compiled_code_seen)
-    maybe (data, "The -D_GLIBCXX_ASSERTIONS option was not seen");
-
-  else
-    skip (data, "The test for -D_GLIBCXX_ASSERTIONS.  (No compiled code seen)");
-}
-
-static void
-show_STACK_REALIGN (annocheck_data * data, test * results)
-{
-  if (per_file.e_machine != EM_386)
-    skip (data, "Test for stack realignment support.  (Only needed on i686 binaries)");
-
-  else if (! built_by_gcc ())
-    skip (data, "Test for stack realignment support.  (Not built by gcc)");
-
-  else if (results->num_fail > 0)
-    {
-      if (results->num_pass > 0 || results->num_maybe > 0)
-	{
-	  if (BE_VERBOSE)
-	    fail (data, "Parts of the binary were compiled without -mstack-realign");
-	  else
-	    fail (data, "Parts of the binary were compiled without -mstack-realign.  Run with -v to see where");
-	}
-      else
-	fail (data, "The binary was compiled without -mstack-realign");
-    }
-  else if (results->num_maybe > 0)
-    {
-      if (results->num_pass > 0)
-	{
-	  if (! BE_VERBOSE)
-	    maybe (data, "Some parts of the binary do not record whether -mstack_realign was used.  Run with -v to see where");
-	  else
-	    maybe (data, "Some parts of the binary do not record whether -mstack_realign was used");
-	}
-      else
-	maybe (data, "The -mstack-realign option was not seen");
-    }
-
-  else if (results->num_pass > 0)
-    pass (data, "Compiled with -mstack_realign");
-
-  else
-    maybe (data, "The -mstack-realign option was not seen");
-}
 
 static bool
 finish (annocheck_data * data)
@@ -3930,7 +3217,7 @@ finish (annocheck_data * data)
     {
       struct checker hardened_notechecker =
 	{
-	 "Hardened",
+	 HARDENED_CHECKER_NAME,
 	 NULL,  /* start_file */
 	 interesting_note_sec,
 	 check_note_section,
@@ -3946,40 +3233,192 @@ finish (annocheck_data * data)
 	};
 
       /* There is a separate debuginfo file.  Scan it to see if there are any notes that we can use.  */
-      einfo (VERBOSE, "%s: info: Running subchecker on %s", data->filename, data->dwarf_filename);
+      einfo (VERBOSE2, "%s: info: running subchecker on %s", data->filename, data->dwarf_filename);
       annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, data->filename, data->dwarf_fd);
     }
 
-  if (! per_file.build_notes_seen && per_file.compiled_code_seen)
-    fail (data, "Build notes were not found for this executable");
+  if (! per_file.build_notes_seen && is_C_compiler (per_file.seen_tools))
+    fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "Annobin notes were not found");
 
   if (! ignore_gaps)
     {
-      if (per_file.e_type == ET_REL)
-	skip (data, "Not checking for gaps (object file)");
-      else if (! built_by_compiler () && ! built_by_assembler ())
-	skip (data, "Not checking for gaps (binary created by a tool without an annobin plugin)");
+      if (is_object_file ())
+	einfo (VERBOSE, "%s: Not checking for gaps (object file)", data->filename);
+      else if (! is_C_compiler (per_file.seen_tools) && ! includes_assembler (per_file.seen_tools))
+	einfo (VERBOSE, "%s: Not checking for gaps (binary created by a tool without an annobin plugin)",
+	       data->filename);
       else
 	check_for_gaps (data);
     }
 
+  if (per_file.seen_tools == TOOL_UNKNOWN)
+    per_file.seen_tools = per_file.current_tool;
+
   int i;
   for (i = 0; i < TEST_MAX; i++)
     {
-      if (tests[i].enabled)
+      if (! tests[i].enabled)
+	continue;
+
+      if (tests[i].state == STATE_UNTESTED)
 	{
-	  tests[i].show_result (data, tests + i);
-	  einfo (VERBOSE2, " Use --skip-%s to disable this test", tests[i].name);
+	  switch (i)
+	    {
+	    case TEST_GNU_STACK:
+	    case TEST_NOTES:
+	    case TEST_LTO:
+	    case TEST_ENTRY:
+	    case TEST_SHORT_ENUM:
+	    case TEST_DYNAMIC_SEGMENT:
+	    case TEST_RUN_PATH:
+	    case TEST_RWX_SEG:
+	    case TEST_TEXTREL:
+	    case TEST_THREADS:
+	    case TEST_WRITEABLE_GOT:
+	      /* The absence of a result for these tests actually means that they have passed.  */
+	      pass (data, i, SOURCE_FINAL_SCAN, NULL);
+	      break;
+
+	    case TEST_BIND_NOW:
+	      if (! is_executable ())
+		skip (data, i, SOURCE_FINAL_SCAN, "only needed for executables");
+	      else if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_UNTESTED)
+		skip (data, i, SOURCE_FINAL_SCAN, "no dynamic segment present");
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "no dynamic relocs found");
+	      break;
+
+	    case TEST_GNU_RELRO:
+	      if (is_object_file ())
+		skip (data, i, SOURCE_FINAL_SCAN, "not needed in object files");
+	      else if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_UNTESTED)
+		skip (data, i, SOURCE_FINAL_SCAN, "no dynamic segment present");
+	      else if (tests [TEST_BIND_NOW].state == STATE_UNTESTED)
+		skip (data, i, SOURCE_FINAL_SCAN, "no dynamic relocations");
+	      else if (per_file.seen_tools & TOOL_GO)
+		/* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
+		skip (data, i, SOURCE_FINAL_SCAN, "built by GO");
+	      else
+		fail (data, i, SOURCE_FINAL_SCAN, "Not linked with -Wl,-z,relro");
+	      break;
+
+	    case TEST_DYNAMIC_TAGS:
+	      if (per_file.e_machine != EM_AARCH64)
+		skip (data, i, SOURCE_FINAL_SCAN, "AArch64 specific");
+	      else if (is_object_file ())
+		skip (data, i, SOURCE_FINAL_SCAN, "not needed in object files");
+	      else
+		future_fail (data, "no dynamic tags found");
+	      break;
+
+	    case TEST_GLIBCXX_ASSERTIONS:
+	      if (per_file.lang != LANG_UNKNOWN && per_file.lang != LANG_CXX)
+		{
+		  skip (data, i, SOURCE_FINAL_SCAN, "source language not C++");
+		  break;
+		}
+	      /* Fall through.  */
+	    case TEST_WARNINGS:
+	    case TEST_FORTIFY:
+	      if (tests[TEST_LTO].state == STATE_PASSED)
+		{
+		  skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides preprocessor and warning options");
+		  break;
+		}
+	      else if (is_C_compiler (per_file.seen_tools))
+		{
+		  fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used");
+		  break;
+		}
+	      /* Fall through.  */
+	    default:
+	      /* Do not complain about compiler specific tests being missing
+		 if all that we have seen is assembler produced code.  */
+	      if (per_file.seen_tools == TOOL_GAS
+		  || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
+		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
+	      /* There may be notes on this test, but the are for a zero-length range.  */
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
+	      break;
+
+	    case TEST_STACK_CLASH:
+	      if (per_file.e_machine == EM_ARM)
+		skip (data, i, SOURCE_FINAL_SCAN, "not support on ARM architectures");
+	      else if (per_file.seen_tools == TOOL_GAS
+		       || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
+		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this test");
+	    break;
+
+	    case TEST_PROPERTY_NOTE:
+	      if (! supports_property_notes (per_file.e_machine))
+		skip (data, i, SOURCE_FINAL_SCAN, "property notes not used");
+	      else if (is_object_file ())
+		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed in object files");
+	      else if (per_file.e_machine == EM_AARCH64)
+		future_fail (data, ".note.gnu.property section not found");
+	      else
+		fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section found");
+	      break;
+
+	    case TEST_CF_PROTECTION:
+	      if (is_x86 () && is_executable ())
+		{
+		  if (tests[TEST_PROPERTY_NOTE].enabled
+		      && tests[TEST_PROPERTY_NOTE].state == STATE_UNTESTED)
+		    fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section = no control flow information");
+		  else
+		    fail (data, i, SOURCE_FINAL_SCAN, "control flow protection is not enabled");
+		}
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "not an x86 executable");
+	      break;
+
+	    case TEST_STACK_REALIGN:
+	      if (per_file.seen_tools == TOOL_GAS
+		  || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
+		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
+	      else if (per_file.e_machine == EM_386)
+		fail  (data, i, SOURCE_FINAL_SCAN, "stack realign support is mandatory");
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "not an x86 executable");
+	      break;
+
+	    case TEST_BRANCH_PROTECTION:
+	      if (per_file.e_machine != EM_AARCH64)
+		skip (data, i, SOURCE_FINAL_SCAN, "not an AArch64 binary");
+	      else if (! includes_gcc (per_file.seen_tools))
+		skip (data, i, SOURCE_FINAL_SCAN, "not built by gcc");
+	      else if (per_file.tool_version < 9)
+		skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
+	      else
+		/* FIXME: Only inform the user for now.  Once -mbranch-protection has
+		   been added to the rpm macros then change this result to a maybe().  */
+		/* maybe (data, "The -mbranch-protection setting was not recorded");  */
+		future_fail (data, "The -mbranch-protection setting was not recorded");
+	      break;
+	    }
 	}
-      else
-	einfo (VERBOSE, "%s: skip: %s", data->filename, tests[i].description);
     }
 
   if (per_file.num_fails > 0)
-    return false;
+    {
+      static bool tell_rerun = true;
+      if (! BE_VERBOSE && tell_rerun)
+	{
+	  einfo (INFO, "Rerun annocheck with --verbose to see more information on the tests");
+	  tell_rerun = false;
+	}
+      return false;
+    }
 
   if (per_file.num_maybes > 0)
     return false; /* FIXME: Add an option to ignore MAYBE results ? */
+
+  if (BE_VERBOSE)
+    return true;
 
   return einfo (INFO, "%s: PASS", data->filename);
 }
@@ -3987,7 +3426,7 @@ finish (annocheck_data * data)
 static void
 version (void)
 {
-  einfo (INFO, "Version 1.3");
+  einfo (INFO, "Version 1.4");
 }
 
 static void
@@ -4010,8 +3449,10 @@ usage (void)
   einfo (INFO, "    --disable-hardened        Disables the hardening checker");
   einfo (INFO, "    --enable-hardened         Reenables the hardening checker");
 
-  einfo (INFO, "  Still to do:");
-  einfo (INFO, "    Add a machine readable output mode");
+  einfo (INFO, "   The tool will generate messages based upon the verbosity level");
+  einfo (INFO, "   but the format is not fixed.  In order to have a consistent");
+  einfo (INFO, "   output enable this option:");
+  einfo (INFO, "     --fixed-format-messages");
 }
 
 static bool
@@ -4097,13 +3538,19 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return true;
     }
 
+  if (streq (arg, "--fixed-format-messages"))
+    {
+      fixed_format_messages = true;
+      return true;
+    }
+
   return false;
 }
 
 
 struct checker hardened_checker =
 {
-  "Hardened",
+  HARDENED_CHECKER_NAME,
   start,
   interesting_sec,
   check_sec,

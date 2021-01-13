@@ -3,7 +3,7 @@ annobin.texi.
 
 This file documents the annobin plugin on the Fedora system.
 
-   Copyright (C) 2018 - 2020 Red Hat.
+   Copyright (C) 2018 - 2021 Red Hat.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -344,7 +344,44 @@ File: annobin.info,  Node: The Version Encoding,  Next: The STACK Encoding,  Up:
 
 The 'version' note encodes the version of the Watermark specification
 used and the version of the tool used to generate the notes.  Typically
-the protocol version will be 3 and the plugin version will be 5.
+the protocol version will be 3 and the plugin version will be 9.  It
+also encodes the tool used to generate the notes as a single character.
+The following characters are used:
+
+'L'
+     The notes have been produced by the Clang plugin.
+
+'V'
+     The notes have been produced by the LLVM plugin.
+
+'a'
+     The notes have been produced by the assembler.
+
+'c'
+     The notes have been produced by the gcc plugin for the .text.cold
+     section.
+
+'e'
+     The notes have been produced by the gcc plugin for the .text.exit
+     section.
+
+'g'
+     The notes have been produced by the gcc plugin when running in LTO
+     mode.
+
+'h'
+     The notes have been produced by the gcc plugin for the .text.hot
+     section.
+
+'l'
+     The notes have been produced by the linker.
+
+'p'
+     The notes have been produced by the gcc plugin.
+
+'s'
+     The notes have been produced by the gcc plugin for the
+     .text.startup section.
 
 
 File: annobin.info,  Node: The STACK Encoding,  Next: The PIC Encoding,  Prev: The Version Encoding,  Up: Examining
@@ -694,6 +731,7 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-test-all]
        [-test-future]
        [-ignore-gaps]
+       [-fixed-format-messages]
        [-disable-hardened]
        [-enable-hardened]
        FILE...
@@ -828,6 +866,25 @@ code to support the test.
 
 '--disable-hardened'
      Disable the tool.
+
+'--ignore-gaps'
+     Do not complain about gaps in the note data.
+
+'--fixed-format-messages'
+     Display messages in a fixed, machine parseable format.  The format
+     is:
+
+          Hardened: <result>: test: <test-name> file: <file-name>
+
+     Where '<result>' is _PASS_ or _FAIL_ and '<test-name>' is the name
+     of the test, which is the same as the name used in the
+     '--test-<test-name>' option.  The '<filename>' is the name of the
+     input file, but with any special characters replaced so that it
+     always fits on one line.
+
+     Here is an example:
+
+            Hardened: FAIL: test: pie file: a.out.
 
 
 File: annobin.info,  Node: Notes,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
@@ -1912,25 +1969,25 @@ Node: Introduction1785
 Node: Plugins3834
 Node: Examining11485
 Node: The Version Encoding14214
-Node: The STACK Encoding14605
-Node: The PIC Encoding15203
-Node: The GOW Encoding15831
-Node: The CF Encoding17634
-Node: The ENUM Encoding18706
-Node: The INSTRUMENT Encoding19095
-Node: Annocheck20469
-Node: Built-By22998
-Node: Hardened24528
-Node: Notes30270
-Node: Section-Size30914
-Node: Timing33068
-Node: Configure Options33715
-Node: Legacy Scripts36000
-Node: Who Built Me36775
-Node: ABI Checking39535
-Node: Hardening Checks41649
-Node: Checking Archives45735
-Node: GNU FDL48157
+Node: The STACK Encoding15454
+Node: The PIC Encoding16052
+Node: The GOW Encoding16680
+Node: The CF Encoding18483
+Node: The ENUM Encoding19555
+Node: The INSTRUMENT Encoding19944
+Node: Annocheck21318
+Node: Built-By23847
+Node: Hardened25377
+Node: Notes31774
+Node: Section-Size32418
+Node: Timing34572
+Node: Configure Options35219
+Node: Legacy Scripts37504
+Node: Who Built Me38279
+Node: ABI Checking41039
+Node: Hardening Checks43153
+Node: Checking Archives47239
+Node: GNU FDL49661
 
 End Tag Table
 

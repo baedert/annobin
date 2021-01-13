@@ -1,5 +1,5 @@
 /* Displays the Annobin notes in binary files.
-   Copyright (c) 2019-2020 Red Hat.
+   Copyright (c) 2019-2021 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -42,8 +42,6 @@ static uint          num_allocated_notes = 0;
 static bool
 notes_start_file (annocheck_data * data)
 {
-  assert (saved_notes == NULL && num_saved_notes == 0 && num_allocated_notes == 0);
-
   if (data->is_32bit)
     {
       Elf32_Ehdr * hdr = elf32_getehdr (data->elf);
@@ -81,7 +79,7 @@ record_new_range (ulong start, ulong end)
   saved_end   = end;
 }
 
-#define RANGE_ALLOC_DELTA    16
+#define RANGE_ALLOC_DELTA    32
 
 static void
 record_note (uint value, const char * data, bool open)
@@ -305,7 +303,8 @@ notes_end_file (annocheck_data * data)
   if (disabled)
     return true;
 
-  einfo (VERBOSE, "%u notes found", num_saved_notes);
+  einfo (PARTIAL, "\n");
+  einfo (VERBOSE, "%s: %u notes found", data->filename, num_saved_notes);
 
   /* Sort the saved notes.  */
   qsort (saved_notes, num_saved_notes, sizeof saved_notes[0], compare_range);
@@ -341,7 +340,26 @@ notes_end_file (annocheck_data * data)
 	{
 	case GNU_BUILD_ATTRIBUTE_VERSION:
 	  if (value == -1)
-	    einfo (PARTIAL, "Version: %s\n", note->data + 1);
+	    {
+	      einfo (PARTIAL, "Version: %s", note->data + 1);
+
+	      switch (note->data[2])
+		{
+		case ANNOBIN_TOOL_ID_CLANG:       einfo (PARTIAL, " [clang]"); break;
+		case ANNOBIN_TOOL_ID_LLVM:        einfo (PARTIAL, " [llvm]"); break;
+		case ANNOBIN_TOOL_ID_ASSEMBLER:   einfo (PARTIAL, " [gas]"); break;
+		case ANNOBIN_TOOL_ID_LINKER:      einfo (PARTIAL, " [linker]"); break;
+		case ANNOBIN_TOOL_ID_GCC:         einfo (PARTIAL, " [gcc]"); break;
+		case ANNOBIN_TOOL_ID_GCC_COLD:    einfo (PARTIAL, " [gcc:.text.cold]"); break;
+		case ANNOBIN_TOOL_ID_GCC_HOT:     einfo (PARTIAL, " [gcc:.text.hot]"); break;
+		case ANNOBIN_TOOL_ID_GCC_STARTUP: einfo (PARTIAL, " [gcc:.text.startup]"); break;
+		case ANNOBIN_TOOL_ID_GCC_EXIT:    einfo (PARTIAL, " [gcc:.text.exit]"); break;
+		case ANNOBIN_TOOL_ID_GCC_LTO:     einfo (PARTIAL, " [gcc in LTO mode]"); break;
+		default:                          einfo (PARTIAL, " [??]"); break;
+		}
+
+	      einfo (PARTIAL, "\n");
+	    }
 	  else
 	    einfo (PARTIAL, "Version: %x (?)\n", value);
 	  break;
@@ -447,6 +465,8 @@ notes_end_file (annocheck_data * data)
 		{
 		case 255:
 		  einfo (PARTIAL, "not detected\n"); break;
+		case 254:
+		  einfo (PARTIAL, "hidden by LTO compilation\n"); break;
 		default:
 		  einfo (PARTIAL, "*unknown (%d)*\n", value); break;
 		case 0:
@@ -592,7 +612,8 @@ notes_end_file (annocheck_data * data)
   /* Free up the notes.  */
   free (saved_notes);
   num_saved_notes = num_allocated_notes = 0;
-  
+  saved_notes = NULL;
+
   return true;
 }
 

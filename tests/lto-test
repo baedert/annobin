@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2017-2020 Red Hat.
+# Copyright (c) 2017-2021 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -35,4 +35,12 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
 
 # Run annocheck, but only enable the LTO test.
 
-$ANNOCHECK -v --ignore-gaps --skip-all --test-lto lto-test.exe | grep -e "PASS: Compiled with LTO enabled"
+$ANNOCHECK -v --ignore-gaps --skip-all --test-lto lto-test.exe --fixed-format-messages > lto-test.out
+
+grep -e "PASS: test: lto" lto-test.out
+if [ $? != 0 ];
+then
+    echo "lto-test: FAIL: did not detect LTO compilation"
+    cat lto-test.out
+    exit 1
+fi
