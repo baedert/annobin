@@ -227,6 +227,16 @@ accept all of these options.  The options are:
 'no-static-notes'
      These options are deprecated.
 
+'ppc64-nops'
+'no-ppc64-nops'
+     This option either enables or disables the insertion of NOP
+     instructions in the some of the code sections of PowerPC64
+     binaries.  This is necessary to avoid problems with the 'elflint'
+     program which will complain about binaries built without this
+     option enabled.  The option is enabled by default, but since it
+     does increase the size of compiled programs by a small amount, the
+     'no-ppc64-nops' is provided in order to turn it off.
+
    The plugins record information appropriate to the compiler that is
 running them.  So the 'gcc' plugin records information about the
 following options:
@@ -1967,27 +1977,27 @@ Tag Table:
 Node: Top705
 Node: Introduction1785
 Node: Plugins3834
-Node: Examining11485
-Node: The Version Encoding14214
-Node: The STACK Encoding15454
-Node: The PIC Encoding16052
-Node: The GOW Encoding16680
-Node: The CF Encoding18483
-Node: The ENUM Encoding19555
-Node: The INSTRUMENT Encoding19944
-Node: Annocheck21318
-Node: Built-By23847
-Node: Hardened25377
-Node: Notes31774
-Node: Section-Size32418
-Node: Timing34572
-Node: Configure Options35219
-Node: Legacy Scripts37504
-Node: Who Built Me38279
-Node: ABI Checking41039
-Node: Hardening Checks43153
-Node: Checking Archives47239
-Node: GNU FDL49661
+Node: Examining11981
+Node: The Version Encoding14710
+Node: The STACK Encoding15950
+Node: The PIC Encoding16548
+Node: The GOW Encoding17176
+Node: The CF Encoding18979
+Node: The ENUM Encoding20051
+Node: The INSTRUMENT Encoding20440
+Node: Annocheck21814
+Node: Built-By24343
+Node: Hardened25873
+Node: Notes32270
+Node: Section-Size32914
+Node: Timing35068
+Node: Configure Options35715
+Node: Legacy Scripts38000
+Node: Who Built Me38775
+Node: ABI Checking41535
+Node: Hardening Checks43649
+Node: Checking Archives47735
+Node: GNU FDL50157
 
 End Tag Table
 

@@ -56,6 +56,10 @@ int            plugin_is_GPL_compatible;
    targets that disable the plugin because they do not want it.  */
 static bool    enabled = true;
 
+/* Enable a workaround for problems building elfutils for the PPC64.
+   Inserts extra NOP instructions into the generated code.  */
+static bool    enable_ppc64_nops = true;
+
 /* True if the symbols used to map addresses to file names should be global.
    On some architectures these symbols have to be global so that they will
    be preserved in object files.  But doing so can prevent the build-id
@@ -129,11 +133,12 @@ static const char *   help_string =  N_("Supported options:\n\
    version                Print out the version of the plugin\n\
    verbose                Be talkative about what is going on\n\
    function-verbose       Report the creation of function specific notes\n\
-   [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
-   [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
-   [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
-   [no-]link-order        Do [do not] attempt to join note sections to code sections using link_order attributes\n\
    [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n\
+   [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
+   [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
+   [no-]link-order        Do [do not] attempt to join note sections to code sections using link_order attributes\n\
+   [no-]ppc64-nops        Do [do not] insert NOP instructions into some PPC64 sections.  (Default: do not)\n\
+   [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
    rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n\
    stack-threshold=N      Only create function specific stack size notes when the size is > N.");
 
@@ -1704,6 +1709,12 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 	 when the symbol's address is being used to compute a range for the
 	 notes.  */
       fprintf (asm_out_file, "\t.set %s%s, . + %d\n", annobin_output_filesym, suffix, target_start_sym_bias);
+
+      /* FIXME: A workaround for BZ 1880634.
+	 Ensure that we do not have empty special text sections so that the
+	 annobin start symbols are never beyond the end of the sections.  */
+      if (suffix && enable_ppc64_nops)
+	annobin_emit_asm ("nop", "Inserted by the annobin plugin.  Disable with -fplugin-arg-annobin-no-ppc64-nops");
     }
   else
     fprintf (asm_out_file, "\t.equiv %s%s, .\n", annobin_output_filesym, suffix);
@@ -2432,6 +2443,11 @@ parse_args (unsigned argc, struct plugin_argument * argv)
       else if (streq (key, "no-active-checks"))
 	annobin_active_checks = false;
 
+      else if (streq (key, "ppc64-nops"))
+	enable_ppc64_nops = true;
+      else if (streq (key, "no-ppc64-nops"))
+	enable_ppc64_nops = false;
+      
       else if (streq (key, "stack-threshold"))
 	{
 	  stack_threshold = strtoul (argv[argc].value, NULL, 0);

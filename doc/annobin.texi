@@ -294,6 +294,16 @@ fully functional.
 @itemx no-static-notes
 These options are deprecated.
 
+@item ppc64-nops
+@itemx no-ppc64-nops
+This option either enables or disables the insertion of NOP
+instructions in the some of the code sections of PowerPC64 binaries.
+This is necessary to avoid problems with the @code{elflint} program
+which will complain about binaries built without this option enabled.
+The option is enabled by default, but since it does increase the size
+of compiled programs by a small amount, the @option{no-ppc64-nops} is
+provided in order to turn it off.
+
 @end table
 @c man end
 

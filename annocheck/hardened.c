@@ -149,10 +149,11 @@ enum test_state
 typedef struct test
 {
   bool	            enabled;	  /* If false then do not run this test.  */
+  bool              skipped;      /* True is a skip message has been issued for this test.  */
+  bool              result_announced;
   enum test_state   state;
   const char *      name;	  /* Also used as part of the command line option to disable the test.  */
   const char *      description;  /* Used in the --help output to describe the test.  */
-  bool              result_announced;
 } test;
 
 enum test_index
@@ -189,7 +190,7 @@ enum test_index
 };
 
 #define TEST(name,upper,description) \
-  [ TEST_##upper ] = { true, STATE_UNTESTED, #name, description, false }
+  [ TEST_##upper ] = { true, false, false, STATE_UNTESTED, #name, description }
 
 /* Array of tests to run.  Default to enabling them all.
    The result field is initialised in the start() function.  */
@@ -644,6 +645,11 @@ skip (annocheck_data * data, uint testnum, const char * source, const char * rea
   if (tests[testnum].state == STATE_UNTESTED)
     tests[testnum].state = STATE_MAYBE; /* FIXME - this is to stop final() from complaining that the test was not seen.  Maybe use a new state ?  */
   
+  if (tests[testnum].skipped)
+    return;
+  
+  tests[testnum].skipped = true;
+
   if (fixed_format_messages)
     return;
 
