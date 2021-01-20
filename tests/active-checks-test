@@ -19,8 +19,6 @@ PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach -fplugin-arg-annobin-active-checks"
 
-OPTS="-c"
-
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $OPTS $srcdir/hello.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $srcdir/hello.c -Werror -flto
 
 # FIXME: Add regexps to check for the expected failure messages

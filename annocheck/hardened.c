@@ -2443,7 +2443,7 @@ check_dynamic_section (annocheck_data *    data,
   else if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_PASSED)
     fail (data, TEST_DYNAMIC_SEGMENT, SOURCE_DYNAMIC_SECTION, "multiple dynamic sections detected");
 
-  size_t num_entries = sec->shdr.sh_size == 0 / sec->shdr.sh_entsize;
+  size_t num_entries = sec->shdr.sh_size / sec->shdr.sh_entsize;
 
   /* Walk the dynamic tags.  */
   while (num_entries --)
@@ -2481,6 +2481,19 @@ check_dynamic_section (annocheck_data *    data,
 	  break;
 
 	case DT_RPATH:
+	  {
+	    if (skip_check (TEST_RUN_PATH))
+	      break;
+
+	    const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
+
+	    if (not_rooted_at_usr (path))
+	      fail (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, NULL);
+	    else
+	      vfuture_fail (data, "The RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead");
+	  }
+	  break;
+
 	case DT_RUNPATH:
 	  {
 	    if (skip_check (TEST_RUN_PATH))

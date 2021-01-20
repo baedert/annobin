@@ -89,8 +89,10 @@ bool                  annobin_is_64bit = false;
 /* True if the creation of function specific notes should be reported.  */
 static bool           annobin_function_verbose = false;
 
-/* True if annobin should generate gcc errors if gcc command line options are wrong.  */
-static bool           annobin_active_checks = false;
+/* 1 if annobin should generate gcc warnings if gcc command line options are wrong.
+   2 if it should generate errors.
+   0 if it should do nothing.  */
+static uint           annobin_active_checks = 1;
 
 enum attach_type
 {
@@ -133,7 +135,7 @@ static const char *   help_string =  N_("Supported options:\n\
    version                Print out the version of the plugin\n\
    verbose                Be talkative about what is going on\n\
    function-verbose       Report the creation of function specific notes\n\
-   [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: do not)\n\
+   [no-]active-checks     Do [do not] generate errors if gcc command line options are wrong.  (Default: warn)\n\
    [no-]attach            Do [do not] attempt to attach function sections to group sections\n\
    [no-]global-file-syms  Create global [or local] file name symbols (default: local)\n\
    [no-]link-order        Do [do not] attempt to join note sections to code sections using link_order attributes\n\
@@ -1977,6 +1979,21 @@ ends_with (const char * string, const char * terminator)
 }
 
 static void
+annobin_active_check (const char * message)
+{
+  // FIXME - for some reason the prototype of warning() in diagnostic-core.h
+  // does not match the implementation.  So we use our own prototype here.
+  extern bool warning (int, const char *, ...);
+
+  if (annobin_active_checks == 1)
+    // FIXME: We should find an OPT_ value to use here so
+    // that users can disable these warnings if they need to.
+    warning (0, "%s", message);
+  else if (annobin_active_checks == 2)
+    error ("%s", message);
+}
+
+static void
 annobin_create_global_notes (void * gcc_data, void * user_data)
 {
   if (asm_out_file == NULL)
@@ -2021,10 +2038,12 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   global_stack_clash_option = GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection);
 #endif
 
+#if 0
 #ifdef flag_cf_protection
   global_cf_option = GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_);
-  if (annobin_active_checks && ((global_cf_option & CF_FULL) == 0))
-    error ("-fcf-protection=full needed");
+  if ((global_cf_option & CF_FULL) == 0)
+    annobin_active_check error ("-fcf-protection=full needed");
+#endif
 #endif
 
   global_stack_prot_option = GET_INT_OPTION_BY_INDEX (OPT_fstack_protector);
@@ -2033,10 +2052,11 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
   global_GOWall_options = compute_GOWall_options ();
   global_omit_frame_pointer = GET_INT_OPTION_BY_INDEX (OPT_fomit_frame_pointer);
 
-  if (annobin_active_checks
-      && annobin_get_optimize () < 2
+#if 0
+  if (annobin_get_optimize () < 2
       && ! annobin_get_optimize_debug ())
-    error ("optimization level is too low!");
+    annobin_active_check ("optimization level is too low!");
+#endif
   
   /* Look for -D _FORTIFY_SOURCE=<n> and -D_GLIBCXX_ASSERTIONS on the
      original gcc command line.  Scan backwards so that we record the
@@ -2188,23 +2208,10 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 	 preprocessed input and non-preprocessed input.*/
       if (global_fortify_level < 2)
 	{
-#if 0
 	  if (global_fortify_level == -1)
-	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE not defined"));
+	    annobin_active_check ("-D_FORTIFY_SOURCE not defined");
 	  else
-	    annobin_inform (INFORM_ALWAYS, _("Warning: -D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
-#else
-	  // FIXME - for some reason the prototype of warning() in diagnostic-core.h
-	  // does not match the implementation.  So we use our own prototype here.
-	  extern bool warning (int, const char *, ...);
-
-	  // FIXME: We should find an OPT_ value to use here so that users can
-	  // disable this warning if they need to.
-	  if (global_fortify_level == -1)
-	    warning (0, _("-D_FORTIFY_SOURCE not defined"));
-	  else
-	    warning (0, _("-D_FORTIFY_SOURCE defined as %d"), global_fortify_level);
-#endif
+	    annobin_active_check ("-D_FORTIFY_SOURCE defined but value is too low");
 	  warned = true;
 	}
 
@@ -2439,9 +2446,9 @@ parse_args (unsigned argc, struct plugin_argument * argv)
 	annobin_attach_type = none;
 
       else if (streq (key, "active-checks"))
-	annobin_active_checks = true;
+	annobin_active_checks = 2;
       else if (streq (key, "no-active-checks"))
-	annobin_active_checks = false;
+	annobin_active_checks = 0;
 
       else if (streq (key, "ppc64-nops"))
 	enable_ppc64_nops = true;

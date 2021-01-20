@@ -15,8 +15,10 @@
 #include "annobin-global.h"
 #include "annobin.h"
 
+#ifndef GNU_PROPERTY_X86_ISA_1_USED
 #define GNU_PROPERTY_X86_ISA_1_USED		0xc0000000
 #define GNU_PROPERTY_X86_ISA_1_NEEDED		0xc0000001
+#endif
 
 #define GNU_PROPERTY_X86_ISA_1_486           (1U << 0)
 #define GNU_PROPERTY_X86_ISA_1_586           (1U << 1)

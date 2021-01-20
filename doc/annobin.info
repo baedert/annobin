@@ -212,14 +212,20 @@ accept all of these options.  The options are:
 
 'active-checks'
 'no-active-checks'
-     The 'active-checks' option enables compile time checking by the
-     annobin plugin.  The plugin will actively examine the gcc command
-     line and generate errors if required security options are missing
-     or have the wrong value.  The default is not to perform these
-     checkes.
+     The annobin plugin will normally generate a warning message if it
+     detects that the '-D_FORTIFY_SOURCE=2' has not been provided on the
+     command line and '-flto' has been enabled.  This is because LTO
+     compilation hides preprocessor options, so information about them
+     cannot be passed on to the 'annocheck' tool.
 
-     Note - this option is currently under development, and is not yet
-     fully functional.
+     The 'active-checks' option changes the warning message into an
+     error message, just as if '-Werror' had been specified.
+
+     The 'no-active-checks' option disables the warning message
+     entirely.
+
+     Note - in the future the annobin plugin might be extended to
+     produce warning messages for other missing command line options.
 
 'dynamic-notes'
 'no-dynamic-notes'
@@ -1977,27 +1983,27 @@ Tag Table:
 Node: Top705
 Node: Introduction1785
 Node: Plugins3834
-Node: Examining11981
-Node: The Version Encoding14710
-Node: The STACK Encoding15950
-Node: The PIC Encoding16548
-Node: The GOW Encoding17176
-Node: The CF Encoding18979
-Node: The ENUM Encoding20051
-Node: The INSTRUMENT Encoding20440
-Node: Annocheck21814
-Node: Built-By24343
-Node: Hardened25873
-Node: Notes32270
-Node: Section-Size32914
-Node: Timing35068
-Node: Configure Options35715
-Node: Legacy Scripts38000
-Node: Who Built Me38775
-Node: ABI Checking41535
-Node: Hardening Checks43649
-Node: Checking Archives47735
-Node: GNU FDL50157
+Node: Examining12275
+Node: The Version Encoding15004
+Node: The STACK Encoding16244
+Node: The PIC Encoding16842
+Node: The GOW Encoding17470
+Node: The CF Encoding19273
+Node: The ENUM Encoding20345
+Node: The INSTRUMENT Encoding20734
+Node: Annocheck22108
+Node: Built-By24637
+Node: Hardened26167
+Node: Notes32564
+Node: Section-Size33208
+Node: Timing35362
+Node: Configure Options36009
+Node: Legacy Scripts38294
+Node: Who Built Me39069
+Node: ABI Checking41829
+Node: Hardening Checks43943
+Node: Checking Archives48029
+Node: GNU FDL50451
 
 End Tag Table
 

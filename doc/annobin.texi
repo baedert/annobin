@@ -280,13 +280,20 @@ same executable, which can be useful for debugging and build testing.
 
 @item active-checks
 @item no-active-checks
-The @option{active-checks} option enables compile time checking by
-the annobin plugin.  The plugin will actively examine the gcc command
-line and generate errors if required security options are missing or
-have the wrong value.  The default is not to perform these checkes.
+The annobin plugin will normally generate a warning message if it
+detects that the @option{-D_FORTIFY_SOURCE=2} has not been provided on
+the command line and @option{-flto} has been enabled.  This is because
+LTO compilation hides preprocessor options, so information about them
+cannot be passed on to the @command{annocheck} tool.
 
-Note - this option is currently under development, and is not yet
-fully functional.
+The @option{active-checks} option changes the warning message into an
+error message, just as if @option{-Werror} had been specified.
+
+The @option{no-active-checks} option disables the warning message
+entirely.
+
+Note - in the future the annobin plugin might be extended to produce
+warning messages for other missing command line options.
 
 @item dynamic-notes
 @itemx no-dynamic-notes
