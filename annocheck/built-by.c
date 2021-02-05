@@ -109,7 +109,7 @@ parse_tool (const char * tool, const char ** program, const char ** version, con
      { STR_AND_LEN ("GNU C17 "), "gcc" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("GNU Fortran2008 "), "gfortran" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("rustc version "), "rust" }, /* DW_AT_producer.  */
-     { STR_AND_LEN ("Go cmd/compile "), "go" }, /* DW_AT_producer.  */
+     { STR_AND_LEN ("Go cmd/compile go"), "go" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("GNU AS "), "as" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("Guile "), "guile" }, /* DW_AT_producer.  */
      { STR_AND_LEN ("GHC "), "ghc" }, /* DW_AT_producer.  */
@@ -242,7 +242,11 @@ builtby_check_sec (annocheck_data *     data,
     return annocheck_walk_notes (data, sec, builtby_note_walker, (void *) data->filename);
 
   if (streq (sec->secname, ".note.go.buildid"))
-    found (".note.go.buildid", data->filename, "Go cmd/compile ?.?.?");
+    /* FIXME: We use a different name for the language here (Go) because the note does
+       not contain any version information.  The DW_AT_producer string does contain
+       version info, but it is checked after this tesst, and we do not want the found()
+       function to think that "go" has already been found.  */
+    found (".note.go.buildid", data->filename, "Go");
 
   return true; /* Allow the search to continue.  */
 }

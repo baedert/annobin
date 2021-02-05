@@ -26,6 +26,7 @@
 
 /* Predefined names for all of the sources of information scanned by this checker.  */
 #define SOURCE_ANNOBIN_NOTES    "annobin notes"
+#define SOURCE_DW_AT_LANGUAGE   "DW_AT_language string"
 #define SOURCE_DW_AT_PRODUCER   "DW_AT_producer string"
 #define SOURCE_DYNAMIC_SECTION  "dynamic section"
 #define SOURCE_DYNAMIC_SEGMENT  "dynamic segment"
@@ -67,6 +68,8 @@ enum lang
   LANG_UNKNOWN = 0,
   LANG_C,
   LANG_CXX,
+  LANG_GO,
+  LANG_RUST,
   LANG_OTHER
 };
 
@@ -170,7 +173,9 @@ enum test_index
   TEST_GLIBCXX_ASSERTIONS,
   TEST_GNU_RELRO,
   TEST_GNU_STACK,
+  TEST_GO_REVISION,
   TEST_LTO,
+  TEST_ONLY_GO,
   TEST_OPTIMIZATION,
   TEST_PIC,
   TEST_PIE,
@@ -188,6 +193,10 @@ enum test_index
 
   TEST_MAX
 };
+
+#define MIN_GO_REVISION 14
+#define STR(a) #a
+#define MIN_GO_REV_STR(a,b,c) a STR(b) c
 
 #define TEST(name,upper,description) \
   [ TEST_##upper ] = { true, false, false, STATE_UNTESTED, #name, description }
@@ -207,7 +216,9 @@ static test tests [TEST_MAX] =
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
   TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writeable"),
   TEST (gnu-stack,          GNU_STACK,          "The stack is not executable"),
+  TEST (go-revision,        GO_REVISION,        MIN_GO_REV_STR ("GO compiler revision >= ", MIN_GO_REVISION, " (go only)")),
   TEST (lto,                LTO,                "Compiled with -flto"),
+  TEST (only-go,            ONLY_GO,            "GO is not mixed with other languages.  (go only, x86 only)"),
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
   TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
@@ -351,226 +362,6 @@ skip_check (enum test_index check)
 
   return false;
 }
-
-static const char *
-get_lang_name (enum lang lang)
-{
-  switch (lang)
-    {
-    default:
-    case LANG_UNKNOWN: return "unknown";
-    case LANG_C: return "C";
-    case LANG_CXX: return "C++";
-    case LANG_OTHER: return "other";
-    }
-}
-
-static void
-set_lang (annocheck_data *  data,
-	  enum lang         lang,
-	  const char *      source)
-{
-  if (per_file.lang == LANG_UNKNOWN)
-    {
-      einfo (VERBOSE2, "%s: info: written in %s (source: %s)",
-	     data->filename, get_lang_name (lang), source);
-
-      per_file.lang = lang;
-    }
-  else if (per_file.lang == lang)
-    ;
-  else
-    {
-      if (! per_file.also_written)
-	{
-	  einfo (VERBOSE, "%s: ALSO written in %s (source: %s)",
-		 data->filename, get_lang_name (lang), source);
-	  per_file.also_written = true;
-	}
-      /* FIXME: What to do ?
-	 For now we choose C++ if it is one of the languages, so that the GLIBXX_ASSERTIONS test is enabled.  */
-      if (per_file.lang != LANG_CXX && lang == LANG_CXX)
-	per_file.lang = lang;
-    }
-}
-
-static const char *
-get_tool_name (uint tool)
-{
-  switch (tool)
-    {
-    default:           return "<unrecognised>";
-    case TOOL_UNKNOWN: return "<unknown>";
-    case TOOL_CLANG:   return "Clang";
-    case TOOL_FORTRAN: return "Fortran";
-    case TOOL_GAS:     return "Gas";
-    case TOOL_GCC:     return "GCC";
-    case TOOL_GIMPLE:  return "Gimple";
-    case TOOL_GO:      return "GO";
-    case TOOL_LLVM:    return "LLVM";
-    case TOOL_RUST:    return "Rust";
-    }
-}
-
-#define COMMENT_SECTION "comment section"
-
-static void
-add_producer (annocheck_data *  data,
-	      uint              tool,
-	      uint              version,
-	      const char *      source,
-	      bool              update_current_file)
-{
-  einfo (VERBOSE2, "%s: info: record producer: %s version: %u source: %s",
-	 data->filename, get_tool_name (tool), version, source);
-
-  if (update_current_file)
-    {
-      per_file.current_tool = tool;
-      if (version)
-	per_file.tool_version = version;
-      return;
-    }
-
-  if (per_file.seen_tools == TOOL_UNKNOWN)
-    {
-      per_file.seen_tools = tool;
-      per_file.tool_version = version;  /* FIXME: Keep track of version numbers on a per-tool basis.  */
-      if (! fixed_format_messages)
-	{
-	  if (version)
-	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
-	  else
-	    einfo (VERBOSE, "%s: info: set binary producer to %s", data->filename, get_tool_name (tool));
-	}
-
-      if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
-	per_file.gcc_from_comment = streq (source, COMMENT_SECTION);      
-    }
-  else if (per_file.seen_tools & tool)
-    {
-      if (per_file.tool_version != version && version > 0)
-	{
-	  if (per_file.tool_version < version)
-	    per_file.tool_version = version;
-	}
-    }
-  else
-    {
-      per_file.seen_tools |= tool;
-
-      /* See BZ 1906171.
-	 Specifically glibc creates some object files by using GCC to assemble hand
-	 written source code and adds the -Wa,--generate-missing-build-notes=yes
-	 option so that there is a note to cover the binary.  Since gcc was involved
-	 the .comment section will add_producer(GCC).  But since the code is in fact
-	 assembler, the usual GCC command line options will not be present.  So when
-	 we see this conflict we choose GAS.  */
-      if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
-	per_file.gcc_from_comment = streq (source, COMMENT_SECTION);
-      else if (tool == TOOL_GAS && per_file.gcc_from_comment)
-	{
-	  if (! per_file.warned_asm_not_gcc)
-	    {
-	      if (! fixed_format_messages)
-		einfo (VERBOSE, "%s: info: assembler built by GCC detected - treating as pure assembler",
-		       data->filename);
-	      per_file.warned_asm_not_gcc = true;
-	    }
-
-	  per_file.seen_tools &= ~ TOOL_GCC;
-	}
-
-      if (! fixed_format_messages)
-	{
-	  if (version)
-	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
-	  else
-	    einfo (VERBOSE, "%s: info: set binary producer to %s", data->filename, get_tool_name (tool));
-	}
-    }
-}
-
-static void
-parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
-{
-  Dwarf_Word val;
-
-  if (dwarf_formudata (attr, & val) != 0)
-    {
-      warn (data, "Unable to parse DW_AT_language attribute");
-      return;
-    }
-  
-  switch (val)
-    {
-    case DW_LANG_C89:
-    case DW_LANG_C:
-    case DW_LANG_C99:
-    case DW_LANG_ObjC:
-    case DW_LANG_C11:
-      set_lang (data, LANG_C, "DW_AT_language");
-      break;
-
-    case DW_LANG_C_plus_plus:
-    case DW_LANG_ObjC_plus_plus:
-    case DW_LANG_C_plus_plus_03:
-    case DW_LANG_C_plus_plus_11:
-    case DW_LANG_C_plus_plus_14:
-      if (! fixed_format_messages)
-	einfo (VERBOSE, "%s: Written in C++", data->filename);
-      set_lang (data, LANG_CXX, "DW_AT_language");
-      break;
-
-    default:
-      if (! per_file.other_language)
-	{
-	  switch (val)
-	    {
-	    case DW_LANG_Go:
-	      einfo (VERBOSE, "%s: Written in GO", data->filename);
-	      break;
-	    case DW_LANG_Rust:
-	      einfo (VERBOSE, "%s: Written in RUST", data->filename);
-	      break;
-	    default:
-	      einfo (VERBOSE, "%s: Written in a language other than C and CC++", data->filename);
-	      einfo (VERBOSE2, "debugging: val = %ld", (long) val);
-	      break;
-	    }
-	  per_file.other_language = true;
-	}
-      set_lang (data, LANG_OTHER, "DW_AT_language");
-      break;
-    }
-}
-
-typedef struct tool_id
-{
-  const char *  producer_string;
-  uint          tool_type;
-} tool_id;
-
-static const tool_id tools[] =
-{
-  { "GNU C",          TOOL_GCC },
-  { "GNU Fortran",    TOOL_FORTRAN },
-  { "rustc version",  TOOL_RUST },
-  { "clang version",  TOOL_CLANG },
-  { "clang LLVM",     TOOL_CLANG }, /* Is this right ?  */
-  { "GNU Fortran",    TOOL_FORTRAN },
-  { "GNU GIMPLE",     TOOL_GIMPLE },
-  { "Go cmd/compile", TOOL_GO },
-  { "GNU AS",         TOOL_GAS },
-  { NULL,             TOOL_UNKNOWN }
-};
-
-struct tool_string
-{
-  const char * lead_in;
-  const char * tool_name;
-  uint         tool_id;
-};
 
 /* Ensure that NAME will not use more than one line.  */
 static const char *
@@ -753,6 +544,260 @@ info (annocheck_data * data, uint testnum, const char * source, const char * ext
 	 data->filename, tests[testnum].name, extra, source);
 }
 
+static const char *
+get_lang_name (enum lang lang)
+{
+  switch (lang)
+    {
+    default:
+    case LANG_UNKNOWN: return "unknown";
+    case LANG_C: return "C";
+    case LANG_CXX: return "C++";
+    case LANG_OTHER: return "other";
+    case LANG_GO: return "GO";
+    case LANG_RUST: return "Rust";
+    }
+}
+
+static void
+set_lang (annocheck_data *  data,
+	  enum lang         lang,
+	  const char *      source)
+{
+  if (per_file.lang == LANG_UNKNOWN)
+    {
+      einfo (VERBOSE2, "%s: info: written in %s (source: %s)",
+	     data->filename, get_lang_name (lang), source);
+
+      per_file.lang = lang;
+    }
+  else if (per_file.lang == lang)
+    ;
+  else
+    {
+      if (! per_file.also_written)
+	{
+	  einfo (VERBOSE, "%s: info: ALSO written in %s (source: %s)",
+		 data->filename, get_lang_name (lang), source);
+	  per_file.also_written = true;
+	}
+
+      if (is_x86 () && (lang == LANG_GO || per_file.lang == LANG_GO))
+	{
+	  /* FIXME: This FAIL is only true if CET is not enabled.  */
+	  if (tests[TEST_ONLY_GO].state != STATE_FAILED)
+	    fail (data, TEST_ONLY_GO, source, "combining GO and non-GO object files on x86 systems is not safe - it disables CET");
+	}
+
+      /* FIXME: What to do ?
+	 For now we choose C++ if it is one of the languages, so that the GLIBXX_ASSERTIONS test is enabled.  */
+      if (per_file.lang != LANG_CXX && lang == LANG_CXX)
+	per_file.lang = lang;
+    }
+}
+
+static const char *
+get_tool_name (uint tool)
+{
+  switch (tool)
+    {
+    default:           return "<unrecognised>";
+    case TOOL_UNKNOWN: return "<unknown>";
+    case TOOL_CLANG:   return "Clang";
+    case TOOL_FORTRAN: return "Fortran";
+    case TOOL_GAS:     return "Gas";
+    case TOOL_GCC:     return "GCC";
+    case TOOL_GIMPLE:  return "Gimple";
+    case TOOL_GO:      return "GO";
+    case TOOL_LLVM:    return "LLVM";
+    case TOOL_RUST:    return "Rust";
+    }
+}
+
+#define COMMENT_SECTION "comment section"
+
+static void
+add_producer (annocheck_data *  data,
+	      uint              tool,
+	      uint              version,
+	      const char *      source,
+	      bool              update_current_file)
+{
+  einfo (VERBOSE2, "%s: info: record producer: %s version: %u source: %s",
+	 data->filename, get_tool_name (tool), version, source);
+
+  if (tool == TOOL_GO)
+    {
+      if (version == 0)
+	{
+	  if (tests[TEST_GO_REVISION].enabled
+	      && tests[TEST_GO_REVISION].state == STATE_UNTESTED)
+	    maybe (data, TEST_GO_REVISION, source, "unknown revision of the GO compiler used");
+	}
+      else if (version < MIN_GO_REVISION)
+	{
+	  if (tests[TEST_GO_REVISION].enabled
+	      && tests[TEST_GO_REVISION].state != STATE_FAILED)
+	    {
+	      fail (data, TEST_GO_REVISION, source, MIN_GO_REV_STR ("GO revision must be >= ", MIN_GO_REVISION, ""));
+	      einfo (VERBOSE, "%s: info: GO compiler revision %u detected in %s",
+		     data->filename, version, source);
+	    }
+	}
+      else
+	pass (data, TEST_GO_REVISION, source, "GO compiler revision is sufficient");
+    }
+  
+  if (update_current_file)
+    {
+      per_file.current_tool = tool;
+      if (version)
+	per_file.tool_version = version;
+      return;
+    }
+
+  if (per_file.seen_tools == TOOL_UNKNOWN)
+    {
+      per_file.seen_tools = tool;
+      per_file.tool_version = version;  /* FIXME: Keep track of version numbers on a per-tool basis.  */
+      if (! fixed_format_messages)
+	{
+	  if (version)
+	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
+	  else
+	    einfo (VERBOSE, "%s: info: set binary producer to %s", data->filename, get_tool_name (tool));
+	}
+
+      if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
+	per_file.gcc_from_comment = streq (source, COMMENT_SECTION);      
+    }
+  else if (per_file.seen_tools & tool)
+    {
+      if (per_file.tool_version != version && version > 0)
+	{
+	  if (per_file.tool_version < version)
+	    per_file.tool_version = version;
+	}
+    }
+  else
+    {
+      per_file.seen_tools |= tool;
+
+      /* See BZ 1906171.
+	 Specifically glibc creates some object files by using GCC to assemble hand
+	 written source code and adds the -Wa,--generate-missing-build-notes=yes
+	 option so that there is a note to cover the binary.  Since gcc was involved
+	 the .comment section will add_producer(GCC).  But since the code is in fact
+	 assembler, the usual GCC command line options will not be present.  So when
+	 we see this conflict we choose GAS.  */
+      if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
+	per_file.gcc_from_comment = streq (source, COMMENT_SECTION);
+      else if (tool == TOOL_GAS && per_file.gcc_from_comment)
+	{
+	  if (! per_file.warned_asm_not_gcc)
+	    {
+	      if (! fixed_format_messages)
+		einfo (VERBOSE, "%s: info: assembler built by GCC detected - treating as pure assembler",
+		       data->filename);
+	      per_file.warned_asm_not_gcc = true;
+	    }
+
+	  per_file.seen_tools &= ~ TOOL_GCC;
+	}
+
+      if (! fixed_format_messages)
+	{
+	  if (version)
+	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
+	  else
+	    einfo (VERBOSE, "%s: info: set binary producer to %s", data->filename, get_tool_name (tool));
+	}
+    }
+}
+
+static void
+parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
+{
+  Dwarf_Word val;
+
+  if (dwarf_formudata (attr, & val) != 0)
+    {
+      warn (data, "Unable to parse DW_AT_language attribute");
+      return;
+    }
+  
+  switch (val)
+    {
+    case DW_LANG_C89:
+    case DW_LANG_C:
+    case DW_LANG_C99:
+    case DW_LANG_ObjC:
+    case DW_LANG_C11:
+      set_lang (data, LANG_C, SOURCE_DW_AT_LANGUAGE);
+      break;
+
+    case DW_LANG_C_plus_plus:
+    case DW_LANG_ObjC_plus_plus:
+    case DW_LANG_C_plus_plus_03:
+    case DW_LANG_C_plus_plus_11:
+    case DW_LANG_C_plus_plus_14:
+      if (! fixed_format_messages)
+	einfo (VERBOSE, "%s: info: Written in C++", data->filename);
+      set_lang (data, LANG_CXX, SOURCE_DW_AT_LANGUAGE);
+      break;
+
+    case DW_LANG_Go:
+      set_lang (data, LANG_GO, SOURCE_DW_AT_LANGUAGE);
+      break;
+
+    case DW_LANG_Rust:
+      set_lang (data, LANG_RUST, SOURCE_DW_AT_LANGUAGE);
+      break;
+
+    default:
+      if (! per_file.other_language)
+	{
+	  switch (val)
+	    {
+	    default:
+	      einfo (VERBOSE, "%s: info: Written in a language other than C/C++/Go/Rust", data->filename);
+	      einfo (VERBOSE2, "debugging: val = %ld", (long) val);
+	      break;
+	    }
+	  per_file.other_language = true;
+	}
+      set_lang (data, LANG_OTHER, SOURCE_DW_AT_LANGUAGE);
+      break;
+    }
+}
+
+typedef struct tool_id
+{
+  const char *  producer_string;
+  uint          tool_type;
+} tool_id;
+
+static const tool_id tools[] =
+{
+  { "GNU C",          TOOL_GCC },
+  { "GNU Fortran",    TOOL_FORTRAN },
+  { "rustc version",  TOOL_RUST },
+  { "clang version",  TOOL_CLANG },
+  { "clang LLVM",     TOOL_CLANG }, /* Is this right ?  */
+  { "GNU Fortran",    TOOL_FORTRAN },
+  { "GNU GIMPLE",     TOOL_GIMPLE },
+  { "Go cmd/compile", TOOL_GO },
+  { "GNU AS",         TOOL_GAS },
+  { NULL,             TOOL_UNKNOWN }
+};
+
+struct tool_string
+{
+  const char * lead_in;
+  const char * tool_name;
+  uint         tool_id;
+};
+
 static inline bool
 is_object_file (void)
 {
@@ -788,10 +833,22 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
     if ((where = strstr (string, tool->producer_string)) != NULL)
       {
 	madeby = tool->tool_type;
+
 	/* Look for a space after the ID string.  */
 	where = strchr (where + strlen (tool->producer_string), ' ');
 	if (where != NULL)
-	  version = strtod (where, NULL);
+	  {
+	    version = strtod (where + 1, NULL);
+	    /* Convert go1.14.13 into 14.
+	       Note - strictly speaking 14 is the revision, not the version.
+	       But the GO compiler is always version 1, and it is the
+	       revision that matters as far as security features are concerened.  */
+	    if (version == 0
+		&& madeby == TOOL_GO
+		&& strncmp (where + 1, "go1.", 4) == 0)
+	      version = strtod (where + 5, NULL);
+	  }
+
 	break;
       }
 
@@ -3349,6 +3406,11 @@ finish (annocheck_data * data)
 		  fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used");
 		  break;
 		}
+	      else if (per_file.current_tool == TOOL_GO)
+		{
+		  skip (data, i, SOURCE_FINAL_SCAN, "GO compilation does not use the C preprocessor");
+		  break;
+		}
 	      /* Fall through.  */
 	    default:
 	      /* Do not complain about compiler specific tests being missing
@@ -3361,12 +3423,35 @@ finish (annocheck_data * data)
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      break;
 
+	    case TEST_PIC:
+	      if (per_file.current_tool == TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support a -fPIC option");
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
+	      break;
+
+	    case TEST_STACK_PROT:
+	      if (per_file.current_tool == TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "GO is stack safe");
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
+	      break;
+
+	    case TEST_OPTIMIZATION:
+	      if (per_file.current_tool == TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "GO optimizes by default");
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
+	      break;
+
 	    case TEST_STACK_CLASH:
 	      if (per_file.e_machine == EM_ARM)
 		skip (data, i, SOURCE_FINAL_SCAN, "not support on ARM architectures");
 	      else if (per_file.seen_tools == TOOL_GAS
 		       || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
+	      else if (per_file.current_tool == TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "GO is stack safe");
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this test");
 	    break;
@@ -3417,6 +3502,23 @@ finish (annocheck_data * data)
 		   been added to the rpm macros then change this result to a maybe().  */
 		/* maybe (data, "The -mbranch-protection setting was not recorded");  */
 		future_fail (data, "The -mbranch-protection setting was not recorded");
+	      break;
+
+	    case TEST_GO_REVISION:
+	      if (per_file.seen_tools & TOOL_GO)
+		fail (data, i, SOURCE_FINAL_SCAN, "No Go compiler revision information found");
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "No GO compiled code found");
+
+	    case TEST_ONLY_GO:
+	      if (! is_x86 ())
+		skip (data, i, SOURCE_FINAL_SCAN, "Not compiled for x86");
+	      else if (per_file.seen_tools == TOOL_GO)
+		pass (data, i, SOURCE_FINAL_SCAN, "Only GO compiled code found");
+	      else if (per_file.seen_tools & TOOL_GO)
+		fail (data, i, SOURCE_FINAL_SCAN, "Mixed GO and another language found");
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "No GO compiled code found");
 	      break;
 	    }
 	}
