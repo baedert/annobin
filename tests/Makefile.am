@@ -11,6 +11,7 @@ TESTS=compile-test \
       active-checks-test \
       assembler-gap-test \
       function-sections-test \
+      glibc-notes-test \
       hardening-fail-test \
       hardening-test \
       instrumentation-test \

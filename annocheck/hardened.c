@@ -872,62 +872,54 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
      options.  Note - this is suboptimal since these options do not
      necessarily apply to the entire binary, but in the absence of
      annobin data they are better than nothing.  */
-  switch (madeby)
+
+  /* Try to determine if there are any command line options recorded in the
+     DW_AT_producer string.  FIXME: This is not a very good heuristic.  */
+  if (strstr (string, "-f") || strstr (string, "-g") || strstr (string, "-O"))
     {
-    default:
-      break;
-      
-    case TOOL_CLANG:
-      /* Try to determine if there are any command line options recorded in the
-	 DW_AT_producer string.  FIXME: This is not a very good heuristic.  */
-      if (strstr (string, "-f") || strstr (string, "-g") || strstr (string, "-O"))
+      if (strstr (string, " -O2") || strstr (string, " -O3"))
+	pass (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, NULL);
+      else if (strstr (string, " -O0") || strstr (string, " -O1"))
+	/* FIXME: This may not be a failure.  GCC needs -O2 or
+	   better for -D_FORTIFY_SOURCE to work properly, but
+	   other compilers may not.  */
+	fail (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "optimization level too low");
+      else
+	info (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "not found in string");
+
+      if (strstr (string, " -fpic") || strstr (string, " -fPIC")
+	  || strstr (string, " -fpie") || strstr (string, " -fPIE"))
+	pass (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, NULL);
+      else
+	info (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, "-fpic/-fpie not found in string");
+
+      if (strstr (string, "-fstack-protector-strong")
+	  || strstr (string, "-fstack-protector-all"))
+	pass (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, NULL);
+      else if (strstr (string, "-fstack-protector"))
+	fail (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "insufficient protection enabled");
+      else
+	info (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "not found in string");
+
+      if (strstr (string, "-Wall")
+	  || strstr (string, "-Wformat-security")
+	  || strstr (string, "-Werror=format-security"))
+	pass (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, NULL);
+      else
+	info (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, "not found in string");
+
+      if (is_x86 ())
 	{
-	  if (strstr (string, " -O2") || strstr (string, " -O3"))
-	    pass (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, NULL);
-	  else if (strstr (string, " -O0") || strstr (string, " -O1"))
-	    /* FIXME: This may not be a failure.  GCC needs -O2 or
-	       better for -D_FORTIFY_SOURCE to work properly, but
-	       other compilers may not.  */
-	    fail (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "optimization level too low");
+	  if (strstr (string, "-fcf-protection"))
+	    pass (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, NULL);
 	  else
-	    info (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "not found in string");
-
-	  if (strstr (string, " -fpic") || strstr (string, " -fPIC")
-	      || strstr (string, " -fpie") || strstr (string, " -fPIE"))
-	    pass (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, NULL);
-	  else
-	    info (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, "-fpic/-fpie not found in string");
-
-	  if (strstr (string, "-fstack-protector-strong")
-	      || strstr (string, "-fstack-protector-all"))
-	    pass (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, NULL);
-	  else if (strstr (string, "-fstack-protector"))
-	    fail (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "insufficient protection enabled");
-	  else
-	    info (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "not found in string");
-
-	  if (strstr (string, "-Wall")
-	      || strstr (string, "-Wformat-security")
-	      || strstr (string, "-Werror=format-security"))
-	    pass (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, NULL);
-	  else
-	    info (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, "not found in string");
-
-	  if (is_x86 ())
-	    {
-	      if (strstr (string, "-fcf-protection"))
-		pass (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, NULL);
-	      else
-		info (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, "not found in string");
-	    }
+	    info (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, "not found in string");
 	}
-      else if (! per_file.warned_command_line)
-	{
-	  warn (data, "Command line options not recorded by -grecord-gcc-switches");
-	  per_file.warned_command_line = true;
-	}
-
-      break;
+    }
+  else if (BE_VERBOSE && ! per_file.warned_command_line)
+    {
+      warn (data, "Command line options not recorded by -grecord-gcc-switches");
+      per_file.warned_command_line = true;
     }
 }
 
@@ -1203,6 +1195,27 @@ report_note_producer (annocheck_data * data,
     einfo (PARTIAL, "version %u\n", version);
 }
 
+static const char *
+note_name (const char * attr)
+{
+  if (isprint (* attr))
+    return attr;
+
+  switch (* attr)
+    {
+    case GNU_BUILD_ATTRIBUTE_VERSION:    return "Version";
+    case GNU_BUILD_ATTRIBUTE_TOOL:       return "Tool";
+    case GNU_BUILD_ATTRIBUTE_RELRO:      return "Relro";
+    case GNU_BUILD_ATTRIBUTE_ABI:        return "ABI";
+    case GNU_BUILD_ATTRIBUTE_STACK_SIZE: return "StackSize";
+    case GNU_BUILD_ATTRIBUTE_PIC:        return "PIC";
+    case GNU_BUILD_ATTRIBUTE_STACK_PROT: return "StackProt";
+    case GNU_BUILD_ATTRIBUTE_SHORT_ENUM: return "Enum";
+    default:                             return "<UNKNOWN>";
+    }
+
+}
+
 static bool
 build_note_checker (annocheck_data *     data,
 		    annocheck_section *  sec,
@@ -1301,6 +1314,12 @@ build_note_checker (annocheck_data *     data,
 	    }
 	}
 
+      if (end == (ulong) -1)
+	{
+	  einfo (WARN, "%s: Corrupt annobin note : end address == -1", data->filename);
+	  start = end;
+	}
+
       if (! is_object_file () && ! ignore_gaps)
 	{
 	  /* Notes can occur in any order and may be spread across multiple note
@@ -1327,24 +1346,20 @@ build_note_checker (annocheck_data *     data,
 	}
     }
 
+  const char *  namedata = sec->data->d_buf + name_offset;
+  uint          pos = (namedata[0] == 'G' ? 3 : 1);
+  char          attr_type = namedata[pos - 1];
+  const char *  attr = namedata + pos;
+
   /* We skip notes with empty ranges unless we are dealing with unrelocated
      object files.  */
   if (! is_object_file ()
       && note_data->start == note_data->end)
     {
-      static ulong last_reported_addr = 0;
-      if (note_data->start != last_reported_addr)
-	{
-	  einfo (VERBOSE2, "skip notes for zero-length range at %#lx", note_data->start);
-	  last_reported_addr = note_data->start;
-	}
+      einfo (VERBOSE2, "skip %s note for zero-length range at %#lx",
+	     note_name (attr), note_data->start);
       return true;
     }
-
-  const char *  namedata = sec->data->d_buf + name_offset;
-  uint          pos = (namedata[0] == 'G' ? 3 : 1);
-  char          attr_type = namedata[pos - 1];
-  const char *  attr = namedata + pos;
 
   /* Advance pos to the attribute's value.  */
   if (! isprint (* attr))
@@ -1390,6 +1405,8 @@ build_note_checker (annocheck_data *     data,
       return true;
     }
 
+  einfo (VERBOSE2, "process %s note for range at %#lx..%#lx",
+	 note_name (attr), note_data->start, note_data->end);
   switch (* attr)
     {
     case GNU_BUILD_ATTRIBUTE_VERSION:
@@ -1408,7 +1425,7 @@ build_note_checker (annocheck_data *     data,
 	}
 
       if (* attr > '0' + SPEC_VERSION)
-	einfo (WARN, "%s: This checker only supports version %d of the Watermark protocol.  The data in the notes uses version %d",
+	einfo (INFO, "%s: WARN: This checker only supports version %d of the Watermark protocol.  The data in the notes uses version %d",
 	       data->filename, SPEC_VERSION, * attr - '0');
 
       /* Check the note per_file.  */
@@ -1528,7 +1545,7 @@ build_note_checker (annocheck_data *     data,
 	    }
 	  else if (per_file.run_major != major)
 	    {
-	      einfo (WARN, "%s: this file was built by more than one version of %s (%u and %u)",
+	      einfo (INFO, "%s: WARN: this file was built by more than one version of %s (%u and %u)",
 		     data->filename, t->tool_name, per_file.run_major, major);
 	      if (per_file.run_major < major)
 		per_file.run_major = major;
@@ -1538,7 +1555,7 @@ build_note_checker (annocheck_data *     data,
 	    {
 	      if (! per_file.warned_version_mismatch)
 		{
-		  einfo (INFO, "%s: ICE:  Annobin plugin was built by %s version %u but run on %s version %u",
+		  einfo (INFO, "%s: WARN: Annobin plugin was built by %s version %u but run on %s version %u",
 			 data->filename, t->tool_name, per_file.anno_major,
 			 t->tool_name, per_file.run_major);
 		  per_file.warned_version_mismatch = true;
@@ -1594,7 +1611,7 @@ build_note_checker (annocheck_data *     data,
 	    }
 	  else if (per_file.anno_major != major)
 	    {
-	      einfo (WARN, "%s: notes produced by annobins compiled for more than one version of %s (%u vs %u)",
+	      einfo (INFO, "%s: WARN: notes produced by annobins compiled for more than one version of %s (%u vs %u)",
 		     data->filename, t->tool_name, per_file.anno_major, major);
 	      if (per_file.anno_major < major)
 		per_file.anno_major = major;
@@ -1604,7 +1621,7 @@ build_note_checker (annocheck_data *     data,
 	    {
 	      if (! per_file.warned_version_mismatch)
 		{
-		  einfo (INFO, "%s: ICE:  Annobin plugin was built by %s version %u but run on %s version %u",
+		  einfo (INFO, "%s: WARN: Annobin plugin was built by %s version %u but run on %s version %u",
 			 data->filename, t->tool_name, per_file.anno_major, t->tool_name, per_file.run_major);
 		  per_file.warned_version_mismatch = true;
 		}
@@ -1674,6 +1691,7 @@ build_note_checker (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
+einfo (VERBOSE2, "STACK PROT %d", value);
       if (skip_check (TEST_STACK_PROT))
 	break;
 
@@ -2066,7 +2084,7 @@ build_note_checker (annocheck_data *     data,
 	  if (skip_check (TEST_STACK_CLASH))
 	    break;
 
-	  if (! includes_gcc (per_file.current_tool))
+	  if (! includes_gcc (per_file.current_tool) && ! includes_gimple (per_file.current_tool))
 	    {
 	      skip (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "not compiled by gcc");
 	      break;
@@ -2102,7 +2120,7 @@ build_note_checker (annocheck_data *     data,
 	  if (skip_check (TEST_STACK_REALIGN))
 	    break;
 
-	  if (! includes_gcc (per_file.current_tool))
+	  if (! includes_gcc (per_file.current_tool) && ! includes_gimple (per_file.current_tool))
 	    {
 	      skip (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "Not built by gcc");
 	      break;
@@ -2416,7 +2434,7 @@ check_note_section (annocheck_data *    data,
 {
   if (sec->shdr.sh_addralign != 4 && sec->shdr.sh_addralign != 8)
     {
-      einfo (WARN, "%s: note section %s not properly aligned (alignment: %ld)",
+      einfo (INFO, "%s: WARN: note section %s not properly aligned (alignment: %ld)",
 	     data->filename, sec->secname, (long) sec->shdr.sh_addralign);
     }
 
@@ -2581,18 +2599,18 @@ check_dynamic_section (annocheck_data *    data,
   if (dynamic_relocs_seen && tests[TEST_BIND_NOW].state != STATE_PASSED)
     {
       if (! is_executable ())
-	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "Not an executable");
+	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "not an executable");
       else if (per_file.seen_tools & TOOL_GO)
 	/* FIXME: Should be changed once GO supports PIE & BIND_NOW.  */
-	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "Binary was built by GO");
+	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "binary was built by GO");
       else
-	fail (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "Not linked with -Wl,-z,now");
+	fail (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "not linked with -Wl,-z,now");
     }
 
   if (per_file.e_machine == EM_AARCH64)
     {
       if (is_object_file ())
-	skip (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "Not needed in object files");
+	skip (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "not needed in object files");
       else
 	{
 	  uint res = aarch64_bti_plt_seen ? 1 : 0;
@@ -2695,6 +2713,13 @@ check_sec (annocheck_data *     data,
 }
 
 static bool
+is_shared_lib (annocheck_data * data)
+{
+  /* FIXME: Need a better test.  */
+  return strstr (data->filename, ".so") != NULL;
+}
+
+static bool
 interesting_seg (annocheck_data *    data,
 		 annocheck_segment * seg)
 {
@@ -2714,13 +2739,6 @@ interesting_seg (annocheck_data *    data,
 
   switch (seg->phdr->p_type)
     {
-#if 0
-    case PT_INTERP:
-      /* Signal the code in check_seg() that this is interpreted code.  */
-      tests[TEST_ENTRY].state = STATE_MAYBE;
-      skip (data, TEST_ENTRY, SOURCE_SEGMENT_HEADERS, "interpreted code");
-      break;
-#endif
     case PT_GNU_RELRO:
       pass (data, TEST_GNU_RELRO, SOURCE_SEGMENT_HEADERS, NULL);
       break;
@@ -2755,6 +2773,7 @@ interesting_seg (annocheck_data *    data,
 	 do not have to have sections.  */
       if (per_file.e_type == ET_DYN
 	  && is_x86 ()
+	  && ! is_shared_lib (data)
 	  && seg->phdr->p_memsz > 0
 	  && seg->phdr->p_vaddr <= per_file.e_entry
 	  && seg->phdr->p_vaddr + seg->phdr->p_memsz > per_file.e_entry
@@ -3206,13 +3225,13 @@ check_for_gaps (annocheck_data * data)
 		    sym = cpsym;
 		}
 
-	      einfo (VERBOSE, "%s: gap:  (%lx..%lx probable component: %s) in annobin notes",
+	      einfo (VERBOSE, "%s: gap:  (%#lx..%#lx probable component: %s) in annobin notes",
 		     data->filename, gap.start, gap.end, sym);
 
 	      free ((char *) cpsym);
 	    }
 	  else
-	    einfo (VERBOSE, "%s: gap:  (%lx..%lx) in annobin notes",
+	    einfo (VERBOSE, "%s: gap:  (%#lx..%#lx) in annobin notes",
 		   data->filename, gap.start, gap.end);
 	}
     }
@@ -3375,7 +3394,7 @@ finish (annocheck_data * data)
 		/* FIXME: This is for GO binaries.  Should be changed once GO supports PIE & BIND_NOW.  */
 		skip (data, i, SOURCE_FINAL_SCAN, "built by GO");
 	      else
-		fail (data, i, SOURCE_FINAL_SCAN, "Not linked with -Wl,-z,relro");
+		fail (data, i, SOURCE_FINAL_SCAN, "not linked with -Wl,-z,relro");
 	      break;
 
 	    case TEST_DYNAMIC_TAGS:
@@ -3426,22 +3445,28 @@ finish (annocheck_data * data)
 	    case TEST_PIC:
 	      if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support a -fPIC option");
-	      else
+	      else if (is_C_compiler (per_file.seen_tools))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "not compiled code");
 	      break;
 
 	    case TEST_STACK_PROT:
 	      if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO is stack safe");
-	      else
+	      else if (is_C_compiler (per_file.seen_tools))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "not compiled code");
 	      break;
 
 	    case TEST_OPTIMIZATION:
 	      if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO optimizes by default");
-	      else
+	      else if (is_C_compiler (per_file.seen_tools))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "not compiled code");
 	      break;
 
 	    case TEST_STACK_CLASH:
@@ -3452,6 +3477,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
 	      else if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO is stack safe");
+	      else if (is_C_compiler (per_file.seen_tools))
+		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this test");
 	    break;
@@ -3461,6 +3488,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not used");
 	      else if (is_object_file ())
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed in object files");
+	      else if (per_file.current_tool == TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed for GO binaries");
 	      else if (per_file.e_machine == EM_AARCH64)
 		future_fail (data, ".note.gnu.property section not found");
 	      else
@@ -3470,7 +3499,9 @@ finish (annocheck_data * data)
 	    case TEST_CF_PROTECTION:
 	      if (is_x86 () && is_executable ())
 		{
-		  if (tests[TEST_PROPERTY_NOTE].enabled
+		  if (per_file.current_tool == TOOL_GO)
+		    skip (data, i, SOURCE_FINAL_SCAN, "control flow protection is not needed for GO binaries");
+		  else if (tests[TEST_PROPERTY_NOTE].enabled
 		      && tests[TEST_PROPERTY_NOTE].state == STATE_UNTESTED)
 		    fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section = no control flow information");
 		  else
@@ -3493,7 +3524,7 @@ finish (annocheck_data * data)
 	    case TEST_BRANCH_PROTECTION:
 	      if (per_file.e_machine != EM_AARCH64)
 		skip (data, i, SOURCE_FINAL_SCAN, "not an AArch64 binary");
-	      else if (! includes_gcc (per_file.seen_tools))
+	      else if (! includes_gcc (per_file.seen_tools) && ! includes_gimple (per_file.current_tool))
 		skip (data, i, SOURCE_FINAL_SCAN, "not built by gcc");
 	      else if (per_file.tool_version < 9)
 		skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
@@ -3506,19 +3537,19 @@ finish (annocheck_data * data)
 
 	    case TEST_GO_REVISION:
 	      if (per_file.seen_tools & TOOL_GO)
-		fail (data, i, SOURCE_FINAL_SCAN, "No Go compiler revision information found");
+		fail (data, i, SOURCE_FINAL_SCAN, "no Go compiler revision information found");
 	      else
-		skip (data, i, SOURCE_FINAL_SCAN, "No GO compiled code found");
+		skip (data, i, SOURCE_FINAL_SCAN, "no GO compiled code found");
 
 	    case TEST_ONLY_GO:
 	      if (! is_x86 ())
-		skip (data, i, SOURCE_FINAL_SCAN, "Not compiled for x86");
+		skip (data, i, SOURCE_FINAL_SCAN, "not compiled for x86");
 	      else if (per_file.seen_tools == TOOL_GO)
-		pass (data, i, SOURCE_FINAL_SCAN, "Only GO compiled code found");
+		pass (data, i, SOURCE_FINAL_SCAN, "only GO compiled code found");
 	      else if (per_file.seen_tools & TOOL_GO)
-		fail (data, i, SOURCE_FINAL_SCAN, "Mixed GO and another language found");
+		fail (data, i, SOURCE_FINAL_SCAN, "mixed GO and another language found");
 	      else
-		skip (data, i, SOURCE_FINAL_SCAN, "No GO compiled code found");
+		skip (data, i, SOURCE_FINAL_SCAN, "no GO compiled code found");
 	      break;
 	    }
 	}

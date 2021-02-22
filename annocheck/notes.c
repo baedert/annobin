@@ -21,11 +21,11 @@
 
 typedef struct local_note
 {
-  ulong start;
-  ulong end;
-  uint value;
-  bool open;
-  const char * data;
+  ulong         start;
+  ulong         end;
+  uint          value;
+  const char *  data;
+  bool          open;
 } local_note;
 
 
@@ -101,6 +101,7 @@ record_note (uint value, const char * data, bool open)
   note->value = value;
   note->open  = open;
   note->data  = data;
+
   ++ num_saved_notes;
 }
 
@@ -286,7 +287,15 @@ compare_range (const void * r1, const void * r2)
 
   if (n1->end > n2->end)
     return 1;
+  if (n1->end < n2->end)
+    return -1;
 
+  /* Put open notes before function notes.  */
+  if (n1->open && ! n2->open)
+    return -1;
+  if (! n1->open && n2->open)
+    return 1;
+#if 0
   /* N1 is wholly covered by N2:
        n2->start <= n1->start <= n2->end
        n2->start <= n1->end   <= n2->end.
@@ -294,12 +303,15 @@ compare_range (const void * r1, const void * r2)
   n1->start = n2->start;
   n1->end   = n2->end;
   assert (n1->start <= n1->end);
+#endif
   return 0;
 }
 
 static bool
 notes_end_file (annocheck_data * data)
 {
+  uint i;
+
   if (disabled)
     return true;
 
@@ -310,7 +322,7 @@ notes_end_file (annocheck_data * data)
   qsort (saved_notes, num_saved_notes, sizeof saved_notes[0], compare_range);
 
   /* Display the saved notes.  */
-  uint i;
+
   ulong prev_start = 0, prev_end = 0;
   for (i = 0; i < num_saved_notes; i++)
     {
@@ -320,7 +332,7 @@ notes_end_file (annocheck_data * data)
       if (note->start == note->end && ! BE_VERBOSE && e_type != ET_REL)
 	continue;
 
-      if (note->start != prev_start || note->end != prev_end)
+      if (i == 0 || note->start != prev_start || note->end != prev_end)
 	{
 	  einfo (INFO, "Range: %#lx .. %#lx", note->start, note->end);
 	  prev_start = note->start;

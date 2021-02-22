@@ -47,8 +47,8 @@ PLUGIN_TEST_OPTIONS = \
 #   -fcf-protection \
 
 check: @srcdir@/hello.c
-	@ $(CLANG) -fplugin=$(PLUGIN) $(PLUGIN_TEST_OPTIONS) -c @srcdir@/hello.c
-	@ $(READELF) --wide --notes hello.o > clang-plugin-test.out
+	$(CLANG) -fplugin=$(PLUGIN) $(PLUGIN_TEST_OPTIONS) -c @srcdir@/hello.c
+	$(READELF) --wide --notes hello.o > clang-plugin-test.out
 	@ grep --silent -e "annobin built by clang version" clang-plugin-test.out
 	@ grep --silent -e "running on clang version" clang-plugin-test.out
 	@ grep --silent -e "sanitize_cfi" clang-plugin-test.out
