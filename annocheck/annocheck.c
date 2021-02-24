@@ -15,6 +15,7 @@
 #include "annobin-global.h"
 #include "annocheck.h"
 #include "config.h"
+#include <limits.h>
 #include <rpm/rpmlib.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -1088,72 +1089,102 @@ ends_with (const char * string, const char * ending, const size_t end_len)
 	  && streq (string + (len - end_len), ending));
 }
 
-static const char *
-find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong addr, Elf64_Shdr * sym_hdr, bool prefer_func)
+typedef struct find_symbol_return
+{
+  const char * name;
+  uint         type;
+  ulong        distance;
+} find_symbol_return;
+
+static bool
+find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr * sym_hdr, bool prefer_func, find_symbol_return * data_return)
 {
   Elf_Data * sym_data;
+
+  if (data_return == NULL)
+    return false;
 
   if ((sym_data = elf_getdata (sym_sec, NULL)) == NULL)
     {
       einfo (VERBOSE2, "No symbol section data");
-      return NULL;
+      return false;
     }
 
-  bool use_sym = false;
-  bool use_saved = false;
-  GElf_Sym saved_sym = {0};
-  GElf_Sym sym;
-  unsigned int symndx;
+  uint          best_type = 0;
+  const char *  best_name = NULL;
+  uint          second_best_type = 0;
+  const char *  second_best_name = NULL;
+  ulong         best_distance_so_far = ULONG_MAX;
+  ulong         second_best_distance = ULONG_MAX;
+  GElf_Sym      sym;
+  uint          symndx;
 
   for (symndx = 1; gelf_getsym (sym_data, symndx, & sym) != NULL; symndx++)
     {
-      /* As of version 3 of the protocol, start symbols might be biased by 2.  */
-      if (sym.st_value >= addr && sym.st_value <= addr + 2)
+      const char * name = elf_strptr (elf, sym_hdr->sh_link, sym.st_name);
+
+      if (sym.st_value < start || sym.st_value >= end)
+	continue;
+
+      /* Skip annobin symbols.  */
+      if (GELF_ST_TYPE (sym.st_info) == STT_NOTYPE
+	  && GELF_ST_BIND (sym.st_info) == STB_LOCAL
+	  && GELF_ST_VISIBILITY (sym.st_other) == STV_HIDDEN)
+	continue;
+
+      if (ends_with (name, "_end", strlen ("_end")))
+	continue;
+
+      if (ends_with (name, ".end", strlen (".end")))
+	continue;
+
+      ulong distance_from_start = sym.st_value - start;
+
+      uint type = GELF_ST_TYPE (sym.st_info);
+
+      if (prefer_func && type != STT_FUNC && type != STT_GNU_IFUNC)
 	{
-	  if (prefer_func && GELF_ST_TYPE (sym.st_info) == STT_FUNC)
-	    {
-	      use_sym = true;
-	      break;
-	    }
-
-	  const char * name = elf_strptr (elf, sym_hdr->sh_link, sym.st_name);
-	  if (ends_with (name, "_end", strlen ("_end")))
+	  if (distance_from_start > second_best_distance)
 	    continue;
-
-	  if (ends_with (name, ".end", strlen (".end")))
+	  second_best_name = name;
+	  second_best_type = type;
+	  second_best_distance = distance_from_start;
+	}
+      else
+	{
+	  if (distance_from_start > best_distance_so_far)
 	    continue;
-
-	  if (! use_saved)
-	    {
-	      memcpy (& saved_sym, & sym, sizeof sym);
-	      use_saved = true;
-	    }
-	  else
-	    {
-	      /* Save this symbol if it is a better fit than the currently
-		 saved symbol.  */
-	      if (GELF_ST_VISIBILITY (sym.st_other) != STV_HIDDEN
-		  && GELF_ST_TYPE (sym.st_info) != STT_NOTYPE)
-		memcpy (& saved_sym, & sym, sizeof sym);
-	    }
+	  best_name = name;
+	  best_type = type;
+	  best_distance_so_far = distance_from_start;
 	}
     }
 
-  if (use_sym)
-    return elf_strptr (elf, sym_hdr->sh_link, sym.st_name);
+  assert (symndx == sym_hdr->sh_size / sym_hdr->sh_entsize);
 
-  if (use_saved)
-    return elf_strptr (elf, sym_hdr->sh_link, saved_sym.st_name);
-
-  return NULL;
+  if (best_name != NULL)
+    {
+      data_return->name = best_name;
+      data_return->type = best_type;
+      data_return->distance = best_distance_so_far;
+      return true;
+    }
+  if (second_best_name != NULL)
+    {
+      data_return->name = second_best_name;
+      data_return->type = second_best_type;
+      data_return->distance = second_best_distance;
+      return true;
+    }
+  return false;
 }
 
 typedef struct walker_info
 {
-  ulong          start;
-  ulong          end;
-  const char **  name;
-  bool           prefer_func;
+  ulong                start;
+  ulong                end;
+  bool                 prefer_func;
+  find_symbol_return * data_return;
 } walker_info;
 
 static bool
@@ -1167,8 +1198,8 @@ find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * 
      it might have a symbol table that we can use.  */
   if (data->elf != dwarf_getelf (dwarf))
     {
-      Elf_Scn *    sym_sec = NULL;
-      Elf *        elf = dwarf_getelf (dwarf);
+      Elf_Scn *  sym_sec = NULL;
+      Elf *      elf = dwarf_getelf (dwarf);
 
       while ((sym_sec = elf_nextscn (elf, sym_sec)) != NULL)
 	{
@@ -1178,17 +1209,20 @@ find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * 
 
 	  if ((sym_shdr.sh_type == SHT_SYMTAB) || (sym_shdr.sh_type == SHT_DYNSYM))
 	    {
-	      const char * name;
-
-	      name = find_symbol_in (elf, sym_sec, info->start, & sym_shdr, info->prefer_func);
-	      if (name)
+	      if (find_symbol_in (elf, sym_sec, info->start, info->end, & sym_shdr, info->prefer_func, info->data_return))
 		{
-		  *(info->name) = name;
-		  return false;
+		  if (info->data_return->distance == 0)
+		    return false; /* This means 'stop searching'.  */
 		}
 	    }
 	}
     }
+
+  /* If we found a name, even one not at START, then stop searching.
+     The dwarf data whilst possibly providing a better match, will
+     not provide any ELF symbol type information.  */
+  if (info->data_return->name != NULL)
+    return false;  /* This means 'stop searching'.  */
 
   size_t         nlines;
   Dwarf_Lines *  lines;
@@ -1199,6 +1233,8 @@ find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * 
     {
       Dwarf_Line * line;
       size_t       indx = 1;
+      ulong        best_distance_so_far = ULONG_MAX;
+      const char * best_name = NULL;
 
       einfo (VERBOSE2, "Scanning %ld lines in the DWARF line table", (unsigned long) nlines);
       while ((line = dwarf_onesrcline (lines, indx)) != NULL)
@@ -1207,17 +1243,28 @@ find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * 
 
 	  dwarf_lineaddr (line, & addr);
 
-	  if (addr >= info->start && addr <= info->end)
+	  if (addr >= info->start && addr < info->end)
 	    {
-	      *(info->name) = dwarf_linesrc (line, NULL, NULL);
-	      return false;
+	      ulong distance_from_start = addr - info->start;
+	      if (distance_from_start < best_distance_so_far)
+		{
+		  best_distance_so_far = distance_from_start;
+		  best_name = dwarf_linesrc (line, NULL, NULL);
+		}
 	    }
-
 	  ++ indx;
+	}
+
+      if (best_name)
+	{
+	  info->data_return->name = best_name;
+	  info->data_return->distance = best_distance_so_far;
+	  info->data_return->type = 0; /* No ELF type data in DWARF...  */
+	  return false; /* This means 'stop searching'.  */
 	}
     }
 
-  return true;
+  return true; /* This means 'continue searching'.  */
 }
 
 /* Return the name of a symbol most appropriate for address range START..END.
@@ -1228,21 +1275,46 @@ annocheck_find_symbol_for_address_range (annocheck_data *     data,
 					 annocheck_section *  sec,
 					 ulong                start,
 					 ulong                end,
-					 bool                 prefer_func)
+					 bool                 prefer)
+{
+  return annocheck_get_symbol_name_and_type (data, sec, start, end, prefer, NULL);
+}
+
+/* Return the name of a symbol most appropriate for address START..END.
+   Returns NULL if no symbol could be found.
+   If a name is found, and the symbol's ELF type is available, return it in TYPE_RETURN.  */
+
+const char *
+annocheck_get_symbol_name_and_type (annocheck_data *     data,
+				    annocheck_section *  sec,
+				    ulong                start,
+				    ulong                end,
+				    bool                 prefer_func,
+				    uint *               type_return)
 {
   static const char * previous_result;
   static ulong        previous_start;
   static ulong        previous_end;
+  static uint         previous_type;
 
-  const char * name = NULL;
   Elf64_Shdr   sym_shdr;
   Elf_Scn *    sym_sec = NULL;
+  find_symbol_return data_return;
+
+  if (type_return != NULL)
+    * type_return = 0;
 
   if (start > end)
     return NULL;
 
+  data_return.name = NULL;
+
   if (start == previous_start && end == previous_end)
-    return previous_result;
+    {
+      if (type_return != NULL)
+	* type_return = previous_type;
+      return previous_result;
+    }
 
   assert (data != NULL);
 
@@ -1259,25 +1331,27 @@ annocheck_find_symbol_for_address_range (annocheck_data *     data,
 
       if (sym_shdr.sh_type == SHT_SYMTAB || sym_shdr.sh_type == SHT_DYNSYM)
 	{
-	  name = find_symbol_in (data->elf, sym_sec, start, & sym_shdr, prefer_func);
-	  if (name != NULL)
-	    goto found;
-
+	  if (find_symbol_in (data->elf, sym_sec, start, end, & sym_shdr, prefer_func, & data_return))
+	    {
+	      if (data_return.distance == 0)
+		goto found;
+	    }
 	}
     }
 
   /* Search for symbol sections.  */
   sym_sec = NULL;
-
   while ((sym_sec = elf_nextscn (data->elf, sym_sec)) != NULL)
     {
       read_section_header (data, sym_sec, & sym_shdr);
 
       if ((sym_shdr.sh_type == SHT_SYMTAB) || (sym_shdr.sh_type == SHT_DYNSYM))
 	{
-	  name = find_symbol_in (data->elf, sym_sec, start, & sym_shdr, prefer_func);
-	  if (name)
-	    goto found;
+	  if (find_symbol_in (data->elf, sym_sec, start, end, & sym_shdr, prefer_func, & data_return))
+	    {
+	      if (data_return.distance == 0)
+		goto found;
+	    }
 	}
     }
 
@@ -1285,16 +1359,21 @@ annocheck_find_symbol_for_address_range (annocheck_data *     data,
   walker_info walker;
   walker.start = start;
   walker.end = end;
-  walker.name = & name;
   walker.prefer_func = prefer_func;
+  walker.data_return = & data_return;
+
   annocheck_walk_dwarf (data, find_symbol_addr_using_dwarf, & walker);
 
  found:
-  /* If we have found an ".annobin_" prefixed symbol then skip the prefix.  */
-  if (name && strncmp (name, ANNOBIN_SYMBOL_PREFIX, strlen (ANNOBIN_SYMBOL_PREFIX)) == 0)
-    name += strlen (ANNOBIN_SYMBOL_PREFIX);
+  if (type_return != NULL)
+    {
+      * type_return = data_return.type;
+      previous_type = data_return.type;
+    }
+  else
+    previous_type = 0;
 
-  return previous_result = name;
+  return previous_result = data_return.name;
 }
 
 /* -------------------------------------------------------------------- */

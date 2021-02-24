@@ -66,6 +66,7 @@ static bool fixed_format_messages = false;
 enum lang
 {
   LANG_UNKNOWN = 0,
+  LANG_ASSEMBLER,
   LANG_C,
   LANG_CXX,
   LANG_GO,
@@ -104,11 +105,13 @@ static struct per_file
   uint        run_minor;
   uint        run_rel;
 
-  uint                seen_tools;
-  uint                tool_version;
-  uint                current_tool;
-  const char *        component_name;
-  note_range  note_data;
+  uint          seen_tools;
+  uint          tool_version;
+  uint          current_tool;
+  note_range    note_data;
+
+  const char *  component_name;
+  uint          component_type;
 
   enum short_enum_state short_enum_state;
 
@@ -297,6 +300,22 @@ skip_check (enum test_index check)
   if (check < TEST_MAX && ! tests[check].enabled)
     return true;
 
+  /* BZ 1923439: IFuncs are compiled without some of the security
+     features because they execute in a special enviroment.  */
+  if (ELF64_ST_TYPE (per_file.component_type) == STT_GNU_IFUNC)
+    {
+      switch (check)
+	{
+	case TEST_FORTIFY:
+	case TEST_STACK_CLASH:
+	case TEST_STACK_PROT:
+	  einfo (VERBOSE2, "skipping test %s for ifunc at %#lx", tests[check].name, per_file.note_data.start);
+	  return true;
+	default:
+	  break;
+	}
+    }
+
   const char * component_name = per_file.component_name;
 
   if (component_name == NULL)
@@ -322,10 +341,13 @@ skip_check (enum test_index check)
   {
     /* We know that some glibc startup functions cannot be compiled
        with stack protection enabled.  So do not complain about them.  */
+    { "_dl_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "__libc_csu_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "__libc_csu_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "__libc_init_first", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "__libc_start_main", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
 
     /* FIXME: Not sure about these two - they need some tests skipping
@@ -551,6 +573,7 @@ get_lang_name (enum lang lang)
     {
     default:
     case LANG_UNKNOWN: return "unknown";
+    case LANG_ASSEMBLER: return "Assembler";
     case LANG_C: return "C";
     case LANG_CXX: return "C++";
     case LANG_OTHER: return "other";
@@ -621,7 +644,7 @@ add_producer (annocheck_data *  data,
 	      uint              tool,
 	      uint              version,
 	      const char *      source,
-	      bool              update_current_file)
+	      bool              update_current_tool)
 {
   einfo (VERBOSE2, "%s: info: record producer: %s version: %u source: %s",
 	 data->filename, get_tool_name (tool), version, source);
@@ -648,12 +671,11 @@ add_producer (annocheck_data *  data,
 	pass (data, TEST_GO_REVISION, source, "GO compiler revision is sufficient");
     }
   
-  if (update_current_file)
+  if (update_current_tool)
     {
       per_file.current_tool = tool;
       if (version)
 	per_file.tool_version = version;
-      return;
     }
 
   if (per_file.seen_tools == TOOL_UNKNOWN)
@@ -754,6 +776,11 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
       set_lang (data, LANG_RUST, SOURCE_DW_AT_LANGUAGE);
       break;
 
+    case DW_LANG_lo_user + 1:
+      /* Some of the GO runtime uses this value,  */
+      set_lang (data, LANG_ASSEMBLER, SOURCE_DW_AT_LANGUAGE);
+      break;
+      
     default:
       if (! per_file.other_language)
 	{
@@ -761,7 +788,7 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
 	    {
 	    default:
 	      einfo (VERBOSE, "%s: info: Written in a language other than C/C++/Go/Rust", data->filename);
-	      einfo (VERBOSE2, "debugging: val = %ld", (long) val);
+	      einfo (VERBOSE2, "debugging: val = %#lx", (long) val);
 	      break;
 	    }
 	  per_file.other_language = true;
@@ -1094,23 +1121,18 @@ align (unsigned long val, unsigned long alignment)
   return (val + (alignment - 1)) & (~ (alignment - 1));
 }
 
-static const char *
-get_component_name (annocheck_data *       data,
-		    annocheck_section *    sec,
-		    note_range *   note_data,
-		    bool                   prefer_func_symbol)
+static void
+get_component_name (annocheck_data *     data,
+		    annocheck_section *  sec,
+		    note_range *         note_data,
+		    bool                 prefer_func_symbol)
 {
-  static char *  buffer = NULL;
+  char *         buffer;
   const char *   sym;
   int            res;
+  uint           type;
 
-  if (buffer != NULL)
-    {
-      free (buffer);
-      buffer = NULL;
-    }
-
-  sym = annocheck_find_symbol_for_address_range (data, sec, note_data->start, note_data->end, prefer_func_symbol);
+  sym = annocheck_get_symbol_name_and_type (data, sec, note_data->start, note_data->end, prefer_func_symbol, & type);
 
   if (sym == NULL)
     {
@@ -1122,9 +1144,18 @@ get_component_name (annocheck_data *       data,
   else
     res = asprintf (& buffer, "component: %s", sym);
 
+  free ((char *) per_file.component_name);
+
   if (res > 0)
-    return buffer;
-  return NULL;
+    {
+      per_file.component_name = buffer;
+      per_file.component_type = type;
+    }
+  else
+    {
+      per_file.component_name = NULL;
+      per_file.component_type = 0;
+    }
 }
 
 static void
@@ -1336,13 +1367,13 @@ build_note_checker (annocheck_data *     data,
 	  if (per_file.note_data.start != per_file.note_data.end)
 	    add_producer (data, per_file.current_tool, per_file.tool_version, SOURCE_ANNOBIN_NOTES, false);
 
-	  /* If the new range is valid, get a component name for it.  */
-	  if (start != end)
-	    per_file.component_name = get_component_name (data, sec, note_data, prefer_func_name);
-
 	  /* Update the saved range.  */
 	  per_file.note_data.start = start;
 	  per_file.note_data.end = end;
+
+	  /* If the new range is valid, get a component name for it.  */
+	  if (start != end)
+	    get_component_name (data, sec, note_data, prefer_func_name);
 	}
     }
 
@@ -1691,7 +1722,6 @@ build_note_checker (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
-einfo (VERBOSE2, "STACK PROT %d", value);
       if (skip_check (TEST_STACK_PROT))
 	break;
 
@@ -1707,7 +1737,6 @@ einfo (VERBOSE2, "STACK PROT %d", value);
 	case -1:
 	default:
 	  maybe (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "unexpected note value");
-	  einfo (VERBOSE2, "debug: stack prot note value: %x", value);
 	  break;
 
 	case 0: /* NONE */
@@ -3059,21 +3088,29 @@ compare_range (const void * r1, const void * r2)
 static bool
 skip_gap_sym (const char * sym)
 {
+  if (sym == NULL)
+    return false;
+
   /* G++ will generate virtual and non-virtual thunk functions all on its own,
      without telling the annobin plugin about them.  Detect them here and do
      not complain about the gap in the coverage.  */
   if (const_strneq (sym, "_ZThn") || const_strneq (sym, "_ZTv0"))
     return true;
 
+  /* The GO infrastructure is not annotated.  */
+  if (const_strneq (sym, "internal/cpu.Initialize"))
+    return true;
+
   /* If the symbol is for a function/file that we know has special
      reasons for not being proplerly annotated then we skip it.  */
+  const char * saved_sym = per_file.component_name;
   per_file.component_name = sym;
   if (skip_check (TEST_MAX))
     {
-      per_file.component_name = NULL;
+      per_file.component_name = saved_sym;
       return true;
     }
-  per_file.component_name = NULL;
+  per_file.component_name = saved_sym;
 
   if (per_file.e_machine == EM_386)
     {

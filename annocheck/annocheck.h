@@ -201,6 +201,12 @@ extern bool      annocheck_add_checker (struct checker * CHECKER, uint MAJOR);
 extern const char *  annocheck_find_symbol_for_address_range
   (annocheck_data * DATA, annocheck_section * SEC, ulong START, ulong ADDR, bool PREFER_FUNC);
 
+/* Return the name of a symbol most appropriate for address START..END.
+   Returns NULL if no symbol could be found.
+   If a name is found, and the symbol's ELF type is available, return it in TYPE_RETURN.  */
+extern const char *  annocheck_get_symbol_name_and_type
+  (annocheck_data * DATA, annocheck_section * SEC, ulong START, ulong ADDR, bool PREFER_FUNC, uint * TYPE_RETURN);
+
 /* Runs the given CHECKER over the sections and segments in FD.
    The filename associated with FD is assumed to be EXTRA_FILENAME.
    the filename associated with the file that prompted the need for these extra checks is ORIGINAL_FILENAME.  */

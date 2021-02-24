@@ -19,7 +19,7 @@ extern "C" {
 /* The version of the package.
    NB/ This number is expected to be in the form "Nnn" where
    "N" is major version number and "nn" is the minor version number.  */
-#define ANNOBIN_VERSION 961
+#define ANNOBIN_VERSION 962
 
 /* The version of the annotation specification supported.  */
 #define SPEC_VERSION  3
