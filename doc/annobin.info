@@ -748,6 +748,7 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-test-future]
        [-ignore-gaps]
        [-fixed-format-messages]
+       [-disable-colour]
        [-disable-hardened]
        [-enable-hardened]
        FILE...
@@ -901,6 +902,12 @@ code to support the test.
      Here is an example:
 
             Hardened: FAIL: test: pie file: a.out.
+
+'--disable-colour'
+     Do not use colour to enhance FAIL, MAYB and WARN messages.  By
+     default annocheck will add colour to these messages so that they
+     stand out when displayed by a terminal emulator.  This option can
+     be used in order to turn this feature off.
 
 
 File: annobin.info,  Node: Notes,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
@@ -1994,16 +2001,16 @@ Node: The INSTRUMENT Encoding20734
 Node: Annocheck22108
 Node: Built-By24637
 Node: Hardened26167
-Node: Notes32564
-Node: Section-Size33208
-Node: Timing35362
-Node: Configure Options36009
-Node: Legacy Scripts38294
-Node: Who Built Me39069
-Node: ABI Checking41829
-Node: Hardening Checks43943
-Node: Checking Archives48029
-Node: GNU FDL50451
+Node: Notes32866
+Node: Section-Size33510
+Node: Timing35664
+Node: Configure Options36311
+Node: Legacy Scripts38596
+Node: Who Built Me39371
+Node: ABI Checking42131
+Node: Hardening Checks44245
+Node: Checking Archives48331
+Node: GNU FDL50753
 
 End Tag Table
 

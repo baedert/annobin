@@ -38,6 +38,10 @@
 #define SOURCE_SEGMENT_HEADERS  "segment headers"
 #define SOURCE_STRING_SECTION   "string section"
 
+#define GOLD_COLOUR     "\e[33;40m"
+#define RED_COLOUR      "\x1B[31;47m"
+#define DEFAULT_COLOUR  "\033[0m"
+
 typedef struct note_range
 {
   ulong         start;
@@ -47,9 +51,10 @@ typedef struct note_range
 /* Set by the constructor.  */
 static bool disabled = false;
 
-/* Can be changed by a command line option.  */
+/* Can be changed by command line options.  */
 static bool ignore_gaps = false;
 static bool fixed_format_messages = false;
+static bool enable_colour = true;
 
 #define FIXED_FORMAT_STRING "%s: test: %s file: %s"
 
@@ -277,9 +282,15 @@ includes_gimple (uint mask)
 static void
 warn (annocheck_data * data, const char * message)
 {
-  /* We use the VERBOSE setting rather than WARN because that way
-     we not get a prefix.  */
-  einfo (VERBOSE, "%s: WARN: %s", data->filename, message);
+  if (fixed_format_messages)
+    return;
+  einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+  if (enable_colour && isatty (1))
+    einfo (PARTIAL, RED_COLOUR);
+  einfo (PARTIAL, "WARN: %s", message);
+  if (enable_colour && isatty (1))
+    einfo (PARTIAL, DEFAULT_COLOUR);
+  einfo (PARTIAL, "\n");
 }
 
 static inline bool
@@ -497,6 +508,8 @@ fail (annocheck_data * data,
   else if (tests[testnum].state != STATE_FAILED || BE_VERBOSE)
     {
       einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+      if (enable_colour && isatty (1))
+	einfo (PARTIAL, RED_COLOUR);
       einfo (PARTIAL, "FAIL: %s test ", tests[testnum].name);
       if (reason)
 	einfo (PARTIAL, "because %s ", reason);
@@ -510,9 +523,10 @@ fail (annocheck_data * data,
 	    einfo (PARTIAL, "(%s) ", name);
 	}
       if (BE_VERY_VERBOSE)
-	einfo (PARTIAL, "(source: %s)\n", source);
-      else
-	einfo (PARTIAL, "\n");
+	einfo (PARTIAL, "(source: %s)", source);
+      if (enable_colour && isatty (1))
+	einfo (PARTIAL, DEFAULT_COLOUR);
+      einfo (PARTIAL, "\n");
     }
 
   tests[testnum].state = STATE_FAILED;
@@ -536,15 +550,18 @@ maybe (annocheck_data * data,
   else if (tests[testnum].state == STATE_UNTESTED || BE_VERBOSE)
     {
       einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+      if (enable_colour && isatty (1))
+	einfo (PARTIAL, GOLD_COLOUR);
       einfo (PARTIAL, "MAYB: test: %s ", tests[testnum].name);
       if (reason)
 	einfo (PARTIAL, "because %s ", reason);
       if (per_file.component_name)
 	einfo (PARTIAL, "(function: %s) ", per_file.component_name);
       if (BE_VERY_VERBOSE)
-	einfo (PARTIAL, " (source: %s)\n", source);
-      else
-	einfo (PARTIAL, "\n");
+	einfo (PARTIAL, " (source: %s)", source);
+      if (enable_colour && isatty (1))
+	einfo (PARTIAL, DEFAULT_COLOUR);
+      einfo (PARTIAL, "\n");
     }
 
   if (tests[testnum].state != STATE_FAILED)
@@ -1740,7 +1757,9 @@ build_note_checker (annocheck_data *     data,
 	  break;
 
 	case 0: /* NONE */
-	  fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "no protection enabled");
+	  /* BZ 1923439: Treat compiling with -fno-stack-protector as a deliberate decision
+	     by a package maintainer and do not consider it to be an error.  */
+	  skip (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "package maintainer has deliberately disabled stack protection");
 	  break;
 
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
@@ -3730,6 +3749,12 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
   if (streq (arg, "--fixed-format-messages"))
     {
       fixed_format_messages = true;
+      return true;
+    }
+
+  if (streq (arg, "--disable-colour") || streq (arg, "--disable-color"))
+    {
+      enable_colour = false;
       return true;
     }
 
