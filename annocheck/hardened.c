@@ -360,6 +360,9 @@ skip_check (enum test_index check)
     { "__libc_init_first", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "__libc_start_main", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "check_one_fd", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "is_dst", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "get_common_indices.constprop.0", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
 
     /* FIXME: Not sure about these two - they need some tests skipping
        but I do not think that they were stack tests...  */
@@ -1757,9 +1760,10 @@ build_note_checker (annocheck_data *     data,
 	  break;
 
 	case 0: /* NONE */
-	  /* BZ 1923439: Treat compiling with -fno-stack-protector as a deliberate decision
-	     by a package maintainer and do not consider it to be an error.  */
-	  skip (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "package maintainer has deliberately disabled stack protection");
+	  /* See BZ 1923439: Parts of glibc are deliberately compiled without stack protection,
+	     because they execute before the framework is established.  This is currently handled
+	     by tests in skip_check ().  */
+	  fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "stack protection deliberately disabled");
 	  break;
 
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
