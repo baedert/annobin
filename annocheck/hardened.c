@@ -346,7 +346,7 @@ skip_check (enum test_index check)
   const static struct ignore
   {
     const char *     func_name;
-    enum test_index  test_indicies[4];
+    enum test_index  test_indicies[6];
   }
   skip_these_funcs[] =
   {
@@ -359,7 +359,7 @@ skip_check (enum test_index check)
     { "__libc_csu_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "__libc_init_first", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "__libc_start_main", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
+    { "_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_FORTIFY, TEST_PIC, TEST_MAX } },
     { "check_one_fd", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "is_dst", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
     { "get_common_indices.constprop.0", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
@@ -380,22 +380,31 @@ skip_check (enum test_index check)
   int i;
 
   for (i = ARRAY_SIZE (skip_these_funcs); i--;)
-    if (streq (component_name, skip_these_funcs[i].func_name))
-      {
-	for (i = 0; i < ARRAY_SIZE (skip_these_funcs[0].test_indicies); i++)
-	  if (skip_these_funcs[0].test_indicies[i] == check)
+    {
+      if (streq (component_name, skip_these_funcs[i].func_name))
+	{
+	  int j;
+
+	  for (j = 0; j < ARRAY_SIZE (skip_these_funcs[i].test_indicies); j++)
 	    {
-	      if (check < TEST_MAX)
-		einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
-	      else
-		einfo (VERBOSE2, "skipping tests of component %s", component_name);
-	      return true;
+	      if (skip_these_funcs[i].test_indicies[j] == check)
+		{
+		  if (check < TEST_MAX)
+		    einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
+		  else
+		    einfo (VERBOSE2, "skipping tests of component %s", component_name);
+		  return true;
+		}
+
+	      if (skip_these_funcs[i].test_indicies[j] == TEST_MAX)
+		break;
 	    }
 
-	/* No need to continue searching - we have already matched the name.  */
-	break;
-      }
-
+	  /* No need to continue searching - we have already matched the name.  */
+	  break;
+	}
+    }
+  
   return false;
 }
 
@@ -3789,3 +3798,4 @@ register_checker (void)
   if (! annocheck_add_checker (& hardened_checker, ANNOBIN_VERSION / 100))
     disabled = true;
 }
+
