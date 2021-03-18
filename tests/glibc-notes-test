@@ -31,7 +31,7 @@ $GCC -pie -Wl,-z,now hello.o hello2.o hello3.o -L. -lhello -o glibc-notes.exe
 
 # Run annocheck
 
-$ANNOCHECK glibc-notes.exe --skip-cf-protection --skip-property-note --ignore-gaps > glibc-notes.out
+$ANNOCHECK glibc-notes.exe --skip-cf-protection --skip-property-note --skip-stack-realign --ignore-gaps > glibc-notes.out
 grep -e "PASS" glibc-notes.out
 if [ $? != 0 ];
 then

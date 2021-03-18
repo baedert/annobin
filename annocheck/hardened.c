@@ -3523,8 +3523,12 @@ finish (annocheck_data * data)
 	    case TEST_STACK_PROT:
 	      if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO is stack safe");
+	      else if (per_file.seen_tools == TOOL_GAS
+		       || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
+		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
 	      else if (is_C_compiler (per_file.seen_tools))
-		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
+		/* The skip is necessary because some glibc code is built this way.  */
+		skip (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this feature");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "not compiled code");
 	      break;

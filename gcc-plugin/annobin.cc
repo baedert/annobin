@@ -25,12 +25,16 @@ struct gcc_options * annobin_global_options = & global_options;
 #define global_options ANNOBIN_ILLEGAL_GLOBAL_OPTIONS       
 
 /* Version number.  */
+#define xstr(s) str(s)
+#define str(s)  #s
 static unsigned int   annobin_version = ANNOBIN_VERSION;
-#define VER_STRING(VER) N_("Version " #VER)
-static const char *   version_string = VER_STRING (ANNOBIN_VERSION);
+static const char *   version_string = "Version " xstr(ANNOBIN_VERSION);
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
+
+/* Filename to use when in LTO mode and the original filename is unavailable.  */
+#define ANNOBIN_LTO_FIXED_NAME "lto"
 
 /* Suffix used to turn a section name into a group name.  */
 #define ANNOBIN_GROUP_NAME    ".group"
@@ -182,27 +186,44 @@ ice (const char * text)
   annobin_inform (INFORM_ALWAYS, "ICE: Please contact the annobin maintainer with details of this problem");
 }
 
+static inline bool
+in_lto (void)
+{
+  /* Testing in_lto_p does not appear to be reliable.  Unsure why.  */
+  if (streq (progname, "lto1"))
+    return true;
+
+  return GET_INT_OPTION_BY_NAME (in_lto_p) != 0;
+}
+    
 /* Determine the (main) input file name.  */
 
 static bool
 init_annobin_input_filename (void)
 {
+  const char * f = NULL;
+
+  /* In LTO mode the compiler will use a random string for the
+     filename.  In order to allow for reproducible compilation
+     however we must ensure that we use a fixed name.  */
+  if (in_lto ())
+    f = ANNOBIN_LTO_FIXED_NAME;
+     
   /* Unfortunately we cannot rely upon 'main_input_filename' since
      if the input is preprocessed, this will have been set to the
      original un-preprocessed filename (foo.c) based upon the
      "# <line> <file>" comments in the preprocessed input (foo.i).
      Also main_input_filename is stored in the global_options array,
      where its offset cannot be safely determined.  */
-  if (num_in_fnames)
-    {
-      if ((annobin_input_filename = in_fnames[0]) != NULL)
-	return true;
-    }
+  if (f == NULL && num_in_fnames > 0)
+    f = in_fnames[0];
 
-  /* This might fail, if annobin is out of sync with gcc.  */
-  annobin_input_filename = GET_STR_OPTION_BY_NAME(main_input_filename);
+  if (f == NULL)
+    /* This might fail, if annobin is out of sync with gcc.  */
+    f = GET_STR_OPTION_BY_NAME (main_input_filename);
 
-  return annobin_input_filename != NULL;
+  annobin_input_filename = f;
+  return f != NULL;
 }
 
 /* Create a symbol name to represent the sources we are annotating.
@@ -821,12 +842,6 @@ annobin_get_optimize_debug (void)
   return GET_INT_OPTION_BY_NAME (optimize_debug);
 }
 
-static inline bool
-in_lto (void)
-{
-  return GET_INT_OPTION_BY_NAME (in_lto_p) != 0;
-}
-    
 /* Compute a numeric value representing the settings/levels of
    the -O and -g options, and some -W options.  This is to help
    verify the recommended hardening options for binaries.
