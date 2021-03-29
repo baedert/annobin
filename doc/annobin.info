@@ -732,6 +732,7 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-skip-optimization]
        [-skip-pic]
        [-skip-pie]
+       [-skip-production]
        [-skip-property-note]
        [-skip-run-path]
        [-skip-rwx-seg]
@@ -861,6 +862,10 @@ code to support the test.
 'Enum Size'
      Check that the program makes consistent use of the '-fshort-enum'
      option.
+
+'Production Ready Compiler'
+     Check that the program was built by a production-ready compiler.
+     Disabled by '--skip-production'.
 
    The tool does support a couple of other command line options as well:
 
@@ -2001,16 +2006,16 @@ Node: The INSTRUMENT Encoding20734
 Node: Annocheck22108
 Node: Built-By24637
 Node: Hardened26167
-Node: Notes32866
-Node: Section-Size33510
-Node: Timing35664
-Node: Configure Options36311
-Node: Legacy Scripts38596
-Node: Who Built Me39371
-Node: ABI Checking42131
-Node: Hardening Checks44245
-Node: Checking Archives48331
-Node: GNU FDL50753
+Node: Notes33029
+Node: Section-Size33673
+Node: Timing35827
+Node: Configure Options36474
+Node: Legacy Scripts38759
+Node: Who Built Me39534
+Node: ABI Checking42294
+Node: Hardening Checks44408
+Node: Checking Archives48494
+Node: GNU FDL50916
 
 End Tag Table
 

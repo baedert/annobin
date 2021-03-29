@@ -839,6 +839,7 @@ annocheck
   [@b{--skip-optimization}]
   [@b{--skip-pic}]
   [@b{--skip-pie}]
+  [@b{--skip-production}]
   [@b{--skip-property-note}]
   [@b{--skip-run-path}]
   [@b{--skip-rwx-seg}]
@@ -985,6 +986,9 @@ Disabled by @option{--skip-property-note}.
 Check that the program makes consistent use of the
 @option{-fshort-enum} option.
 
+@item Production Ready Compiler
+Check that the program was built by a production-ready compiler.
+Disabled by @option{--skip-production}.
 @end table
 
 The tool does support a couple of other command line options as well:
