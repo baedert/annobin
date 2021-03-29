@@ -37,6 +37,7 @@
 #define SOURCE_SEGMENT_CONTENTS "segment contents"
 #define SOURCE_SEGMENT_HEADERS  "segment headers"
 #define SOURCE_STRING_SECTION   "string section"
+#define SOURCE_COMMENT_SECTION   "comment section"
 
 #define GOLD_COLOUR     "\e[33;40m"
 #define RED_COLOUR      "\x1B[31;47m"
@@ -187,6 +188,7 @@ enum test_index
   TEST_OPTIMIZATION,
   TEST_PIC,
   TEST_PIE,
+  TEST_PRODUCTION,
   TEST_PROPERTY_NOTE,
   TEST_RUN_PATH,
   TEST_RWX_SEG,
@@ -230,6 +232,7 @@ static test tests [TEST_MAX] =
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
   TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
+  TEST (production,         PRODUCTION,         "Built by a production compiler"),
   TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, aarch64, PowerPC)"),
   TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
   TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
@@ -2748,6 +2751,10 @@ check_code_section (annocheck_data *     data,
 	  einfo (VERBOSE2, "unrecognised component in .comment section: %s", tool);
 	}
 
+      /* Check for files built by tools that are not intended to produce production ready binaries.  */
+      if (strstr (tool, "NOT_FOR_PRODUCTION"))
+	fail (data, TEST_PRODUCTION, SOURCE_COMMENT_SECTION, "a production-ready compiler was not used to build the binary");
+
       tool += strlen (tool) + 1;
     }
 
@@ -3428,6 +3435,7 @@ finish (annocheck_data * data)
 	{
 	  switch (i)
 	    {
+	    case TEST_PRODUCTION:
 	    case TEST_GNU_STACK:
 	    case TEST_NOTES:
 	    case TEST_LTO:
