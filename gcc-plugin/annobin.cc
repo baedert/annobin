@@ -1730,7 +1730,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
       /* FIXME: A workaround for BZ 1880634.
 	 Ensure that we do not have empty special text sections so that the
 	 annobin start symbols are never beyond the end of the sections.  */
-      if (suffix && enable_ppc64_nops)
+      if (* suffix && enable_ppc64_nops)
 	annobin_emit_asm ("nop", "Inserted by the annobin plugin.  Disable with -fplugin-arg-annobin-no-ppc64-nops");
     }
   else

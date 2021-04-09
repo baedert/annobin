@@ -1794,7 +1794,7 @@ build_note_checker (annocheck_data *     data,
       {
 	enum short_enum_state state = value ? SHORT_ENUM_STATE_SHORT : SHORT_ENUM_STATE_LONG;
 
-	if (value < 0 || value > 1)
+	if (value > 1)
 	  {
 	    maybe (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "unexpected note value");
 	    einfo (VERBOSE2, "debug: enum note value: %x", value);
