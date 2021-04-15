@@ -1047,15 +1047,14 @@ start (annocheck_data * data)
       per_file.is_little_endian = hdr->e_ident[EI_DATA] != ELFDATA2MSB;
     }
 
-  /* We do not expect to find ET_EXEC binaries.  These days all binaries
-     should be ET_DYN, even executable programs.  */
+  /* We do not expect to find ET_EXEC binaries.  These days
+     all binaries should be ET_DYN, even executable programs.  */
   if (per_file.e_type == ET_EXEC)
-    fail (data, TEST_PIE, SOURCE_ELF_HEADER, "not linked with -Wl,-pie");
+    fail (data, TEST_PIE, SOURCE_ELF_HEADER, "not built with '-Wl,-pie' (gcc/clang) or '-buildmode pie' (go)");
   else
     pass (data, TEST_PIE, SOURCE_ELF_HEADER, NULL);
     
-  /* Check to see if something other than gcc produced parts
-     of this binary.  */
+  /* Check to see which tool(s) produced this binary.  */
   (void) annocheck_walk_dwarf (data, dwarf_attribute_checker, NULL);
 
   return true;
@@ -1083,8 +1082,9 @@ interesting_sec (annocheck_data *     data,
       per_file.text_section_alignment   = sec->shdr.sh_addralign;
       per_file.text_section_range.start = sec->shdr.sh_addr;
       per_file.text_section_range.end   = sec->shdr.sh_addr + sec->shdr.sh_size;
-      
-      return false; /* We do not actually need to scan the contents of the .text section.  */
+
+      /* We do not actually need to scan the contents of the .text section.  */
+      return false;
     }
 
   if (per_file.debuginfo_file)
