@@ -1150,6 +1150,10 @@ interesting_sec (annocheck_data *     data,
 
   if (is_object_file () && streq (sec->secname, ".note.GNU-stack"))
     {
+      /* The permissions of the .note-GNU-stack section are used to set the permissions of the GNU_STACK segment,
+	 hence they should not include SHF_EXECINSTR.  Note - if the section is missing, then the linker may
+	 choose to create an executable stack (based upon command line options, amoungst other things) so it is
+	 always best to specify this section.  */
       if (sec->shdr.sh_flags & SHF_EXECINSTR)
 	fail (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, ".note.GNU-stack section has execute permission");
       else
@@ -3473,7 +3477,11 @@ finish (annocheck_data * data)
 	    {
 	    case TEST_GNU_STACK:
 	      if (is_object_file ())
-		fail (data, i, SOURCE_FINAL_SCAN, "no .note.GNU-stack section found");
+		{
+		  fail (data, i, SOURCE_FINAL_SCAN, "no .note.GNU-stack section found");
+		  if (includes_assembler (per_file.seen_tools))
+		    info (data, i, SOURCE_FINAL_SCAN, "possibly need to add '.section .note.GNU-stack,\"\",%progbits' to the assembler sources");
+		}
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no GNU-stack found");
 	      break;
