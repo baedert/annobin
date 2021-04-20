@@ -859,6 +859,7 @@ annocheck
   [@b{--disable-colour}]
   [@b{--disable-hardened}]
   [@b{--enable-hardened}]
+  [@b{--full-filenames}]
   @var{file}@dots{}
 @c man end
 @end smallexample
@@ -1042,6 +1043,10 @@ Do not use colour to enhance FAIL, MAYB and WARN messages.  By default
 annocheck will add colour to these messages so that they stand out
 when displayed by a terminal emulator.  This option can be used in
 order to turn this feature off.
+
+@item --full-filenames
+Use the full pathname for files.  Useful when recursing into
+directories.   Disabled by default.
 
 @end table
 

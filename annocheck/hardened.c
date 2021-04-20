@@ -56,6 +56,7 @@ static bool disabled = false;
 static bool ignore_gaps = false;
 static bool fixed_format_messages = false;
 static bool enable_colour = true;
+static bool full_filenames = false;
 
 #define FIXED_FORMAT_STRING "%s: test: %s file: %s"
 
@@ -282,18 +283,32 @@ includes_gimple (uint mask)
   return mask & TOOL_GIMPLE;
 }
 
+static inline const char *
+get_filename (annocheck_data * data)
+{
+  return full_filenames ? data->full_filename : data->filename;
+}
+
 static void
 warn (annocheck_data * data, const char * message)
 {
   if (fixed_format_messages)
     return;
-  einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+  einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, get_filename (data));
   if (enable_colour && isatty (1))
     einfo (PARTIAL, RED_COLOUR);
   einfo (PARTIAL, "WARN: %s", message);
   if (enable_colour && isatty (1))
     einfo (PARTIAL, DEFAULT_COLOUR);
   einfo (PARTIAL, "\n");
+}
+
+static void
+inform (annocheck_data * data, const char * message)
+{
+  if (fixed_format_messages)
+    return;
+  einfo (VERBOSE, "%s: %s: %s", HARDENED_CHECKER_NAME, get_filename (data), message);
 }
 
 static inline bool
@@ -412,6 +427,7 @@ skip_check (enum test_index check)
 }
 
 /* Ensure that NAME will not use more than one line.  */
+
 static const char *
 sanitize_filename (const char * name)
 {
@@ -455,14 +471,16 @@ pass (annocheck_data * data, uint testnum, const char * source, const char * rea
 
   tests[testnum].result_announced = true;
 
+  const char * filename = get_filename (data);
+
   if (fixed_format_messages)
-    einfo (INFO, FIXED_FORMAT_STRING, "PASS", tests[testnum].name, sanitize_filename (data->filename));
+    einfo (INFO, FIXED_FORMAT_STRING, "PASS", tests[testnum].name, sanitize_filename (filename));
   else
     {
       if (! BE_VERBOSE)
 	return;
 
-      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, filename);
       einfo (PARTIAL, "PASS: %s test ", tests[testnum].name);
       if (reason)
 	einfo (PARTIAL, "because %s ", reason);
@@ -495,7 +513,7 @@ skip (annocheck_data * data, uint testnum, const char * source, const char * rea
   if (! BE_VERBOSE)
     return;
 
-  einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+  einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, get_filename (data));
   einfo (PARTIAL, "skip: %s test ", tests[testnum].name);
   if (reason)
     einfo (PARTIAL, "because %s ", reason);
@@ -518,11 +536,15 @@ fail (annocheck_data * data,
 
   per_file.num_fails ++;
 
+  const char * filename = get_filename (data);
+
   if (fixed_format_messages)
-    einfo (INFO, FIXED_FORMAT_STRING, "FAIL", tests[testnum].name, sanitize_filename (data->filename));
+    {
+      einfo (INFO, FIXED_FORMAT_STRING, "FAIL", tests[testnum].name, sanitize_filename (filename));
+    }
   else if (tests[testnum].state != STATE_FAILED || BE_VERBOSE)
     {
-      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, filename);
       if (enable_colour && isatty (1))
 	einfo (PARTIAL, RED_COLOUR);
       einfo (PARTIAL, "FAIL: %s test ", tests[testnum].name);
@@ -560,11 +582,15 @@ maybe (annocheck_data * data,
 
   per_file.num_maybes ++;
 
+  const char * filename = get_filename (data);
+
   if (fixed_format_messages)
-    einfo (INFO, FIXED_FORMAT_STRING, "MAYB", tests[testnum].name, sanitize_filename (data->filename));
+    {
+      einfo (INFO, FIXED_FORMAT_STRING, "MAYB", tests[testnum].name, sanitize_filename (filename));
+    }
   else if (tests[testnum].state == STATE_UNTESTED || BE_VERBOSE)
     {
-      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, data->filename);
+      einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, filename);
       if (enable_colour && isatty (1))
 	einfo (PARTIAL, GOLD_COLOUR);
       einfo (PARTIAL, "MAYB: test: %s ", tests[testnum].name);
@@ -594,8 +620,8 @@ info (annocheck_data * data, uint testnum, const char * source, const char * ext
   if (fixed_format_messages)
     return;
 
-  einfo (VERBOSE2, "%s: info: %s %s (source %s)",
-	 data->filename, tests[testnum].name, extra, source);
+  einfo (VERBOSE2, "%s: info: %s %s (source %s)", get_filename (data),
+	 tests[testnum].name, extra, source);
 }
 
 static const char *
@@ -622,7 +648,7 @@ set_lang (annocheck_data *  data,
   if (per_file.lang == LANG_UNKNOWN)
     {
       einfo (VERBOSE2, "%s: info: written in %s (source: %s)",
-	     data->filename, get_lang_name (lang), source);
+	     get_filename (data), get_lang_name (lang), source);
 
       per_file.lang = lang;
     }
@@ -633,7 +659,7 @@ set_lang (annocheck_data *  data,
       if (! per_file.also_written)
 	{
 	  einfo (VERBOSE, "%s: info: ALSO written in %s (source: %s)",
-		 data->filename, get_lang_name (lang), source);
+		 get_filename (data), get_lang_name (lang), source);
 	  per_file.also_written = true;
 	}
 
@@ -679,7 +705,7 @@ add_producer (annocheck_data *  data,
 	      bool              update_current_tool)
 {
   einfo (VERBOSE2, "%s: info: record producer: %s version: %u source: %s",
-	 data->filename, get_tool_name (tool), version, source);
+	 get_filename (data), get_tool_name (tool), version, source);
 
   if (tool == TOOL_GO)
     {
@@ -696,7 +722,7 @@ add_producer (annocheck_data *  data,
 	    {
 	      fail (data, TEST_GO_REVISION, source, MIN_GO_REV_STR ("GO revision must be >= ", MIN_GO_REVISION, ""));
 	      einfo (VERBOSE, "%s: info: GO compiler revision %u detected in %s",
-		     data->filename, version, source);
+		     get_filename (data), version, source);
 	    }
 	}
       else
@@ -717,9 +743,9 @@ add_producer (annocheck_data *  data,
       if (! fixed_format_messages)
 	{
 	  if (version)
-	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
+	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
 	  else
-	    einfo (VERBOSE, "%s: info: set binary producer to %s", data->filename, get_tool_name (tool));
+	    einfo (VERBOSE, "%s: info: set binary producer to %s", get_filename (data), get_tool_name (tool));
 	}
 
       if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
@@ -752,7 +778,7 @@ add_producer (annocheck_data *  data,
 	    {
 	      if (! fixed_format_messages)
 		einfo (VERBOSE, "%s: info: assembler built by GCC detected - treating as pure assembler",
-		       data->filename);
+		       get_filename (data));
 	      per_file.warned_asm_not_gcc = true;
 	    }
 
@@ -762,9 +788,9 @@ add_producer (annocheck_data *  data,
       if (! fixed_format_messages)
 	{
 	  if (version)
-	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", data->filename, get_tool_name (tool), version);
+	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
 	  else
-	    einfo (VERBOSE, "%s: info: set binary producer to %s", data->filename, get_tool_name (tool));
+	    einfo (VERBOSE, "%s: info: set binary producer to %s", get_filename (data), get_tool_name (tool));
 	}
     }
 }
@@ -796,7 +822,7 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
     case DW_LANG_C_plus_plus_11:
     case DW_LANG_C_plus_plus_14:
       if (! fixed_format_messages)
-	einfo (VERBOSE, "%s: info: Written in C++", data->filename);
+	einfo (VERBOSE, "%s: info: Written in C++", get_filename (data));
       set_lang (data, LANG_CXX, SOURCE_DW_AT_LANGUAGE);
       break;
 
@@ -819,7 +845,7 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
 	  switch (val)
 	    {
 	    default:
-	      einfo (VERBOSE, "%s: info: Written in a language other than C/C++/Go/Rust", data->filename);
+	      einfo (VERBOSE, "%s: info: Written in a language other than C/C++/Go/Rust", get_filename (data));
 	      einfo (VERBOSE2, "debugging: val = %#lx", (long) val);
 	      break;
 	    }
@@ -880,7 +906,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       return;
     }
 
-  einfo (VERBOSE2, "%s: DW_AT_producer = %s", data->filename, string);
+  einfo (VERBOSE2, "%s: DW_AT_producer = %s", get_filename (data), string);
 
   /* See if we can determine exactly which tool did produce this binary.  */
   const tool_id *  tool;
@@ -916,9 +942,9 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       /* FIXME: This can happen for object files because the DWARF data
 	 has not been relocated.  Find out how to handle this using libdwarf.  */
       if (is_object_file ())
-	warn (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
+	inform (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
       else
-	warn (data, "Unable to determine the binary's producer from its DW_AT_producer string");
+	inform (data, "Unable to determine the binary's producer from it's DW_AT_producer string");
       return;
     }
 
@@ -1098,7 +1124,7 @@ interesting_sec (annocheck_data *     data,
       else if (tests[TEST_GNU_STACK].state == STATE_PASSED)
 	maybe (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "multiple stack sections detected");
       else
-	pass (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, NULL);
+	pass (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, ".stack section exists and has correction permissions");
 
       return false;
     }
@@ -1119,6 +1145,15 @@ interesting_sec (annocheck_data *     data,
       else
 	pass (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, NULL);
 	
+      return false;
+    }
+
+  if (is_object_file () && streq (sec->secname, ".note.GNU-stack"))
+    {
+      if (sec->shdr.sh_flags & SHF_EXECINSTR)
+	fail (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, ".note.GNU-stack section has execute permission");
+      else
+	pass (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "non-executable .note.GNU-stack section found");
       return false;
     }
 
@@ -1248,7 +1283,7 @@ report_note_producer (annocheck_data * data,
     return;
 
   einfo (PARTIAL, "%s: %s: info: notes produced by %s plugin ",
-	 HARDENED_CHECKER_NAME, data->filename, source);
+	 HARDENED_CHECKER_NAME, get_filename (data), source);
 
   if (version == 0)
     einfo (PARTIAL, "(version unknown)\n");
@@ -1293,7 +1328,7 @@ build_note_checker (annocheck_data *     data,
   if (note->n_type    != NT_GNU_BUILD_ATTRIBUTE_OPEN
       && note->n_type != NT_GNU_BUILD_ATTRIBUTE_FUNC)
     {
-      einfo (FAIL, "%s: Unrecognised annobin note type %d", data->filename, note->n_type);
+      einfo (FAIL, "%s: Unrecognised annobin note type %d", get_filename (data), note->n_type);
       return false;
     }
 
@@ -1302,7 +1337,7 @@ build_note_checker (annocheck_data *     data,
 
   if (note->n_namesz < 3)
     {
-      einfo (FAIL, "%s: Corrupt annobin note, name size: %x", data->filename, note->n_namesz);
+      einfo (FAIL, "%s: Corrupt annobin note, name size: %x", get_filename (data), note->n_namesz);
       return false;
     }
 
@@ -1352,7 +1387,7 @@ build_note_checker (annocheck_data *     data,
       else
 	{
 	  einfo (FAIL, "%s: Corrupt annobin note, desc size: %x",
-		 data->filename, note->n_descsz);
+		 get_filename (data), note->n_descsz);
 	  return false;
 	}
 
@@ -1372,14 +1407,14 @@ build_note_checker (annocheck_data *     data,
 		return true;
 
 	      einfo (FAIL, "%s: Corrupt annobin note, start address %#lx > end address %#lx",
-		     data->filename, start, end);
+		     get_filename (data), start, end);
 	      return true;
 	    }
 	}
 
       if (end == (ulong) -1)
 	{
-	  einfo (WARN, "%s: Corrupt annobin note : end address == -1", data->filename);
+	  einfo (WARN, "%s: Corrupt annobin note : end address == -1", get_filename (data));
 	  start = end;
 	}
 
@@ -1489,7 +1524,7 @@ build_note_checker (annocheck_data *     data,
 
       if (* attr > '0' + SPEC_VERSION)
 	einfo (INFO, "%s: WARN: This checker only supports version %d of the Watermark protocol.  The data in the notes uses version %d",
-	       data->filename, SPEC_VERSION, * attr - '0');
+	       get_filename (data), SPEC_VERSION, * attr - '0');
 
       /* Check the note per_file.  */
       ++ attr;
@@ -1596,7 +1631,7 @@ build_note_checker (annocheck_data *     data,
 	    }
 
 	  einfo (VERBOSE2, "%s: info: detected information created by an annobin plugin running on %s version %u.%u.%u",
-		 data->filename, t->tool_name, major, minor, rel);
+		 get_filename (data), t->tool_name, major, minor, rel);
 
 	  /* Make a note of the producer in case there has not been any version notes.  */
 	  if (t->tool_id != TOOL_GCC || per_file.current_tool != TOOL_GIMPLE)
@@ -1609,7 +1644,7 @@ build_note_checker (annocheck_data *     data,
 	  else if (per_file.run_major != major)
 	    {
 	      einfo (INFO, "%s: WARN: this file was built by more than one version of %s (%u and %u)",
-		     data->filename, t->tool_name, per_file.run_major, major);
+		     get_filename (data), t->tool_name, per_file.run_major, major);
 	      if (per_file.run_major < major)
 		per_file.run_major = major;
 	    }
@@ -1619,7 +1654,7 @@ build_note_checker (annocheck_data *     data,
 	      if (! per_file.warned_version_mismatch)
 		{
 		  einfo (INFO, "%s: WARN: Annobin plugin was built by %s version %u but run on %s version %u",
-			 data->filename, t->tool_name, per_file.anno_major,
+			 get_filename (data), t->tool_name, per_file.anno_major,
 			 t->tool_name, per_file.run_major);
 		  per_file.warned_version_mismatch = true;
 		}
@@ -1632,12 +1667,12 @@ build_note_checker (annocheck_data *     data,
 	      || (per_file.anno_rel != 0 && per_file.anno_rel != rel))
 	    {
 	      einfo (VERBOSE, "%s: warn: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
-		     data->filename, t->tool_name,
+		     get_filename (data), t->tool_name,
 		     per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
 		     t->tool_name,
 		     per_file.run_major, per_file.run_minor, per_file.run_rel);
 	      einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
-		     data->filename);
+		     get_filename (data));
 	    }
 	  break;
 	}
@@ -1666,7 +1701,7 @@ build_note_checker (annocheck_data *     data,
 	    }
 
 	  einfo (VERBOSE2, "%s: info: detected information stored by an annobin plugin built by %s version %u.%u.%u",
-		 data->filename, t->tool_name, major, minor, rel);
+		 get_filename (data), t->tool_name, major, minor, rel);
 
 	  if (per_file.anno_major == 0)
 	    {
@@ -1675,7 +1710,7 @@ build_note_checker (annocheck_data *     data,
 	  else if (per_file.anno_major != major)
 	    {
 	      einfo (INFO, "%s: WARN: notes produced by annobins compiled for more than one version of %s (%u vs %u)",
-		     data->filename, t->tool_name, per_file.anno_major, major);
+		     get_filename (data), t->tool_name, per_file.anno_major, major);
 	      if (per_file.anno_major < major)
 		per_file.anno_major = major;
 	    }
@@ -1685,7 +1720,7 @@ build_note_checker (annocheck_data *     data,
 	      if (! per_file.warned_version_mismatch)
 		{
 		  einfo (INFO, "%s: WARN: Annobin plugin was built by %s version %u but run on %s version %u",
-			 data->filename, t->tool_name, per_file.anno_major, t->tool_name, per_file.run_major);
+			 get_filename (data), t->tool_name, per_file.anno_major, t->tool_name, per_file.run_major);
 		  per_file.warned_version_mismatch = true;
 		}
 	    }
@@ -1696,10 +1731,10 @@ build_note_checker (annocheck_data *     data,
 	      || (per_file.run_rel != 0 && per_file.run_rel != rel))
 	    {
 	      einfo (VERBOSE, "%s: warn: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
-		     data->filename, t->tool_name, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
+		     get_filename (data), t->tool_name, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
 		     t->tool_name, per_file.run_major, per_file.run_minor, per_file.run_rel);
 	      einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
-		     data->filename);
+		     get_filename (data));
 	    }
 
 	  break;
@@ -1716,11 +1751,11 @@ build_note_checker (annocheck_data *     data,
 	  uint version = (uint) strtoul (gcc + 4, NULL, 10);
 
 	  einfo (VERBOSE2, "%s: (%s) built-by gcc version %u",
-		 data->filename, per_file.component_name, version);
+		 get_filename (data), per_file.component_name, version);
 	}
       else
 	einfo (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
-	       data->filename, per_file.component_name, attr);
+	       get_filename (data), per_file.component_name, attr);
       break;
 
     case GNU_BUILD_ATTRIBUTE_PIC:
@@ -2104,7 +2139,7 @@ build_note_checker (annocheck_data *     data,
 	  if (! per_file.warned_about_instrumentation)
 	    {
 	      einfo (INFO, "%s: WARN: (%s): Instrumentation enabled - this is probably a mistake for production binaries",
-		     data->filename, per_file.component_name);
+		     get_filename (data), per_file.component_name);
 
 	      per_file.warned_about_instrumentation = true;
 
@@ -2116,23 +2151,23 @@ build_note_checker (annocheck_data *     data,
 		  if (sscanf (attr, "%u/%u/%u/%u", & sanitize, & instrument, & profile, & arcs) != 4)
 		    {
 		      einfo (VERBOSE2, "%s: ICE:  (%s): Unable to extract details from instrumentation note",
-			     data->filename, per_file.component_name);
+			     get_filename (data), per_file.component_name);
 		    }
 		  else
 		    {
 		      einfo (VERBOSE, "%s: info: (%s):  Details: -fsanitize=...: %s",
-			     data->filename, per_file.component_name, sanitize ? "enabled" : "disabled");
+			     get_filename (data), per_file.component_name, sanitize ? "enabled" : "disabled");
 		      einfo (VERBOSE, "%s: info: (%s):  Details: -finstrument-functions: %s",
-			     data->filename, per_file.component_name, instrument ? "enabled" : "disabled");
+			     get_filename (data), per_file.component_name, instrument ? "enabled" : "disabled");
 		      einfo (VERBOSE, "%s: info: (%s):  Details: -p and/or -pg: %s",
-			     data->filename, per_file.component_name, profile ? "enabled" : "disabled");
+			     get_filename (data), per_file.component_name, profile ? "enabled" : "disabled");
 		      einfo (VERBOSE, "%s: info: (%s):  Details: -fprofile-arcs: %s",
-			     data->filename, per_file.component_name, arcs ? "enabled" : "disabled");
+			     get_filename (data), per_file.component_name, arcs ? "enabled" : "disabled");
 		    }
 		}
 	      else
 		einfo (INFO, "%s: info: (%s):  Run with -v for more information",
-		       data->filename, per_file.component_name);
+		       get_filename (data), per_file.component_name);
 	    }
 	}
       else
@@ -2259,9 +2294,9 @@ ffail (annocheck_data * data, const char * message, int level)
   if (! report_future_fail)
     level = VERBOSE2;
 
-  einfo (level, "%s: look: %s", data->filename, message);
+  einfo (level, "%s: look: %s", get_filename (data), message);
   einfo (level, "%s: ^^^^:  This test is not yet enabled, but if it was enabled, it would fail...",
-	 data->filename);
+	 get_filename (data));
 }
 
 static void
@@ -2303,7 +2338,7 @@ handle_aarch64_property_note (annocheck_data *      data,
   
   if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
     {
-      einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
+      einfo (VERBOSE2, "%s: Ignoring property note type %lx", get_filename (data), type);
       return NULL;
     }
 
@@ -2330,7 +2365,7 @@ handle_aarch64_property_note (annocheck_data *      data,
       return NULL;
     }
 
-  einfo (VERBOSE2, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", data->filename);
+  einfo (VERBOSE2, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", get_filename (data));
   return NULL;
 }
 
@@ -2351,7 +2386,7 @@ handle_x86_property_note (annocheck_data *      data,
 
   if (type != GNU_PROPERTY_X86_FEATURE_1_AND)
     {
-      einfo (VERBOSE2, "%s: Ignoring property note type %lx", data->filename, type);
+      einfo (VERBOSE2, "%s: Ignoring property note type %lx", get_filename (data), type);
       return NULL;
     }
 
@@ -2410,13 +2445,13 @@ property_note_checker (annocheck_data *     data,
       break;
 
     default:
-      einfo (VERBOSE2, "%s: WARN: Property notes for architecture %d not handled", data->filename, per_file.e_machine);
+      einfo (VERBOSE2, "%s: WARN: Property notes for architecture %d not handled", get_filename (data), per_file.e_machine);
       return true;
     }
   
   if (note->n_type != NT_GNU_PROPERTY_TYPE_0)
     {
-      einfo (VERBOSE2, "%s: info: unexpected GNU Property note type %x", data->filename, note->n_type);
+      einfo (VERBOSE2, "%s: info: unexpected GNU Property note type %x", get_filename (data), note->n_type);
       return true;
     }
 
@@ -2499,7 +2534,7 @@ check_note_section (annocheck_data *    data,
   if (sec->shdr.sh_addralign != 4 && sec->shdr.sh_addralign != 8)
     {
       einfo (INFO, "%s: WARN: note section %s not properly aligned (alignment: %ld)",
-	     data->filename, sec->secname, (long) sec->shdr.sh_addralign);
+	     get_filename (data), sec->secname, (long) sec->shdr.sh_addralign);
     }
 
   if (const_strneq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
@@ -2573,7 +2608,7 @@ check_dynamic_section (annocheck_data *    data,
 
   if (sec->shdr.sh_size == 0 || sec->shdr.sh_entsize == 0)
     {
-      einfo (VERBOSE, "%s: WARN: Dynamic section %s is empty - ignoring", data->filename, sec->secname);
+      einfo (VERBOSE, "%s: WARN: Dynamic section %s is empty - ignoring", get_filename (data), sec->secname);
       return true;
     }
 
@@ -2732,7 +2767,7 @@ check_code_section (annocheck_data *     data,
 	  version = (uint) strtod (where + strlen (gcc_prefix), NULL);
 	  add_producer (data, TOOL_GCC, version, COMMENT_SECTION, true);
 	  einfo (VERBOSE2, "%s: built by gcc version %u (extracted from '%s' in comment section)",
-		 data->filename, version, where);
+		 get_filename (data), version, where);
 	}
       else if ((where = strstr (tool, clang_prefix)) != NULL)
 	{
@@ -2740,7 +2775,7 @@ check_code_section (annocheck_data *     data,
 	  version = (uint) strtod (where + strlen (clang_prefix), NULL);
 	  add_producer (data, TOOL_CLANG, version, COMMENT_SECTION, true);
 	  einfo (VERBOSE2, "%s: built by clang version %u (extracted from '%s' in comment section)",
-		 data->filename, version, where);
+		 get_filename (data), version, where);
 	}
       else if (strstr (tool, lld_prefix) != NULL)
 	{
@@ -2784,7 +2819,7 @@ static bool
 is_shared_lib (annocheck_data * data)
 {
   /* FIXME: Need a better test.  */
-  return strstr (data->filename, ".so") != NULL;
+  return strstr (get_filename (data), ".so") != NULL;
 }
 
 static bool
@@ -2800,8 +2835,9 @@ interesting_seg (annocheck_data *    data,
 	{
 	  /* Object files should not have segments.  */
 	  assert (! is_object_file ());
-	  fail (data, TEST_RWX_SEG, SOURCE_SEGMENT_HEADERS, "Segment has Read, Write and eXecute flags set");
+	  fail (data, TEST_RWX_SEG, SOURCE_SEGMENT_HEADERS, "segment has Read, Write and eXecute flags set");
 	  einfo (VERBOSE2, "RWX segment number: %d", seg->number);
+	  fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "the GNU stack segment has execute permission");
 	}
     }
 
@@ -2815,10 +2851,10 @@ interesting_seg (annocheck_data *    data,
       if (! skip_check (TEST_GNU_STACK))
 	{
 	  if ((seg->phdr->p_flags & (PF_W | PF_R)) != (PF_W | PF_R))
-	    fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "The GNU stack segment does not have both read & write permissions");
+	    fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "the GNU stack segment does not have both read & write permissions");
 	  /* If the segment has the PF_X flag set it will have been reported as a failure above.  */
 	  else if ((seg->phdr->p_flags & PF_X) == 0)
-	    pass (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, NULL);
+	    pass (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "stack segment exists with the correct permissions");
 	}
       break;
 
@@ -2889,7 +2925,7 @@ check_seg (annocheck_data *    data,
 	      fail (data, TEST_ENTRY, SOURCE_SEGMENT_CONTENTS, "instruction at entry is not ENDBR32");
 
 	      einfo (VERBOSE, "%s: info: entry address: %#lx.  Bytes at this address: %x %x %x %x",
-		     data->filename, (long) per_file.e_entry,
+		     get_filename (data), (long) per_file.e_entry,
 		     entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
 	    }
 	}
@@ -2906,7 +2942,7 @@ check_seg (annocheck_data *    data,
 	      fail (data, TEST_ENTRY, SOURCE_SEGMENT_CONTENTS, "instruction at entry is not ENDBR64");
 
 	      einfo (VERBOSE, "%s: info: entry address: %#lx.  Bytes at this address: %x %x %x %x",
-		     data->filename, (long) per_file.e_entry,
+		     get_filename (data), (long) per_file.e_entry,
 		     entry_bytes[0], entry_bytes[1], entry_bytes[2], entry_bytes[3]);
 	    }
 	}
@@ -3302,13 +3338,13 @@ check_for_gaps (annocheck_data * data)
 		}
 
 	      einfo (VERBOSE, "%s: gap:  (%#lx..%#lx probable component: %s) in annobin notes",
-		     data->filename, gap.start, gap.end, sym);
+		     get_filename (data), gap.start, gap.end, sym);
 
 	      free ((char *) cpsym);
 	    }
 	  else
 	    einfo (VERBOSE, "%s: gap:  (%#lx..%#lx) in annobin notes",
-		   data->filename, gap.start, gap.end);
+		   get_filename (data), gap.start, gap.end);
 	}
     }
 
@@ -3366,9 +3402,9 @@ check_for_gaps (annocheck_data * data)
 	 of the .text section, so make it an INFO result for now.
 	 Nor does it allow for linker generated code that have no notes.  */
       einfo (VERBOSE, "%s: info: not all of the .text section is covered by notes",
-	     data->filename);
+	     get_filename (data));
       einfo (VERBOSE, "%s: info: addr range not covered: %lx..%lx",
-	     data->filename, per_file.text_section_range.start, per_file.text_section_range.end);
+	     get_filename (data), per_file.text_section_range.start, per_file.text_section_range.end);
     }
 }
 
@@ -3404,8 +3440,8 @@ finish (annocheck_data * data)
 	};
 
       /* There is a separate debuginfo file.  Scan it to see if there are any notes that we can use.  */
-      einfo (VERBOSE2, "%s: info: running subchecker on %s", data->filename, data->dwarf_filename);
-      annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, data->filename, data->dwarf_fd);
+      einfo (VERBOSE2, "%s: info: running subchecker on %s", get_filename (data), data->dwarf_filename);
+      annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, get_filename (data), data->dwarf_fd);
     }
 
   if (! per_file.build_notes_seen && is_C_compiler (per_file.seen_tools))
@@ -3414,10 +3450,10 @@ finish (annocheck_data * data)
   if (! ignore_gaps)
     {
       if (is_object_file ())
-	einfo (VERBOSE, "%s: Not checking for gaps (object file)", data->filename);
+	einfo (VERBOSE, "%s: Not checking for gaps (object file)", get_filename (data));
       else if (! is_C_compiler (per_file.seen_tools) && ! includes_assembler (per_file.seen_tools))
 	einfo (VERBOSE, "%s: Not checking for gaps (binary created by a tool without an annobin plugin)",
-	       data->filename);
+	       get_filename (data));
       else
 	check_for_gaps (data);
     }
@@ -3435,8 +3471,14 @@ finish (annocheck_data * data)
 	{
 	  switch (i)
 	    {
-	    case TEST_PRODUCTION:
 	    case TEST_GNU_STACK:
+	      if (is_object_file ())
+		fail (data, i, SOURCE_FINAL_SCAN, "no .note.GNU-stack section found");
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no GNU-stack found");
+	      break;
+
+	    case TEST_PRODUCTION:
 	    case TEST_NOTES:
 	    case TEST_LTO:
 	    case TEST_ENTRY:
@@ -3653,7 +3695,7 @@ finish (annocheck_data * data)
   if (BE_VERBOSE)
     return true;
 
-  return einfo (INFO, "%s: PASS", data->filename);
+  return einfo (INFO, "%s: PASS", get_filename (data));
 }
 
 static void
@@ -3783,6 +3825,12 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return true;
     }
 
+  if (streq (arg, "--full-filenames"))
+    {
+      full_filenames = true;
+      return true;
+    }
+
   return false;
 }
 
@@ -3810,4 +3858,3 @@ register_checker (void)
   if (! annocheck_add_checker (& hardened_checker, ANNOBIN_VERSION / 100))
     disabled = true;
 }
-

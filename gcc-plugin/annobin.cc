@@ -2503,8 +2503,10 @@ plugin_init (struct plugin_name_args *    plugin_info,
       return 1;
     }
 
-  /* Create a file name symbol to be referenced by the notes.
-     Note - do not call annobin_inform before this operation has completed.  */
+  if (! enabled)
+    return 0;
+
+  /* Create a file name symbol to be referenced by the notes.  */
   if (! init_annobin_output_filesym ())
     {
       ice ("Could not find output filename");
@@ -2512,17 +2514,11 @@ plugin_init (struct plugin_name_args *    plugin_info,
       annobin_output_filesym = (char *) "unknown_source";
     }
 
-  if (! enabled)
-    return 0;
-
   if (BE_VERBOSE)
     annobin_display_version ();
 
-  if (!plugin_default_version_check (version, & gcc_version))
+  if (! plugin_default_version_check (version, & gcc_version))
     {
-      /* Note - we use fprintf here rather than annobin_inform as the
-	 latter references main_input_filename, which is a gcc variable
-	 and may not be accessible.  */
       bool fail = false;
 
       /* plugin_default_version_check is very strict and requires that the
@@ -2531,8 +2527,8 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	 be sufficient.  [FIXME: It turns out that this is not entirely true...]  */
       if (strncmp (version->basever, gcc_version.basever, strchr (version->basever, '.') - version->basever))
 	{
-	  fprintf (stderr, _("annobin: Error: plugin built for compiler version (%s) but run with compiler version (%s)\n"),
-		   gcc_version.basever, version->basever);
+	  annobin_inform (INFORM_ALWAYS, _("Error: plugin built for compiler version (%s) but run with compiler version (%s)"),
+			  gcc_version.basever, version->basever);
 	  fail = true;
 	}
 
@@ -2540,19 +2536,19 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	 likely that it has been built on a different day.  This is not
 	 a showstopper however, since compatibility will be retained as
 	 long as the correct headers were used.  */
-      if (BE_VERBOSE && ! streq (version->datestamp, gcc_version.datestamp))
-	fprintf (stderr, _("annobin: Plugin datestamp (%s) is different from compiler datestamp (%s) - ignored\n"),
-		 version->datestamp, gcc_version.datestamp);
+      if (! streq (version->datestamp, gcc_version.datestamp))
+	annobin_inform (INFORM_VERBOSE, _("Plugin datestamp (%s) is different from compiler datestamp (%s) - ignored\n"),
+			version->datestamp, gcc_version.datestamp);
 
       /* Unlikely, but also not serious.  */
-      if (BE_VERBOSE && ! streq (version->devphase, gcc_version.devphase))
-	fprintf (stderr, _("annobin: Plugin built for compiler development phase (%s) not (%s) - ignored\n"),
-		 version->devphase, gcc_version.devphase);
+      if (! streq (version->devphase, gcc_version.devphase))
+	annobin_inform (INFORM_VERBOSE, _("Plugin built for compiler development phase (%s) not (%s) - ignored\n"),
+			version->devphase, gcc_version.devphase);
 
       /* Theoretically this could be a problem, in practice it probably isn't.  */
-      if (BE_VERBOSE && ! streq (version->revision, gcc_version.revision))
-	fprintf (stderr, _("annobin: Plugin built for compiler revision (%s) not (%s) - ignored\n"),
-		 version->revision, gcc_version.revision);
+      if (! streq (version->revision, gcc_version.revision))
+	annobin_inform (INFORM_VERBOSE, _("Plugin built for compiler revision (%s) not (%s) - ignored\n"),
+			version->revision, gcc_version.revision);
 
       if (! streq (version->configuration_arguments, gcc_version.configuration_arguments))
 	{
@@ -2576,6 +2572,7 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	      plugin_target = "native";
 	      plugin_target_end = plugin_target + 6; /* strlen ("native")  */
 	    }
+
 	  if (gcc_target)
 	    {
 	      gcc_target += 7;
@@ -2591,15 +2588,15 @@ plugin_init (struct plugin_name_args *    plugin_info,
 	      && gcc_target_end
 	      && strncmp (plugin_target, gcc_target, plugin_target_end - plugin_target))
 	    {
-	      fprintf (stderr, _("annobin: Error: plugin run on a %.*s compiler but built for a %.*s compiler\n"),
-		       (int) (plugin_target_end - plugin_target), plugin_target,
-		       (int) (gcc_target_end - gcc_target), gcc_target);
+	      annobin_inform (INFORM_ALWAYS, _("Error: plugin run on a %.*s compiler but built for a %.*s compiler\n"),
+			      (int) (plugin_target_end - plugin_target), plugin_target,
+			      (int) (gcc_target_end - gcc_target), gcc_target);
 	      fail = true;
 	    }
-	  else if (BE_VERBOSE)
+	  else
 	    {
-	      fprintf (stderr, _("annobin: Plugin run on a compiler configured as (%s) not (%s) - ignored\n"),
-		       version->configuration_arguments, gcc_version.configuration_arguments);
+	      annobin_inform (INFORM_VERBOSE, _("Plugin run on a compiler configured as (%s) not (%s) - ignored\n"),
+			      version->configuration_arguments, gcc_version.configuration_arguments);
 	    }
 	}
 

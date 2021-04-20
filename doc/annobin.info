@@ -752,6 +752,7 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-disable-colour]
        [-disable-hardened]
        [-enable-hardened]
+       [-full-filenames]
        FILE...
 
    The HARDENED tool checks that the specified files were compiled with
@@ -913,6 +914,10 @@ code to support the test.
      default annocheck will add colour to these messages so that they
      stand out when displayed by a terminal emulator.  This option can
      be used in order to turn this feature off.
+
+'--full-filenames'
+     Use the full pathname for files.  Useful when recursing into
+     directories.  Disabled by default.
 
 
 File: annobin.info,  Node: Notes,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
@@ -2006,16 +2011,16 @@ Node: The INSTRUMENT Encoding20734
 Node: Annocheck22108
 Node: Built-By24637
 Node: Hardened26167
-Node: Notes33029
-Node: Section-Size33673
-Node: Timing35827
-Node: Configure Options36474
-Node: Legacy Scripts38759
-Node: Who Built Me39534
-Node: ABI Checking42294
-Node: Hardening Checks44408
-Node: Checking Archives48494
-Node: GNU FDL50916
+Node: Notes33180
+Node: Section-Size33824
+Node: Timing35978
+Node: Configure Options36625
+Node: Legacy Scripts38910
+Node: Who Built Me39685
+Node: ABI Checking42445
+Node: Hardening Checks44559
+Node: Checking Archives48645
+Node: GNU FDL51067
 
 End Tag Table
 
