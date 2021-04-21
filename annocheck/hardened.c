@@ -1657,8 +1657,9 @@ build_note_checker (annocheck_data *     data,
 	    {
 	      if (! per_file.warned_version_mismatch)
 		{
-		  einfo (INFO, "%s: WARN: Annobin plugin was built by %s version %u but run on %s version %u",
-			 get_filename (data), t->tool_name, per_file.anno_major,
+		  warn (data, "The annobin plugin was built by a compiler with a different major version to the one upon which it was run");
+		  einfo (VERBOSE, "debug: Annobin plugin built by %s version %u but run on %s version %u",
+			 t->tool_name, per_file.anno_major,
 			 t->tool_name, per_file.run_major);
 		  per_file.warned_version_mismatch = true;
 		}
@@ -1670,13 +1671,24 @@ build_note_checker (annocheck_data *     data,
 	  if ((per_file.anno_minor != 0 && per_file.anno_minor != minor)
 	      || (per_file.anno_rel != 0 && per_file.anno_rel != rel))
 	    {
-	      einfo (VERBOSE, "%s: warn: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
-		     get_filename (data), t->tool_name,
-		     per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
-		     t->tool_name,
-		     per_file.run_major, per_file.run_minor, per_file.run_rel);
-	      einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
-		     get_filename (data));
+	      if (! per_file.warned_version_mismatch)
+		{
+		  if (per_file.anno_minor > minor)
+		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
+		  else if (per_file.anno_minor < minor)
+		    inform (data, "The annobin plugin was built by am older version of the compiler");
+		  else if (per_file.anno_rel > rel)
+		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
+		  else
+		    inform (data, "The annobin  plugin was built by am older version of the compiler");
+
+		  einfo (VERBOSE, "debug: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
+			 t->tool_name, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
+			 t->tool_name, per_file.run_major, per_file.run_minor, per_file.run_rel);
+		  einfo (VERBOSE, "debug: If there are WARN or FAIL results that appear to be incorrect, it could be due to this discrepancy.");
+
+		  per_file.warned_version_mismatch = true;
+		}
 	    }
 	  break;
 	}
