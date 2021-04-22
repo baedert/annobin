@@ -1,0 +1,18 @@
+Details
+=======
+
+The project is currently hosted on sourceware, although it does not
+have a homepage of its own.
+
+The source code can be checked out with:
+
+  git clone git://sourceware.org/git/libabigail
+
+Releases are archived here:
+
+  https://nickc.fedorapeople.org
+
+Bug reports, patches and questions can all be emailed to:
+
+  nickc@redhat.com
+
