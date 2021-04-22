@@ -18,17 +18,15 @@ TESTS=compile-test \
       lto-test \
       missing-notes-test \
       objcopy-test \
-      section-size-test
+      section-size-test \
+      missing-notes-test \
+      active-checks-test \
+      property-note-test \
+      hardening-fail-test
 
 if HAVE_DEBUGINFOD
 TESTS += debuginfod-test
 endif
-
-XFAIL_TESTS=hardening-fail-test \
-      missing-notes-test \
-      active-checks-test \
-      property-note-test
-
 
 # FIXME: Add a test for merging notes...
 # FIXME: Add a test for examining archives...

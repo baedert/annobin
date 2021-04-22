@@ -12,13 +12,13 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so hardening-fail-test.exe
-
-GCC=${GCC:-gcc}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=active-checks
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach -fplugin-arg-annobin-active-checks"
 
+start_test
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $srcdir/hello.c -Werror -flto
+end_test
 
 # FIXME: Add regexps to check for the expected failure messages

@@ -12,17 +12,14 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so hardening-fail-test.exe
-
-GCC=${GCC:-gcc}
-READELF=${READELF:-readelf}
-OBJCOPY=${OBJCOPY:-objcopy}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=hardening-fail
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
+
+start_test
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $OPTS $srcdir/hello.c -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $OPTS $srcdir/hello2.c -U_GLIBCXX_ASSERTIONS
@@ -32,5 +29,7 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c $OPTS $srcdir/hello_lib.c -O1
 $GCC hello.o hello2.o hello3.o hello_lib.o -o hardening-fail-test.exe -Wl,-z,norelro
 
 $ANNOCHECK hardening-fail-test.exe
+
+end_test
 
 # FIXME: Add regexps to check for the expected failure messages

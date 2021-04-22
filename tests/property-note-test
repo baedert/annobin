@@ -15,16 +15,14 @@
 
 # Test that a bad GNU Property note section/segment is detected.
 
-rm -f hello.o property-note.o hello3.o property-note-test.exe property-note-test.out
-
-GAS=as
-GCC=gcc
-ANNOCHECK=../annocheck/annocheck
-PLUGIN=../plugin/.libs/annobin.so
+TEST_NAME=property-note
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fPIE -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 EXTRA_OPTS="-fcf-protection -mstackrealign"
+
+start_test
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
 if [ $? != 0 ];
@@ -62,3 +60,5 @@ $ANNOCHECK property-note-test.exe > property-note-test.out
 cat property-note-test.out
 
 grep --silent "Bad GNU Property note" property-note-test.out
+
+end_test

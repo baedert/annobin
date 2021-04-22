@@ -12,20 +12,14 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-
 # Test building an assembler source file without creating a gap in the notes.
 
-rm -f hello.o hello2.o hello3.o
-rm -f gap1.o assembler-gap-test1.exe assembler-gas-test1.out
-rm -f gap2.o assembler-gap-test2.exe assembler-gas-test2.out
-
-GAS=${GAS:-as}
-GCC=${GCC:-gcc}
-READELF=${READELF:-readelf}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=assembler-gap
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
+
+start_test
 
 # Assemble the file, and include debug information which will
 # identify the producer as being AS.
@@ -36,6 +30,9 @@ $GAS --gdwarf-2 $srcdir/gap.S -o gap1.o
 # that was partially built by GCC, and partially not.  Note - we
 # are not using all of the hardening options as we want to be sure
 # that annocheck will notice.
+
+pwd
+echo $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello.c 
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello.c 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -c -O2 -fPIC $srcdir/hello2.c 
@@ -57,7 +54,7 @@ then
     exit 1
 fi
 
-# Repeat the test, but this time, instead of generating debug inofrmation
+# Repeat the test, but this time, instead of generating debug information
 # generate a note.
 
 $GAS --generate-missing-build-notes=yes $srcdir/gap.S -o gap2.o
@@ -82,4 +79,4 @@ then
     exit 1
 fi
 
-
+end_test

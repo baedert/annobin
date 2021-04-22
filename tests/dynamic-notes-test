@@ -15,10 +15,9 @@
 
 # Test only creating dynamic notes.
 
-rm -f hello.o
+TEST_NAME=dynamic-notes
+. $srcdir/common.sh
 
-GCC=${GCC:-gcc}
-READELF=${READELF:-readelf}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
-
+start_test
 $GCC -fplugin=$PLUGIN -c -fplugin-arg-annobin-no-static-notes $srcdir/hello.c -fplugin-arg-annobin-dynamic-notes
+end_test

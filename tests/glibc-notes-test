@@ -14,15 +14,15 @@
 
 # Mimics how glibc builds C sources without annotation.
 
-rm -f hello.o hello2.o hello3.o libhello.so glibc-notes.exe glibc-notes.out
-
-GCC=${GCC:-gcc}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
+TEST_NAME=glibc-notes
+. $srcdir/common.sh
 
 OPTS="-g -c -O2 -fpie"
 
+start_test
+
 $GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS $srcdir/hello.c
-$GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS $srcdir/hello2.c 
+$GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS $srcdir/hello2.c
 $GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS $srcdir/hello3.c
 $GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS -shared $srcdir/hello_lib.c -o libhello.so
 
@@ -40,3 +40,4 @@ then
     exit 1
 fi
 
+end_test

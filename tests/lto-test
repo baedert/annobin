@@ -12,18 +12,17 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f lto-hello.o hello2.o hello3.o libhello.so lto-test.exe
-
-GCC=${GCC:-gcc}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=lto
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-g -c -O2 -fpie -flto -D_FORTIFY_SOURCE=2"
 
+start_test
+
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello.c
 mv hello.o lto-hello.o
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello2.c
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello3.c
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS -shared $srcdir/hello_lib.c -o libhello.so
 

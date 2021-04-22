@@ -17,15 +17,15 @@
 
 rm -f hello.o property-note.o hello3.o property-note-test.exe property-note-test.out
 
-GAS=${GAS:-as}
-GCC=${GCC:-gcc}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=instrumentation
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fPIE -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection -p"
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $srcdir/hello_hard.c 
+start_test
+
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $srcdir/hello_hard.c
 if [ $? != 0 ];
 then
     echo "Failed to compile :-("
@@ -39,3 +39,5 @@ $ANNOCHECK instrumentation-test.exe > instrumentation-test.out
 cat instrumentation-test.out
 
 grep --silent "Instrumentation enabled" instrumentation-test.out
+
+end_test

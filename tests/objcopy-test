@@ -12,18 +12,16 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so objcopy-test.exe objcopy-merged.exe
-
-GCC=${GCC:-gcc}
-OBJCOPY=${OBJCOPY:-objcopy}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=objcopy
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-g -c -O2 -fpie"
 
+start_test
+
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello.c
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello2.c
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $srcdir/hello3.c
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS -shared $srcdir/hello_lib.c -o libhello.so
 
@@ -48,3 +46,4 @@ then
     exit 1
 fi
 
+end_test

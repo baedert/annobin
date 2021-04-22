@@ -15,17 +15,9 @@
 
 # Test for debuginfod functionality in annocheck.
 
-rm -f hello.o hello2.o hello3.o hello_lib.o \
-      debuginfod-test.exe debuginfod-test.dbg debuginfod-test.out .debuginfod.db
-rm -rf dbg .debuginfod_cache
+TEST_NAME=debuginfod
+. $srcdir/common.sh
 
-GCC=${GCC:-gcc}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-OBJCOPY=${OBJCOPY:-objcopy}
-CURL=${CURL:-curl}
-SS=${SS:-ss}
-DEBUGINFOD=${DEBUGINFOD:-debuginfod}
-PLUGIN=${PLUGIN:-../plugin/.libs/annobin.so}
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
 FAIL="debuginfod-test: FAIL:"
@@ -44,6 +36,8 @@ if [ -z $(command -v $SS) ]; then
   echo "$FAIL Could not find ss"
   exit 1
 fi
+
+start_test
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g -c $srcdir/hello.c $srcdir/hello2.c $srcdir/hello3.c $srcdir/hello_lib.c
 $GCC hello.o hello2.o hello3.o hello_lib.o -o debuginfod-test.exe
@@ -130,3 +124,5 @@ if [ $? != 0 ]; then
   cat debuginfod-test.out
   exit 1
 fi
+
+end_test

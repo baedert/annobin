@@ -2893,6 +2893,8 @@ interesting_seg (annocheck_data *    data,
 	 do not have to have sections.  */
       if (per_file.e_type == ET_DYN
 	  && is_x86 ()
+	  /* If GO is being used then CET is not supported.  */
+	  && ((per_file.seen_tools & TOOL_GO) == 0)
 	  && ! is_shared_lib (data)
 	  && seg->phdr->p_memsz > 0
 	  && seg->phdr->p_vaddr <= per_file.e_entry

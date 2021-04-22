@@ -12,44 +12,41 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so hardening-test.exe
-
-GCC=${GCC:-gcc}
-READELF=${READELF:-readelf}
-OBJCOPY=${OBJCOPY:-objcopy}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=hardening
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-c -O2 -D_FORTIFY_SOURCE=2 -fpie -Wall -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 EXTRA_OPTS="-fcf-protection -mstackrealign"
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
+start_test
+
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS hello_hard.o $srcdir/hello_hard.c
 if [ $? != 0 ];
 then
     echo "Compiler might not support -fcf-protection, retrying without it"
     EXTRA_OPTS="-mstackrealign"
-    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS -$srcdir/hello_hard.c
     if [ $? != 0 ];
     then
-	echo "Compiler might not support -mstackrealign, retrying without it"
-	EXTRA_OPTS="-fcf-protection"
-	$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
-	if [ $? != 0 ];
-	then
-	    echo "Compiler might not support either -fcf-protection or -mstackrealign, retrying without both"
-	    EXTRA_OPTS=""
-	    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
-	    if [ $? != 0 ];
-	    then
-		echo "Failed :-("
-		exit 1
-	    fi
-	fi
+    echo "Compiler might not support -mstackrealign, retrying without it"
+    EXTRA_OPTS="-fcf-protection"
+    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c
+    if [ $? != 0 ];
+    then
+        echo "Compiler might not support either -fcf-protection or -mstackrealign, retrying without both"
+        EXTRA_OPTS=""
+        $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c
+        if [ $? != 0 ];
+        then
+      echo "Failed :-("
+      exit 1
+        fi
+    fi
     fi
 fi
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -O3 $OPTS $EXTRA_OPTS $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -O3 $OPTS $EXTRA_OPTS $srcdir/hello2.c
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g3 $OPTS $EXTRA_OPTS $srcdir/hello3.c
 
@@ -74,3 +71,4 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
 
 $ANNOCHECK -v --ignore-gaps --skip-entry hardening-test.exe --enable-timing
 
+end_test

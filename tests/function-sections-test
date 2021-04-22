@@ -12,33 +12,31 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o function-sections-test.exe unused_code.o unused_code.i unused_code.s fred.map
-
-GCC=${GCC:-gcc}
-READELF=${READELF:-readelf}
-ANNOCHECK=${ANNOCHECK:-../annocheck/annocheck}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=function-sections
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 OPTS="-Wformat -Werror=format-security -Wall -c -O2 -D_FORTIFY_SOURCE=2 -fPIE -fstack-protector-strong -D_GLIBCXX_ASSERTIONS -fstack-clash-protection"
 EXTRA_OPTS="-fcf-protection -mstackrealign"
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS  $srcdir/hello_hard.c 
+start_test
+
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS -o hello_hard.o $srcdir/hello_hard.c
 if [ $? != 0 ];
 then
     echo "Compiler might not support -fcf-protection, retrying without it"
     EXTRA_OPTS="-mstackrealign"
-    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS  $EXTRA_OPTS $srcdir/hello_hard.c 
+    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS  $EXTRA_OPTS $srcdir/hello_hard.c
     if [ $? != 0 ];
     then
 	echo "Compiler might not support -mstackrealign, retrying without it"
 	EXTRA_OPTS="-fcf-protection"
-	$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+	$GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c
 	if [ $? != 0 ];
 	then
 	    echo "Compiler might not support either -fcf-protection or -mstackrealign, retrying without both"
 	    EXTRA_OPTS=""
-	    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c 
+	    $GCC -fplugin=$PLUGIN $PLUGIN_OPTS -g $OPTS $EXTRA_OPTS $srcdir/hello_hard.c
 	    if [ $? != 0 ];
 	    then
 		echo "Failed :-("
@@ -49,11 +47,11 @@ then
 fi
 
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -ffunction-sections $srcdir/unused_code.c \
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -ffunction-sections $srcdir/unused_code.c
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS $srcdir/hello.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS $srcdir/hello.c
 
-$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -ffunction-sections $srcdir/hello2.c 
+$GCC -fplugin=$PLUGIN $PLUGIN_OPTS $OPTS $EXTRA_OPTS -ffunction-sections $srcdir/hello2.c
 
 # For extra debugging add these to linker command line below:
 #     -Wl,--print-gc-sections \
@@ -68,3 +66,5 @@ $GCC -pie \
 # FIXME - we should check that the notes were parsed correctly...
 # FIXME - we should check for gaps.
 $ANNOCHECK -v --ignore-gaps --skip-optimization --skip-entry function-sections-test.exe
+
+end_test

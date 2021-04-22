@@ -12,14 +12,12 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-rm -f hello.o hello2.o hello3.o libhello.so compile-test.exe hello.i hello.s
-
-GCC=${GCC:-gcc}
-READELF=${READELF:-readelf}
-OBJCOPY=${OBJCOPY:-objcopy}
-PLUGIN=${PLUGIN:-../gcc-plugin/.libs/annobin.so}
+TEST_NAME=compile
+. $srcdir/common.sh
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
+
+start_test
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -c \
@@ -29,7 +27,7 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      --save-temps -fverbose-asm \
      -fno-stack-protector \
      -fplugin-arg-annobin-stack-threshold=0x10 \
- $srcdir/hello.c 
+ $srcdir/hello.c
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -O3 \
@@ -37,7 +35,7 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -fPIC \
      -fno-stack-protector \
      -fplugin-arg-annobin-global-file-syms \
- $srcdir/hello2.c 
+ $srcdir/hello2.c
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -O2 \
@@ -48,7 +46,7 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
      -D_FORTIFY_SOURCE=2 \
      -fplugin-arg-annobin-no-stack-size-notes \
      -grecord-gcc-switches \
- $srcdir/hello3.c \
+ $srcdir/hello3.c
 
 $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
     -O2 \
@@ -66,3 +64,5 @@ $GCC \
 
 # FIXME - we should check that the notes were parsed correctly...
 $READELF --notes --wide compile-test.exe > /dev/null
+
+end_test

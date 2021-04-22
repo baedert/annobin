@@ -478,12 +478,8 @@ TESTS = compile-test abi-test active-checks-test assembler-gap-test \
 	function-sections-test glibc-notes-test hardening-fail-test \
 	hardening-test instrumentation-test lto-test \
 	missing-notes-test objcopy-test section-size-test \
-	$(am__append_1)
-XFAIL_TESTS = hardening-fail-test \
-      missing-notes-test \
-      active-checks-test \
-      property-note-test
-
+	missing-notes-test active-checks-test property-note-test \
+	hardening-fail-test $(am__append_1)
 all: all-am
 
 .SUFFIXES:
@@ -758,6 +754,13 @@ objcopy-test.log: objcopy-test
 section-size-test.log: section-size-test
 	@p='section-size-test'; \
 	b='section-size-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+property-note-test.log: property-note-test
+	@p='property-note-test'; \
+	b='property-note-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
