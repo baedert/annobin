@@ -6,7 +6,7 @@ have a homepage of its own.
 
 The source code can be checked out with:
 
-  git clone git://sourceware.org/git/libabigail
+  git clone git://sourceware.org/git/annobin.git
 
 Releases are archived here:
 
