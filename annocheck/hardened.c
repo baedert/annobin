@@ -720,6 +720,8 @@ add_producer (annocheck_data *  data,
 	  if (tests[TEST_GO_REVISION].enabled
 	      && tests[TEST_GO_REVISION].state != STATE_FAILED)
 	    {
+	      /* Note - in the future MIN_GO_REVISION may no longer be supported by
+		 Red Hat even though it is still viable from a security point of view.  */
 	      fail (data, TEST_GO_REVISION, source, MIN_GO_REV_STR ("GO revision must be >= ", MIN_GO_REVISION, ""));
 	      einfo (VERBOSE, "%s: info: GO compiler revision %u detected in %s",
 		     get_filename (data), version, source);

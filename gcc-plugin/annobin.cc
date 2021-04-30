@@ -359,14 +359,14 @@ annobin_output_note (const char * name,
   if (name == NULL)
     {
       if (namesz)
-	ice ("null name with non-zero size");
+	ice ("unable to generate annobin note: null name with non-zero size");
 
       annobin_emit_asm (".dc.l 0", "no name");
     }
   else if (name_is_string)
     {
       if (strlen ((char *) name) != namesz - 1)
-	ice ("name string does not match name size");
+	ice ("unable to generate annobin note: name string does not match name size");
 
       sprintf (buffer1, ".dc.l %u", namesz);
       sprintf (buffer2 , "namesz [= strlen (%s)]", name);
@@ -381,7 +381,7 @@ annobin_output_note (const char * name,
   if (info->start_sym == NULL)
     {
       if (info->end_sym != NULL)
-	ice ("non-null end_sym with null start_sym");
+	ice ("unable to generate annobin note: non-null end_sym with null start_sym");
 
       annobin_emit_asm (".dc.l 0", "no description");
     }
@@ -541,9 +541,9 @@ annobin_output_numeric_note (const char     numeric_type,
   /* If the value needs more than 8 bytes, consumers are unlikely to be able
      to handle it.  */
   if (i > 12)
-    ice ("Numeric value too big to fit into 8 bytes");
+    ice ("unable to generate annobin note: Numeric value too big to fit into 8 bytes");
   if (value)
-    ice ("Unable to record numeric value");
+    ice ("unable to generate annobin note: Unable to record numeric value");
 
   annobin_output_note (buffer, i + 1, false, /* The name is not ASCII */
 		       name_description, is_open, info);
@@ -559,8 +559,8 @@ annobin_remap (unsigned int cl_option_index)
 {
   if (cl_option_index >= cl_options_count)
     {
-      annobin_inform (INFORM_VERBOSE, "debugging: index = %u max = %u", cl_option_index, cl_options_count);
-      annobin_inform (INFORM_VERBOSE, "ICE: attempting to access an unknown gcc command line option");
+      annobin_inform (INFORM_VERBOSE, "Error: attempting to access an unknown gcc command line option");
+      annobin_inform (INFORM_VERBOSE, "debug: index = %u max = %u", cl_option_index, cl_options_count);
       return -1;
     }
 
@@ -672,11 +672,11 @@ annobin_remap (unsigned int cl_option_index)
     {
       if (! cl_remap[i].warned)
 	{
-	  annobin_inform (INFORM_VERBOSE, "debugging: index = %u (%s) max = %u",
+	  annobin_inform (INFORM_VERBOSE, "Error: Could not find option in cl_options, using flag instead");
+	  annobin_inform (INFORM_VERBOSE, "debug: index = %u (%s) max = %u",
 			  cl_option_index,
 			  cl_remap[i].option_name,
 			  cl_options_count);
-	  annobin_inform (INFORM_VERBOSE, "ICE: Could not find option in cl_options, using flag instead");
 	  cl_remap[i].warned = true;
 	}
 
@@ -700,7 +700,7 @@ annobin_get_int_option_by_index (int cl_option_index)
   /* This is just paranoia....  */
   if (cl_option_index >= (int) cl_options_count)
     {
-      annobin_inform (INFORM_VERBOSE, "ICE: integer gcc command line option index (%d) too big",
+      annobin_inform (INFORM_VERBOSE, "Error: integer gcc command line option index (%d) too big",
 		      cl_option_index);
       return -1;
     }
@@ -731,8 +731,8 @@ annobin_get_int_option_by_index (int cl_option_index)
       return -1;
 
     default:
-      annobin_inform (INFORM_VERBOSE, "debugging: type = %d, index = %d", option->var_type, cl_option_index);
-      annobin_inform (INFORM_VERBOSE, "ICE: unsupported integer gcc command line option type");
+      annobin_inform (INFORM_VERBOSE, "Error: unsupported integer gcc command line option type");
+      annobin_inform (INFORM_VERBOSE, "debug: type = %d, index = %d", option->var_type, cl_option_index);
       return -1;
     }
 }
@@ -750,7 +750,7 @@ annobin_get_str_option_by_index (int cl_option_index)
   /* This is just paranoia....  */
   if (cl_option_index >= (int) cl_options_count)
     {
-      annobin_inform (INFORM_VERBOSE, "ICE: string gcc command line option index (%d) too big",
+      annobin_inform (INFORM_VERBOSE, "Error: string gcc command line option index (%d) too big",
 		      cl_option_index);
       return NULL;
     }
@@ -767,8 +767,8 @@ annobin_get_str_option_by_index (int cl_option_index)
       return * (const char **) flag;
 
     default:
-      annobin_inform (INFORM_VERBOSE, "debugging: type = %d, index = %d", var_type, cl_option_index);
-      annobin_inform (INFORM_VERBOSE, "ICE: unsupported string gcc command line option type");
+      annobin_inform (INFORM_VERBOSE, "Error: unsupported string gcc command line option type");
+      annobin_inform (INFORM_VERBOSE, "debug: type = %d, index = %d", var_type, cl_option_index);
       return NULL;
     }
 }
@@ -869,8 +869,7 @@ compute_GOWall_options (void)
   val = GET_INT_OPTION_BY_NAME (write_symbols);
   if (val > VMS_AND_DWARF2_DEBUG)
     {
-      annobin_inform (INFORM_VERBOSE, "write_symbols = %d", val);
-      ice ("unknown debug info type");
+      annobin_inform (INFORM_VERBOSE, "unknown debug info type (%d)", val);
       val = 0;
     }
 
@@ -880,8 +879,7 @@ compute_GOWall_options (void)
   i = GET_INT_OPTION_BY_NAME (debug_info_level);
   if (i > DINFO_LEVEL_VERBOSE)
     {
-      annobin_inform (INFORM_VERBOSE, "debug_info_level = %d", i);
-      ice ("unknown debug info level");
+      annobin_inform (INFORM_VERBOSE, "unexpected debug_info_level = %d", i);
     }
   else
     val |= (i << 4);
@@ -1731,7 +1729,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 	 Ensure that we do not have empty special text sections so that the
 	 annobin start symbols are never beyond the end of the sections.  */
       if (* suffix && enable_ppc64_nops)
-	annobin_emit_asm ("nop", "Inserted by the annobin plugin.  Disable with -fplugin-arg-annobin-no-ppc64-nops");
+	annobin_emit_asm (".nop", "Inserted by the annobin plugin.  Disable with -fplugin-arg-annobin-no-ppc64-nops");
     }
   else
     fprintf (asm_out_file, "\t.equiv %s%s, .\n", annobin_output_filesym, suffix);
