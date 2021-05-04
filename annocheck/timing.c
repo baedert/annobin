@@ -136,6 +136,9 @@ timing_end_file (annocheck_data * data)
 static void
 timing_start_scan (uint level, const char * datafile)
 {
+  if (disabled)
+    return;
+
   num_files = 0;
   scan_time = 0;
   clk_id = CLOCK_REALTIME;
