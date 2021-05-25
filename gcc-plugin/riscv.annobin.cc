@@ -34,8 +34,8 @@ annobin_target_start_symbol_bias (void)
 unsigned int
 annobin_get_target_pointer_size (void)
 {
-  // FIXME: Testing POINTER_SIZE may not be reliable.
-  return POINTER_SIZE;
+  // Note: Testing POINTER_SIZE may not be reliable.
+  return (GET_INT_OPTION_BY_NAME (riscv_abi) >= ABI_LP64) ? 64 : 32;
 }
 
 int
@@ -50,7 +50,6 @@ annobin_record_global_target_notes (annobin_function_info * info ATTRIBUTE_UNUSE
 }
 
 void
-annobin_target_specific_function_notes (annobin_function_info * info ATTRIBUTE_UNUSED,
-					bool force ATTRIBUTE_UNUSED)
+annobin_target_specific_function_notes (annobin_function_info * info, bool force)
 {
 }

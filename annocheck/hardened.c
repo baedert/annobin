@@ -100,9 +100,6 @@ static struct per_file
   ulong       text_section_alignment;
   note_range  text_section_range;
 
-  bool        is_little_endian;
-  bool        debuginfo_file;
-  bool        build_notes_seen;
   int         num_fails;
   int         num_maybes;
   uint        anno_major;
@@ -126,6 +123,9 @@ static struct per_file
 
   enum lang   lang;
 
+  bool        is_little_endian;
+  bool        debuginfo_file;
+  bool        build_notes_seen;
   bool        gcc_from_comment;
   bool        warned_asm_not_gcc;
   bool        warned_about_instrumentation;
@@ -133,6 +133,11 @@ static struct per_file
   bool        warned_command_line;
   bool        other_language;
   bool        also_written;
+  bool	      has_pie_flag;
+  bool	      has_soname;
+  bool	      has_program_interpreter;
+  bool	      has_dt_debug;
+
 } per_file;
 
 /* Extensible array of note ranges  */
@@ -222,7 +227,7 @@ static test tests [TEST_MAX] =
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8+ only)"),
   TEST (dynamic-segment,    DYNAMIC_SEGMENT,    "There is at most one dynamic segment/section"),
   TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI present (AArch64 only)"),
-  TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 only)"),
+  TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 executables only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
   TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writeable"),
@@ -1043,6 +1048,7 @@ start (annocheck_data * data)
     {
       tests [i].state = STATE_UNTESTED;
       tests [i].result_announced = false;
+      tests [i].skipped = false;
     }
 
   /* Initialise other per-file variables.  */
@@ -1670,19 +1676,19 @@ build_note_checker (annocheck_data *     data,
 	  per_file.run_minor = minor;
 	  per_file.run_rel = rel;
 
-	  if ((per_file.anno_minor != 0 && per_file.anno_minor != minor)
-	      || (per_file.anno_rel != 0 && per_file.anno_rel != rel))
+	  if (per_file.anno_major != 0
+	      && (per_file.anno_minor != minor || per_file.anno_rel != rel))
 	    {
 	      if (! per_file.warned_version_mismatch)
 		{
 		  if (per_file.anno_minor > minor)
 		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
 		  else if (per_file.anno_minor < minor)
-		    inform (data, "The annobin plugin was built by am older version of the compiler");
+		    inform (data, "The annobin plugin was built by an older version of the compiler");
 		  else if (per_file.anno_rel > rel)
 		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
 		  else
-		    inform (data, "The annobin  plugin was built by am older version of the compiler");
+		    inform (data, "The annobin  plugin was built by an older version of the compiler");
 
 		  einfo (VERBOSE, "debug: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
 			 t->tool_name, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
@@ -1745,14 +1751,28 @@ build_note_checker (annocheck_data *     data,
 
 	  per_file.anno_minor = minor;
 	  per_file.anno_rel = rel;
-	  if ((per_file.run_minor != 0 && per_file.run_minor != minor)
-	      || (per_file.run_rel != 0 && per_file.run_rel != rel))
+
+	  if (per_file.run_major != 0
+	      && (per_file.run_minor != minor || per_file.run_rel != rel))
 	    {
-	      einfo (VERBOSE, "%s: warn: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
-		     get_filename (data), t->tool_name, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
-		     t->tool_name, per_file.run_major, per_file.run_minor, per_file.run_rel);
-	      einfo (VERBOSE, "%s: warn: If there are FAIL results that appear to be incorrect, it could be due to this discrepancy.",
-		     get_filename (data));
+	      if (! per_file.warned_version_mismatch)
+		{
+		  if (per_file.run_minor < minor)
+		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
+		  else if (per_file.run_minor > minor)
+		    inform (data, "The annobin plugin was built by an older version of the compiler");
+		  else if (per_file.run_rel < rel)
+		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
+		  else
+		    inform (data, "The annobin  plugin was built by an older version of the compiler");
+
+		  einfo (VERBOSE, "debug: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
+			 t->tool_name, major, minor, rel,
+			 t->tool_name, per_file.run_major, per_file.run_minor, per_file.run_rel);
+		  einfo (VERBOSE, "debug: If there are WARN or FAIL results that appear to be incorrect, it could be due to this discrepancy.");
+
+		  per_file.warned_version_mismatch = true;
+		}
 	    }
 
 	  break;
@@ -2633,6 +2653,8 @@ check_dynamic_section (annocheck_data *    data,
   if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_UNTESTED)
     pass (data, TEST_DYNAMIC_SEGMENT, SOURCE_DYNAMIC_SECTION, NULL);
   else if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_PASSED)
+    /* Note - we test sections before segments, so we do not
+       have to worry about interesting_seg() PASSing this test.  */
     fail (data, TEST_DYNAMIC_SEGMENT, SOURCE_DYNAMIC_SECTION, "multiple dynamic sections detected");
 
   size_t num_entries = sec->shdr.sh_size / sec->shdr.sh_entsize;
@@ -2706,6 +2728,18 @@ check_dynamic_section (annocheck_data *    data,
 
 	case DT_AARCH64_PAC_PLT:
 	  aarch64_pac_plt_seen = true;
+	  break;
+
+	case DT_FLAGS_1:
+	  per_file.has_pie_flag = (dyn->d_un.d_val & DF_1_PIE) != 0;
+	  break;
+
+	case DT_SONAME:
+	  per_file.has_soname = true;
+	  break;
+
+	case DT_DEBUG:
+	  per_file.has_dt_debug = true;
 	  break;
 
 	default:
@@ -2833,11 +2867,44 @@ check_sec (annocheck_data *     data,
     }
 }
 
+/* Determine if the current file is a shared_library.
+   The tests below have been stolen from is_shared() in the elfutils' elfclassify.c source file.  */
+
 static bool
-is_shared_lib (annocheck_data * data)
+is_shared_lib (void)
 {
-  /* FIXME: Need a better test.  */
-  return strstr (get_filename (data), ".so") != NULL;
+  /* If it does not have a dynamic section/segment, then it cannot be a shared library.  */
+  if (tests[TEST_DYNAMIC_SEGMENT].state != STATE_PASSED)
+    return false;
+
+  /* If it has a PIE flag it is an executable.  */
+  if (per_file.has_pie_flag != 0)
+    return false;
+
+  /* Treat a DT_SONAME tag as a strong indicator that this is a shared
+     object.  */
+  if (per_file.has_soname)
+    return true;
+
+  /* This is probably a PIE program: there is no soname, but a program
+     interpreter.  In theory, this file could be also a DSO with a
+     soname implied by its file name that can be run as a program.
+     This situation is impossible to resolve in the general case. */
+  if (per_file.has_program_interpreter)
+    return false;
+
+  /* Roland McGrath mentions in
+     <https://www.sourceware.org/ml/libc-alpha/2015-03/msg00605.html>,
+     that “we defined a PIE as an ET_DYN with a DT_DEBUG”.  This
+     matches current binutils behavior (version 2.32).  DT_DEBUG is
+     added if bfd_link_executable returns true or if bfd_link_pic
+     returns false, depending on the architectures.  However, DT_DEBUG
+     is not documented as being specific to executables, therefore use
+     it only as a low-priority discriminator.  */
+  if (per_file.has_dt_debug)
+    return false;
+
+  return true;
 }
 
 static bool
@@ -2861,6 +2928,10 @@ interesting_seg (annocheck_data *    data,
 
   switch (seg->phdr->p_type)
     {
+    case PT_INTERP:
+      per_file.has_program_interpreter = true;
+      break;
+
     case PT_GNU_RELRO:
       pass (data, TEST_GNU_RELRO, SOURCE_SEGMENT_HEADERS, NULL);
       break;
@@ -2893,15 +2964,15 @@ interesting_seg (annocheck_data *    data,
       /* If we are checking the entry point instruction then we need to load
 	 the segment.  We check segments rather than sections because executables
 	 do not have to have sections.  */
-      if (per_file.e_type == ET_DYN
+      if (! skip_check (TEST_ENTRY)
+	  && (per_file.e_type == ET_DYN || per_file.e_type == ET_EXEC)
 	  && is_x86 ()
 	  /* If GO is being used then CET is not supported.  */
 	  && ((per_file.seen_tools & TOOL_GO) == 0)
-	  && ! is_shared_lib (data)
+	  /* Check that the entry point is inside this segment.  */
 	  && seg->phdr->p_memsz > 0
 	  && seg->phdr->p_vaddr <= per_file.e_entry
-	  && seg->phdr->p_vaddr + seg->phdr->p_memsz > per_file.e_entry
-	  && ! skip_check (TEST_ENTRY))
+	  && seg->phdr->p_vaddr + seg->phdr->p_memsz > per_file.e_entry)
 	return true;
       break;
 
@@ -2923,16 +2994,19 @@ check_seg (annocheck_data *    data,
     {
       Elf64_Addr entry_point = per_file.e_entry - seg->phdr->p_vaddr;
 
-      /* We are checking the entry point instruction.  We should
-	 only have reached this point if the requirements for the
-	 check have already been met, so we do not need to test
-	 them again.  */
+      /* We are only interested in PT_LOAD segmments if we are checking
+	 the entry point instruction.  However we should not check shared
+	 libraries, so test for them here.  */
+      if (is_shared_lib ())
+	{
+	  skip (data, TEST_ENTRY, SOURCE_SEGMENT_CONTENTS, "shared libraries do not use entry points");
+	  return true;
+	}
+
       assert (entry_point + 3 < seg->data->d_size);
       memcpy (entry_bytes, seg->data->d_buf + entry_point, sizeof entry_bytes);
 
-      if (tests[TEST_ENTRY].state == STATE_MAYBE)
-	; /* A signal from interesting_seg() that this is interpreted code.  */
-      else if (per_file.e_machine == EM_386)
+      if (per_file.e_machine == EM_386)
 	{
 	  /* Look for ENDBR32: 0xf3 0x0f 0x1e 0xfb. */
 	  if (   entry_bytes[0] == 0xf3
@@ -2970,13 +3044,9 @@ check_seg (annocheck_data *    data,
       return true;
     }
 
-  if (seg->phdr->p_type != PT_NOTE)
-    return true;
-    
-  if (per_file.e_machine != EM_X86_64)
-    return true;
-
-  if (skip_check (TEST_PROPERTY_NOTE))
+  if (seg->phdr->p_type != PT_NOTE
+      || per_file.e_machine != EM_X86_64
+      || skip_check (TEST_PROPERTY_NOTE))
     return true;
 
   /* FIXME: Only run these checks if the note section is missing ?  */

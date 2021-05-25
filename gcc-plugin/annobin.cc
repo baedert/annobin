@@ -98,16 +98,9 @@ static bool           annobin_function_verbose = false;
    0 if it should do nothing.  */
 static uint           annobin_active_checks = 1;
 
-enum attach_type
-{
-  none,
-  group,
-  link_order
-};
-
 /* Default to using section groups as the link-order
-   method needs a linker from binutils 2.36 or later/  */
-static enum attach_type annobin_attach_type = group;
+   method needs a linker from binutils 2.36 or later.  */
+enum attach_type annobin_attach_type = group;
 
 #ifdef flag_stack_clash_protection
 static int            global_stack_clash_option = -1;

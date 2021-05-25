@@ -1,5 +1,5 @@
 /* aarch64.annobin - AArch64 specific parts of the annobin plugin.
-   Copyright (c) 2017 - 2019 Red Hat.
+   Copyright (c) 2017 - 2021 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -72,6 +72,7 @@ void
 annobin_target_specific_function_notes (annobin_function_info * info, bool force)
 {
   signed int val = GET_INT_OPTION_BY_INDEX (OPT_mtls_dialect_);
+
   if (force || saved_tls_dialect != val)
     {
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val,

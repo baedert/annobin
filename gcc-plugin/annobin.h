@@ -1,5 +1,5 @@
 /* annobin - Header file for the gcc plugin for annotating binary files.
-   Copyright (c) 2017 - 2020 Red Hat.
+   Copyright (c) 2017 - 2021 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -69,6 +69,18 @@ typedef struct annobin_function_info
   const char * unlikely_end_sym;
 } annobin_function_info;
 
+enum attach_type
+{
+  none,
+  group,
+  link_order
+};
+
+/* How to connection annobin notes to code sections.  */
+extern enum attach_type annobin_attach_type;
+
+/* ------ TARGET SPECIFIC FUNCTIONS ----------------------------- */
+
 /* Called during plugin_init().
    Should record any target specific information that will be needed later.
    Returns 0 upon success and 1 if there is a failure.  */
@@ -95,6 +107,8 @@ extern void annobin_target_specific_function_notes (annobin_function_info *, boo
    the start symbol in order for it to avoid conflicts
    with file symbols and/or the first function symbol.  */
 extern signed int annobin_target_start_symbol_bias (void);
+
+/* ------ GENERIC FUNCTIONS ----------------------------- */
 
 /* Utility function to generate some output.  The first argument is a verbosity level.
    If it is zero then the output is always generated, otherwise the output is only
