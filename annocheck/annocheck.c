@@ -34,11 +34,18 @@
 /* -1: silent, 0: normal, 1: verbose, 2: very verbose.  */
 ulong         verbosity = 0;
 
+enum ignore_enum
+  {
+    do_not_ignore = 0,
+    ignore_not_set,
+    do_ignore
+  };
+
 static ulong         	num_files = 0;
 static const char *     files[MAX_NUM_FILES];
 static const char *     full_progname;
 static const char *     progname;
-static bool             ignore_unknown = true;
+static enum ignore_enum ignore_unknown = ignore_not_set;
 static char *           saved_args = NULL;
 static char *           prefix = "";
 static const char *     debug_rpm = NULL;
@@ -316,11 +323,11 @@ process_command_line (uint argc, const char * argv[])
 	      exit (EXIT_SUCCESS);
 
 	    case 'i': /* --ignore-unknown  */
-	      ignore_unknown = true;
+	      ignore_unknown = do_ignore;
 	      break;
 
 	    case 'r': /* --report-unknown  */
-	      ignore_unknown = false;
+	      ignore_unknown = do_not_ignore;
 	      break;
 
 	    case 'q': /* --quiet */
@@ -1424,7 +1431,7 @@ process_elf (const char * filename, int fd, Elf * elf)
       ret = run_checkers (filename, fd, elf);
       break;
     default:
-      if (ignore_unknown)
+      if (ignore_unknown == do_ignore)
 	return true;
       return einfo (WARN, "%s: is not an ELF format file", filename);
     }
@@ -1520,22 +1527,50 @@ process_file (const char * filename)
 {
   size_t       len;
   struct stat  statbuf;
+  int          res;
 
   /* Fast track ignoring of debuginfo files.
      FIXME: Maybe add other file extensions ?
      FIXME: Maybe check that the extension is at the end of the filename ?  */
-  if (ignore_unknown && strstr (filename, ".debug"))
+  if (ignore_unknown == ignore_not_set && ends_with (filename, ".debug", 6))
     return true;
 
-  /* When ignoring unknown file types (which typically happens when processing the
-     contents of an rpm), we do not follow symbolic links.  This allows us to detect
-     and ignore these links.  */
-  if ((ignore_unknown ? lstat (filename, & statbuf) : stat (filename, & statbuf)) < 0)
+  switch (ignore_unknown)
+    {
+    case ignore_not_set:
+      /* When processing rpms we default to not following symbolic links.  */
+      if (ends_with (filename, ".rpm", 4))
+	res = lstat (filename, & statbuf);
+      else
+	res = stat (filename, & statbuf);
+      break;
+
+    case do_ignore:
+      /* If we are ignoring unknown files then we follow links.  */
+      res = stat (filename, & statbuf);
+      break;
+      
+    case do_not_ignore:
+      /* If we are reporting unknown files, then links are considered unknown.  */
+      res = lstat (filename, & statbuf);
+      break;
+
+    default:
+      res = -1;
+      break;
+    }
+      
+  if (res < 0)
     {
       if (errno == ENOENT)
 	return einfo (WARN, "'%s': No such file", filename);
 
       return einfo (SYS_WARN, "Could not locate '%s'", filename);
+    }
+
+  if (S_ISLNK (statbuf.st_mode))
+    {
+      return einfo (WARN, "'%s' is a symbolic link.  Run %s with -i to follow the link", filename, progname);
     }
 
   if (S_ISDIR (statbuf.st_mode))
@@ -1565,7 +1600,7 @@ process_file (const char * filename)
 
   if (! S_ISREG (statbuf.st_mode))
     {
-      if (ignore_unknown)
+      if (ignore_unknown == do_ignore)
 	return true;
 
       return einfo (WARN, "'%s' is not an ordinary file", filename);

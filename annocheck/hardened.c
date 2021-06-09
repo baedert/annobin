@@ -36,8 +36,9 @@
 #define SOURCE_SECTION_HEADERS  "section headers"
 #define SOURCE_SEGMENT_CONTENTS "segment contents"
 #define SOURCE_SEGMENT_HEADERS  "segment headers"
+#define SOURCE_SKIP_CHECKS      "special case exceptions"
 #define SOURCE_STRING_SECTION   "string section"
-#define SOURCE_COMMENT_SECTION   "comment section"
+#define SOURCE_COMMENT_SECTION  "comment section"
 
 #define GOLD_COLOUR     "\e[33;40m"
 #define RED_COLOUR      "\x1B[31;47m"
@@ -326,109 +327,6 @@ static inline bool
 is_executable (void)
 {
   return per_file.e_type == ET_EXEC || per_file.e_type == ET_DYN;
-}
-
-static bool
-skip_check (enum test_index check)
-{
-  if (check < TEST_MAX && ! tests[check].enabled)
-    return true;
-
-  /* BZ 1923439: IFuncs are compiled without some of the security
-     features because they execute in a special enviroment.  */
-  if (ELF64_ST_TYPE (per_file.component_type) == STT_GNU_IFUNC)
-    {
-      switch (check)
-	{
-	case TEST_FORTIFY:
-	case TEST_STACK_CLASH:
-	case TEST_STACK_PROT:
-	  einfo (VERBOSE2, "skipping test %s for ifunc at %#lx", tests[check].name, per_file.note_data.start);
-	  return true;
-	default:
-	  break;
-	}
-    }
-
-  const char * component_name = per_file.component_name;
-
-  if (component_name == NULL)
-    return false;
-
-  if (const_strneq (component_name, "component: "))
-    component_name += strlen ("component: ");
-
-  if (streq (component_name, "elf_init.c")
-      || streq (component_name, "init.c"))
-    {
-      if (check < TEST_MAX)
-	einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
-      return true;
-    }
-
-  const static struct ignore
-  {
-    const char *     func_name;
-    enum test_index  test_indicies[6];
-  }
-  skip_these_funcs[] =
-  {
-    /* We know that some glibc startup functions cannot be compiled
-       with stack protection enabled.  So do not complain about them.  */
-    { "_dl_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "__libc_csu_init", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "__libc_csu_fini", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "__libc_init_first", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "__libc_start_main", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "_start", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_FORTIFY, TEST_PIC, TEST_MAX } },
-    { "check_one_fd", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "is_dst", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "get_common_indices.constprop.0", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-
-    /* FIXME: Not sure about these two - they need some tests skipping
-       but I do not think that they were stack tests...  */
-    { "static_reloc.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "_dl_relocate_static_pie", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-
-    /* The stack overflow support code does not need stack protection.  */
-    { "__stack_chk_fail_local", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-    { "stack_chk_fail_local.c", { TEST_STACK_PROT, TEST_STACK_CLASH, TEST_STACK_REALIGN, TEST_MAX } },
-
-    /* Also the atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
-    { "atexit", { TEST_PIC, TEST_PIE, TEST_MAX, 0 } }
-  };
-
-  int i;
-
-  for (i = ARRAY_SIZE (skip_these_funcs); i--;)
-    {
-      if (streq (component_name, skip_these_funcs[i].func_name))
-	{
-	  int j;
-
-	  for (j = 0; j < ARRAY_SIZE (skip_these_funcs[i].test_indicies); j++)
-	    {
-	      if (skip_these_funcs[i].test_indicies[j] == check)
-		{
-		  if (check < TEST_MAX)
-		    einfo (VERBOSE2, "skipping test %s for component %s", tests[check].name, component_name);
-		  else
-		    einfo (VERBOSE2, "skipping tests of component %s", component_name);
-		  return true;
-		}
-
-	      if (skip_these_funcs[i].test_indicies[j] == TEST_MAX)
-		break;
-	    }
-
-	  /* No need to continue searching - we have already matched the name.  */
-	  break;
-	}
-    }
-  
-  return false;
 }
 
 /* Ensure that NAME will not use more than one line.  */
@@ -896,6 +794,16 @@ is_object_file (void)
   return per_file.e_type == ET_REL;
 }
 
+static inline bool
+skip_test (enum test_index check)
+{
+  if (check < TEST_MAX && ! tests[check].enabled)
+    /* We do not issue a SKIP message for disabled tests.  */
+    return true;
+
+  return false;
+}
+
 static void
 parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 {
@@ -969,7 +877,9 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
      DW_AT_producer string.  FIXME: This is not a very good heuristic.  */
   if (strstr (string, "-f") || strstr (string, "-g") || strstr (string, "-O"))
     {
-      if (strstr (string, " -O2") || strstr (string, " -O3"))
+      if (skip_test (TEST_OPTIMIZATION))
+	;
+      else if (strstr (string, " -O2") || strstr (string, " -O3"))
 	pass (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, NULL);
       else if (strstr (string, " -O0") || strstr (string, " -O1"))
 	/* FIXME: This may not be a failure.  GCC needs -O2 or
@@ -979,13 +889,17 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       else
 	info (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "not found in string");
 
-      if (strstr (string, " -fpic") || strstr (string, " -fPIC")
+      if (skip_test (TEST_PIC))
+	;
+      else if (strstr (string, " -fpic") || strstr (string, " -fPIC")
 	  || strstr (string, " -fpie") || strstr (string, " -fPIE"))
 	pass (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, NULL);
       else
 	info (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, "-fpic/-fpie not found in string");
 
-      if (strstr (string, "-fstack-protector-strong")
+      if (skip_test (TEST_STACK_PROT))
+	;
+      else if (strstr (string, "-fstack-protector-strong")
 	  || strstr (string, "-fstack-protector-all"))
 	pass (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, NULL);
       else if (strstr (string, "-fstack-protector"))
@@ -993,7 +907,9 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       else
 	info (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "not found in string");
 
-      if (strstr (string, "-Wall")
+      if (skip_test (TEST_WARNINGS))
+	;
+      else if (strstr (string, "-Wall")
 	  || strstr (string, "-Wformat-security")
 	  || strstr (string, "-Werror=format-security"))
 	pass (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, NULL);
@@ -1002,7 +918,9 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 
       if (is_x86 ())
 	{
-	  if (strstr (string, "-fcf-protection"))
+	  if (skip_test (TEST_CF_PROTECTION))
+	    ;
+	  else if (strstr (string, "-fcf-protection"))
 	    pass (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, NULL);
 	  else
 	    info (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, "not found in string");
@@ -1324,6 +1242,168 @@ note_name (const char * attr)
     default:                             return "<UNKNOWN>";
     }
 
+}
+
+/* Returns true iff COMPONENT_NAME is in FUNC_NAMES[NUM_NAMES].  */
+
+static bool
+skip_this_func (const char ** func_names, unsigned int num_names, const char * component_name)
+{
+  unsigned int i;
+
+  for (i = num_names; i--;)
+    {
+      int res = strcmp (component_name, func_names[i]);
+
+      if (res > 0)
+	/* The array is alpha-sorted, and we are scanning in reverse... */
+	break;
+
+      if (res == 0)
+	return true;
+    }
+
+  return false;
+}
+
+/* Decides if a given test should be skipped for a the current component.
+   If it should be skipped then a SKIP result is generated.  */
+
+static bool
+skip_test_for_current_func (annocheck_data * data, enum test_index check)
+{
+  char reason[1280]; /* FIXME: Use a dynamic buffer ? */
+
+  /* BZ 1923439: IFuncs are compiled without some of the security
+     features because they execute in a special enviroment.  */
+  if (ELF64_ST_TYPE (per_file.component_type) == STT_GNU_IFUNC)
+    {
+      switch (check)
+	{
+	case TEST_FORTIFY:
+	case TEST_STACK_CLASH:
+	case TEST_STACK_PROT:
+	  sprintf (reason, "code at %#lx is a part of an ifunc", per_file.note_data.start); 
+	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
+	  return true;
+	default:
+	  break;
+	}
+    }
+
+  const char * component_name = per_file.component_name;
+
+  if (component_name == NULL)
+    return false;
+
+  if (const_strneq (component_name, "component: "))
+    component_name += strlen ("component: ");
+
+  if (streq (component_name, "elf_init.c")
+      || streq (component_name, "init.c"))
+    {
+      sprintf (reason, "\
+function %s is part of the C library's startup code, which executes before a security framework is established",
+	       component_name);
+      skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  /* Certain tests cannot be applied to C library startup code...  */
+  if (check == TEST_STACK_PROT || check == TEST_STACK_CLASH || check == TEST_STACK_REALIGN)
+    {
+      /* Note - this list has been developed over time in response to bug reports.
+	 It does not have a well defined set of criteria for name inclusion.  */
+      const static char * startup_funcs[] =
+	{ /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+	  "__libc_csu_fini",
+	  "__libc_csu_init",
+	  "__libc_init_first",
+	  "__libc_start_main",
+	  "_dl_relocate_static_pie",
+	  "_dl_start",
+	  "_fini",
+	  "_init",
+	  "_start",
+	  "check_one_fd",
+	  "get_common_indices.constprop.0",
+	  "is_dst",
+	  "static_reloc.c"
+	};
+
+      if (skip_this_func (startup_funcs, ARRAY_SIZE (startup_funcs), component_name))
+	{
+	  sprintf (reason, "\
+function %s is part of the C library's startup code, which executes before stack proection is established",
+		   component_name);
+	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
+	  return true;
+	}
+
+      /* The function used to check for stack checking do not pass these tests either.  */
+      const static char * stack_check_funcs[] =
+	{ /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+	  "__stack_chk_fail_local",
+	  "stack_chk_fail_local.c"
+	};
+
+      if (skip_this_func (stack_check_funcs, ARRAY_SIZE (stack_check_funcs), component_name))
+	{
+	  sprintf (reason, "\
+function %s is part of the stack checking code and as such does not need stack proection itself",
+		   component_name);
+	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
+	  return true;
+	}
+
+      return false;
+    }
+
+  if (check == TEST_PIC || check == TEST_PIE)
+    {
+      /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+      const static char * non_pie_funcs[] =
+	{
+	  /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+	  "atexit"
+	};
+
+      if (skip_this_func (non_pie_funcs, ARRAY_SIZE (non_pie_funcs), component_name))
+	{
+	  sprintf (reason, "\
+function %s is used to end program execution and as such does not need to compiled with PIE support",
+		   component_name);
+	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
+	  return true;
+	}
+
+      return false;
+    }
+
+  if (check == TEST_FORTIFY)
+    {
+      const static char * non_fortify_funcs[] =
+	{
+	  /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+	  "__libc_init_first",
+	  "__libc_start_main",
+	  "free_derivation",
+	  "free_mem"
+	};
+
+      if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
+	{
+	  sprintf (reason, "\
+function %s is part of the C library, and as such it does not need fortification",
+		   component_name);
+	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
+	  return true;
+	}
+
+      return false;
+    }
+  
+  return false;
 }
 
 static bool
@@ -1797,7 +1877,7 @@ build_note_checker (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_PIC:
-      if (skip_check (TEST_PIC))
+      if (skip_test (TEST_PIC))
 	break;
 
       /* Convert the pic value into a pass/fail result.  */
@@ -1805,12 +1885,16 @@ build_note_checker (annocheck_data *     data,
 	{
 	case -1:
 	default:
-	  maybe (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "unexpected value");
-	  einfo (VERBOSE2, "debug: PIC note value: %x", value);
+	  if (! skip_test_for_current_func (data, TEST_PIC))
+	    {
+	      maybe (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "unexpected value");
+	      einfo (VERBOSE2, "debug: PIC note value: %x", value);
+	    }
 	  break;
 
 	case 0:
-	  fail (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "-fpic/-fpie not enabled");
+	  if (! skip_test_for_current_func (data, TEST_PIC))
+	    fail (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "-fpic/-fpie not enabled");
 	  break;
 
 	case 1:
@@ -1827,7 +1911,7 @@ build_note_checker (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_STACK_PROT:
-      if (skip_check (TEST_STACK_PROT))
+      if (skip_test (TEST_STACK_PROT))
 	break;
 
       /* We can get stack protection notes without tool notes.  See BZ 1703788 for an example.  */
@@ -1841,19 +1925,22 @@ build_note_checker (annocheck_data *     data,
 	{
 	case -1:
 	default:
-	  maybe (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	  if (! skip_test_for_current_func (data, TEST_STACK_PROT))
+	    maybe (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "unexpected note value");
 	  break;
 
 	case 0: /* NONE */
 	  /* See BZ 1923439: Parts of glibc are deliberately compiled without stack protection,
 	     because they execute before the framework is established.  This is currently handled
 	     by tests in skip_check ().  */
-	  fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "stack protection deliberately disabled");
+	  if (! skip_test_for_current_func (data, TEST_STACK_PROT))
+	    fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "stack protection deliberately disabled");
 	  break;
 
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
 	case 4: /* EXPLICIT */
-	  fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "only some functions protected");
+	  if (! skip_test_for_current_func (data, TEST_STACK_PROT))
+	    fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "only some functions protected");
 	  break;
 
 	case 2: /* ALL */
@@ -1864,19 +1951,20 @@ build_note_checker (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_SHORT_ENUM:
-      {
-	enum short_enum_state state = value ? SHORT_ENUM_STATE_SHORT : SHORT_ENUM_STATE_LONG;
+      if (skip_test (TEST_SHORT_ENUM))
+	break;
 
-	if (value > 1)
-	  {
-	    maybe (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "unexpected note value");
-	    einfo (VERBOSE2, "debug: enum note value: %x", value);
-	  }
-	else if (per_file.short_enum_state == SHORT_ENUM_STATE_UNSET)
-	  per_file.short_enum_state = state;
-	else if (per_file.short_enum_state != state)
-	  fail (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "both short and long enums supported");
-      }
+      enum short_enum_state state = value ? SHORT_ENUM_STATE_SHORT : SHORT_ENUM_STATE_LONG;
+
+      if (value > 1)
+	{
+	  maybe (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	  einfo (VERBOSE2, "debug: enum note value: %x", value);
+	}
+      else if (per_file.short_enum_state == SHORT_ENUM_STATE_UNSET)
+	per_file.short_enum_state = state;
+      else if (per_file.short_enum_state != state)
+	fail (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "both short and long enums supported");
       break;
 
     case 'b':
@@ -1885,7 +1973,7 @@ build_note_checker (annocheck_data *     data,
 	  if (per_file.e_machine != EM_AARCH64)
 	    break;
 
-	  if (skip_check (TEST_BRANCH_PROTECTION))
+	  if (skip_test (TEST_BRANCH_PROTECTION))
 	    break;
 
 	  attr += strlen ("branch_protection:");
@@ -1919,7 +2007,7 @@ build_note_checker (annocheck_data *     data,
 	  if (! is_x86 ())
 	    break;
 
-	  if (skip_check (TEST_CF_PROTECTION))
+	  if (skip_test (TEST_CF_PROTECTION))
 	    break;
 	  
 	  if (! is_C_compiler (per_file.current_tool))
@@ -1972,7 +2060,7 @@ build_note_checker (annocheck_data *     data,
     case 'F':
       if (streq (attr, "FORTIFY"))
 	{
-	  if (skip_check (TEST_FORTIFY))
+	  if (skip_test (TEST_FORTIFY))
 	    break;
 
 	  if (! is_C_compiler (per_file.current_tool))
@@ -1985,8 +2073,11 @@ build_note_checker (annocheck_data *     data,
 	    {
 	    case -1:
 	    default:
-	      maybe (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "unexpected note value");
-	      einfo (VERBOSE2, "debug: fortify note value: %x", value);
+	      if (! skip_test_for_current_func (data, TEST_FORTIFY))
+		{
+		  maybe (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+		  einfo (VERBOSE2, "debug: fortify note value: %x", value);
+		}
 	      break;
 
 	    case 0xfe:
@@ -2018,13 +2109,14 @@ build_note_checker (annocheck_data *     data,
 	    case 0xff:
 	      if (per_file.current_tool == TOOL_GIMPLE)
 		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
-	      else
+	      else if (! skip_test_for_current_func (data, TEST_FORTIFY))
 		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-D_FORTIFY_SOURCE=2 was not present on command line");
 	      break;
 
 	    case 0:
 	    case 1:
-	      fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-O level is too low");
+	      if (! skip_test_for_current_func (data, TEST_FORTIFY))
+		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-O level is too low");
 	      break;
 
 	    case 2:
@@ -2040,16 +2132,13 @@ build_note_checker (annocheck_data *     data,
     case 'G':
       if (streq (attr, "GOW"))
 	{
-	  if (value == -1)
+	  if (skip_test (TEST_OPTIMIZATION))
+	    ;
+	  else if (value == -1)
 	    {
 	      maybe (data, TEST_OPTIMIZATION, SOURCE_ANNOBIN_NOTES, "unexpected note value");
 	      einfo (VERBOSE2, "debug: optimization note value: %x", value);
-	      break;
-	    }
-
-	  
-	  if (skip_check (TEST_OPTIMIZATION))
-	    ;
+	    }	  
 	  else if (value & (1 << 13))
 	    {
 	      /* Compiled with -Og rather than -O2.
@@ -2072,7 +2161,7 @@ build_note_checker (annocheck_data *     data,
 	    }
 
 	  
-	  if (skip_check (TEST_WARNINGS))
+	  if (skip_test (TEST_WARNINGS))
 	    ;
 	  else if (value & (1 << 14))
 	    {
@@ -2107,8 +2196,8 @@ build_note_checker (annocheck_data *     data,
 	  else
 	    fail (data, TEST_WARNINGS, SOURCE_ANNOBIN_NOTES, "compiled without either -Wall or -Wformat-security");
 
-	  
-	  if (skip_check (TEST_LTO))
+
+	  if (skip_test (TEST_LTO))
 	    ;
 	  else if (value & (1 << 16))
 	    {
@@ -2133,7 +2222,7 @@ build_note_checker (annocheck_data *     data,
 	}
       else if (streq (attr, "GLIBCXX_ASSERTIONS"))
 	{
-	  if (skip_check (TEST_GLIBCXX_ASSERTIONS))
+	  if (skip_test (TEST_GLIBCXX_ASSERTIONS))
 	    break;
 
 	  if (per_file.lang != LANG_UNKNOWN && per_file.lang != LANG_CXX)
@@ -2218,7 +2307,7 @@ build_note_checker (annocheck_data *     data,
 	  if (per_file.e_machine == EM_ARM)
 	    break;
 
-	  if (skip_check (TEST_STACK_CLASH))
+	  if (skip_test (TEST_STACK_CLASH))
 	    break;
 
 	  if (! includes_gcc (per_file.current_tool) && ! includes_gimple (per_file.current_tool))
@@ -2236,7 +2325,8 @@ build_note_checker (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      fail (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "-fstack-clash-protection not enabled");
+	      if (! skip_test_for_current_func (data, TEST_STACK_CLASH))
+		fail (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "-fstack-clash-protection not enabled");
 	      break;
 
 	    case 1:
@@ -2244,8 +2334,11 @@ build_note_checker (annocheck_data *     data,
 	      break;
 
 	    default:
-	      maybe (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "unexpected note value");
-	      einfo (VERBOSE2, "debug: stack clash note vbalue: %x", value);
+	      if (! skip_test_for_current_func (data, TEST_STACK_CLASH))
+		{
+		  maybe (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+		  einfo (VERBOSE2, "debug: stack clash note vbalue: %x", value);
+		}
 	      break;
 	    }
 	}
@@ -2254,7 +2347,7 @@ build_note_checker (annocheck_data *     data,
 	  if (per_file.e_machine != EM_386)
 	    break;
 
-	  if (skip_check (TEST_STACK_REALIGN))
+	  if (skip_test (TEST_STACK_REALIGN))
 	    break;
 
 	  if (! includes_gcc (per_file.current_tool) && ! includes_gimple (per_file.current_tool))
@@ -2266,12 +2359,16 @@ build_note_checker (annocheck_data *     data,
 	  switch (value)
 	    {
 	    default:
-	      maybe (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "unexpected note value");
-	      einfo (VERBOSE2, "debug: stack realign note vbalue: %x", value);
+	      if (! skip_test_for_current_func (data, TEST_STACK_REALIGN))
+		{
+		  maybe (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+		  einfo (VERBOSE2, "debug: stack realign note vbalue: %x", value);
+		}
 	      break;
 
 	    case 0:
-	      fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-fstack-realign not enabled");
+	      if (! skip_test_for_current_func (data, TEST_STACK_REALIGN))
+		fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-fstack-realign not enabled");
 	      break;
 
 	    case 1:
@@ -2281,7 +2378,7 @@ build_note_checker (annocheck_data *     data,
 	}
       else if (streq (attr, "sanitize_cfi"))
 	{
-	  if (skip_check (TEST_CF_PROTECTION))
+	  if (skip_test (TEST_CF_PROTECTION))
 	    ;
 	  else if (! includes_clang (per_file.current_tool))
 	    skip (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "not built by clang");
@@ -2293,12 +2390,15 @@ build_note_checker (annocheck_data *     data,
 	}
       else if (streq (attr, "sanitize_safe_stack"))
 	{
-	  if (skip_check (TEST_STACK_PROT))
+	  if (skip_test (TEST_STACK_PROT))
 	    ;
 	  else if (! includes_clang (per_file.current_tool))
 	    skip (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "not built by clang");
 	  else if (value < 1)
-	    fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "insufficient Stack Safe sanitization");
+	    {
+	      if (! skip_test_for_current_func (data, TEST_STACK_PROT))
+		fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "insufficient Stack Safe sanitization");
+	    }
 	  else
 	    pass (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, NULL);
 	  break;
@@ -2463,7 +2563,7 @@ property_note_checker (annocheck_data *     data,
 {
   const char * reason = NULL;
 
-  if (skip_check (TEST_PROPERTY_NOTE))
+  if (skip_test (TEST_PROPERTY_NOTE))
     return true;
 
   const char * (* handler) (annocheck_data *, annocheck_section *, ulong, ulong, const unsigned char *);
@@ -2696,7 +2796,7 @@ check_dynamic_section (annocheck_data *    data,
 
 	case DT_RPATH:
 	  {
-	    if (skip_check (TEST_RUN_PATH))
+	    if (skip_test (TEST_RUN_PATH))
 	      break;
 
 	    const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
@@ -2710,7 +2810,7 @@ check_dynamic_section (annocheck_data *    data,
 
 	case DT_RUNPATH:
 	  {
-	    if (skip_check (TEST_RUN_PATH))
+	    if (skip_test (TEST_RUN_PATH))
 	      break;
 
 	    const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
@@ -2914,7 +3014,7 @@ interesting_seg (annocheck_data *    data,
   if (disabled)
     return false;
 
-  if (! skip_check (TEST_RWX_SEG))
+  if (! skip_test (TEST_RWX_SEG))
     {
       if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R))
 	{
@@ -2937,7 +3037,7 @@ interesting_seg (annocheck_data *    data,
       break;
 
     case PT_GNU_STACK:
-      if (! skip_check (TEST_GNU_STACK))
+      if (! skip_test (TEST_GNU_STACK))
 	{
 	  if ((seg->phdr->p_flags & (PF_W | PF_R)) != (PF_W | PF_R))
 	    fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "the GNU stack segment does not have both read & write permissions");
@@ -2955,7 +3055,7 @@ interesting_seg (annocheck_data *    data,
       break;
 
     case PT_NOTE:
-      if (skip_check (TEST_PROPERTY_NOTE))
+      if (skip_test (TEST_PROPERTY_NOTE))
 	break;
       /* We return true if we want to examine the note segments.  */
       return supports_property_notes (per_file.e_machine);
@@ -2964,7 +3064,7 @@ interesting_seg (annocheck_data *    data,
       /* If we are checking the entry point instruction then we need to load
 	 the segment.  We check segments rather than sections because executables
 	 do not have to have sections.  */
-      if (! skip_check (TEST_ENTRY)
+      if (! skip_test (TEST_ENTRY)
 	  && (per_file.e_type == ET_DYN || per_file.e_type == ET_EXEC)
 	  && is_x86 ()
 	  /* If GO is being used then CET is not supported.  */
@@ -3046,7 +3146,7 @@ check_seg (annocheck_data *    data,
 
   if (seg->phdr->p_type != PT_NOTE
       || per_file.e_machine != EM_X86_64
-      || skip_check (TEST_PROPERTY_NOTE))
+      || skip_test (TEST_PROPERTY_NOTE))
     return true;
 
   /* FIXME: Only run these checks if the note section is missing ?  */
@@ -3251,7 +3351,7 @@ compare_range (const void * r1, const void * r2)
 /* Certain symbols can indicate that a gap can be safely ignored.  */
 
 static bool
-skip_gap_sym (const char * sym)
+skip_gap_sym (annocheck_data * data, const char * sym)
 {
   if (sym == NULL)
     return false;
@@ -3270,7 +3370,7 @@ skip_gap_sym (const char * sym)
      reasons for not being proplerly annotated then we skip it.  */
   const char * saved_sym = per_file.component_name;
   per_file.component_name = sym;
-  if (skip_check (TEST_MAX))
+  if (skip_test_for_current_func (data, TEST_MAX))
     {
       per_file.component_name = saved_sym;
       return true;
@@ -3357,7 +3457,7 @@ check_for_gaps (annocheck_data * data)
 	    continue;
 
 	  const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
-	  if (sym && skip_gap_sym (sym))
+	  if (sym && skip_gap_sym (data, sym))
 	    {
 	      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym);
 
@@ -3379,7 +3479,7 @@ check_for_gaps (annocheck_data * data)
 		  && (sym == NULL || ! streq (sym, sym2))
 		  && strstr (sym2, ".end") == NULL)
 		{
-		  if (skip_gap_sym (sym2))
+		  if (skip_gap_sym (data, sym2))
 		    {
 		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
 		      /* See comment above.  */
@@ -3403,7 +3503,7 @@ check_for_gaps (annocheck_data * data)
 		  && (sym == NULL || ! streq (sym, sym2))
 		  && strstr (sym2, ".end") == NULL)
 		{
-		  if (skip_gap_sym (sym2))
+		  if (skip_gap_sym (data, sym2))
 		    {
 		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
 		      /* See comment above.  */
