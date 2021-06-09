@@ -14,7 +14,10 @@
 #ifndef __ANNOCHECK_H__
 #define __ANNOCHECK_H__
 
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
+
 #include <assert.h>
 #include <errno.h>
 #include <stddef.h>

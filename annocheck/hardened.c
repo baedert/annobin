@@ -1334,7 +1334,7 @@ function %s is part of the C library's startup code, which executes before a sec
       if (skip_this_func (startup_funcs, ARRAY_SIZE (startup_funcs), component_name))
 	{
 	  sprintf (reason, "\
-function %s is part of the C library's startup code, which executes before stack proection is established",
+function %s is part of the C library's startup code, which executes before stack protection is established",
 		   component_name);
 	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
 	  return true;
@@ -1350,7 +1350,7 @@ function %s is part of the C library's startup code, which executes before stack
       if (skip_this_func (stack_check_funcs, ARRAY_SIZE (stack_check_funcs), component_name))
 	{
 	  sprintf (reason, "\
-function %s is part of the stack checking code and as such does not need stack proection itself",
+function %s is part of the stack checking code and as such does not need stack protection itself",
 		   component_name);
 	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
 	  return true;
