@@ -1563,7 +1563,13 @@ process_file (const char * filename)
   if (res < 0)
     {
       if (errno == ENOENT)
-	return einfo (WARN, "'%s': No such file", filename);
+	{
+	  if (lstat (filename, & statbuf) == 0
+	      && S_ISLNK (statbuf.st_mode))
+	    return einfo (WARN, "'%s': Could not follow link", filename);
+	  else
+	    return einfo (WARN, "'%s': No such file", filename);
+	}
 
       return einfo (SYS_WARN, "Could not locate '%s'", filename);
     }
