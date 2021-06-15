@@ -1096,6 +1096,52 @@ ends_with (const char * string, const char * ending, const size_t end_len)
 	  && streq (string + (len - end_len), ending));
 }
 
+bool
+annocheck_find_symbol_by_name (annocheck_data * data, const char * name,
+			       ulong * value_return, uint * section_return)
+{
+  /* Search for symbol sections.  */
+  Elf_Scn *  sym_sec = NULL;
+
+  while ((sym_sec = elf_nextscn (data->elf, sym_sec)) != NULL)
+    {
+      Elf64_Shdr sym_shdr;
+
+      read_section_header (data, sym_sec, & sym_shdr);
+
+      if ((sym_shdr.sh_type != SHT_SYMTAB) && (sym_shdr.sh_type != SHT_DYNSYM))
+	continue;
+
+      Elf_Data *  sym_data;
+
+      if ((sym_data = elf_getdata (sym_sec, NULL)) == NULL)
+	{
+	  einfo (VERBOSE2, "Unable to load symbol section");
+	  /* FIXME: Warn ??  */
+	  continue;
+	}
+
+      GElf_Sym  sym;
+      uint      symndx;
+
+      for (symndx = 1; gelf_getsym (sym_data, symndx, & sym) != NULL; symndx++)
+	{
+	  const char * symname = elf_strptr (data->elf, sym_shdr.sh_link, sym.st_name);
+
+	  if (streq (name, symname))
+	    {
+	      if (value_return != NULL)
+		* value_return = sym.st_value;
+	      if (section_return != NULL)
+		* section_return = sym.st_shndx;
+	      return true;
+	    }
+	}
+    }
+
+  return false;
+}
+
 typedef struct find_symbol_return
 {
   const char * name;

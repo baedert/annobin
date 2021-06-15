@@ -39,6 +39,7 @@
 #define SOURCE_SKIP_CHECKS      "special case exceptions"
 #define SOURCE_STRING_SECTION   "string section"
 #define SOURCE_COMMENT_SECTION  "comment section"
+#define SOURCE_RODATA_SECTION   ".rodata section"
 
 #define GOLD_COLOUR     "\e[33;40m"
 #define RED_COLOUR      "\x1B[31;47m"
@@ -616,7 +617,11 @@ add_producer (annocheck_data *  data,
 	{
 	  if (tests[TEST_GO_REVISION].enabled
 	      && tests[TEST_GO_REVISION].state == STATE_UNTESTED)
-	    maybe (data, TEST_GO_REVISION, source, "unknown revision of the GO compiler used");
+	    {
+	      /* This is not a MAYB result, because stripped GO binaries can trigger this result.  */
+	      einfo (VERBOSE2, "%s: info: GO compilation detected, but version is unknown.  Source: %s",
+		     data->filename, source);
+	    }
 	}
       else if (version < MIN_GO_REVISION)
 	{
@@ -660,8 +665,22 @@ add_producer (annocheck_data *  data,
     {
       if (per_file.tool_version != version && version > 0)
 	{
-	  if (per_file.tool_version < version)
-	    per_file.tool_version = version;
+	  if (per_file.tool_version == 0)
+	    {
+	      einfo (VERBOSE, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
+	      per_file.tool_version = version;
+	    }
+	  else if (per_file.tool_version < version)
+	    {
+	      einfo (VERBOSE, "%s: info: change %s binary producer from version %u to version %u",
+		     get_filename (data), get_tool_name (tool), per_file.tool_version, version);
+	      per_file.tool_version = version;
+	    }
+	  else
+	    {
+	      einfo (VERBOSE2, "%s: info: ignore change in %s binary producer from version %u to version %u",
+		     get_filename (data), get_tool_name (tool), per_file.tool_version, version);
+	    }
 	}
     }
   else
@@ -1094,6 +1113,10 @@ interesting_sec (annocheck_data *     data,
     return true;
 
   if (streq (sec->secname, ".gnu.attributes"))
+    return true;
+
+  if (streq (sec->secname, ".rodata"))
+    /* We might want to scan this section for a GO version string.  */
     return true;
 
   /* These types of section need further processing.  */
@@ -2698,6 +2721,16 @@ check_note_section (annocheck_data *    data,
 
   if (streq (sec->secname, ".note.go.buildid"))
     {
+      /* The go buildid note does not contain version information.  But
+	 it does tell us that GO was used to build the binary.
+
+	 What we should now do is look for the "runtime.buildVersion"
+	 symbol, find the relocation that sets its value, parse that
+	 relocation, and then search at the resulting address in the
+	 .rodata section in order to find the GO build version string.
+	 But that is complex and target specific, so instead there is
+	 a hack in check_code_section() to scan the .rodata section
+	 directly.  */
       add_producer (data, TOOL_GO, 0, ".note.go.buildid", true);
     }
 
@@ -2892,6 +2925,22 @@ static bool
 check_code_section (annocheck_data *     data,
 		    annocheck_section *  sec)
 {
+  if (per_file.current_tool == TOOL_GO && streq (sec->secname, ".rodata"))
+    {
+      /* Look for a GO compiler build version.  See check_note_section()
+	 for why we cannot use the .note.go.buildid section.  */
+      const char * go_version = memmem (sec->data->d_buf, sec->data->d_size, "go1.", 4);
+
+      if (go_version != NULL)
+	{
+	  uint version, revision;
+
+	  if (sscanf (go_version + 4, "%u.%u", & version, & revision) == 2)
+	    add_producer (data, TOOL_GO, version, SOURCE_RODATA_SECTION, false);
+	}
+      return true;
+    }
+
   /* At the moment we are only interested in the .comment section.  */
   if (sec->data->d_size <= 11 || ! streq (sec->secname, ".comment"))
     return true;

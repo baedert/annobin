@@ -182,7 +182,7 @@ typedef bool (*  note_walker) (annocheck_data *     DATA,
    Stops if FUNC returns FALSE.
    Passes PTR to FNC along with a pointer to the note and the offsets to the name and desc data fields.
    Returns FALSE if it could not walk the notes.  */
-extern bool      annocheck_walk_notes (annocheck_data * DATA, annocheck_section * SEC, note_walker FNC, void * PTR);
+extern bool annocheck_walk_notes (annocheck_data * DATA, annocheck_section * SEC, note_walker FNC, void * PTR);
 
 /* Type for the DWARF DIE walker.  */
 typedef bool (*  dwarf_walker) (annocheck_data * DATA, Dwarf * DWARF, Dwarf_Die * DIE, void * PTR);
@@ -191,13 +191,13 @@ typedef bool (*  dwarf_walker) (annocheck_data * DATA, Dwarf * DWARF, Dwarf_Die 
    Stops if FNC returns FALSE.
    Passes PTR to FUNC along with a pointer to the DIE.
    Returns FALSE if it could not walk the debug information.  */
-extern bool      annocheck_walk_dwarf (annocheck_data * DATA, dwarf_walker FNC, void * PTR);
+extern bool annocheck_walk_dwarf (annocheck_data * DATA, dwarf_walker FNC, void * PTR);
 
 /* Called to register a checker.
    Returns FALSE if the checker could not be registered.
    Can be called from static constructors.
    The MAJOR version number is used to verify that the checker is compatible with the framework.  */
-extern bool      annocheck_add_checker (struct checker * CHECKER, uint MAJOR);
+extern bool annocheck_add_checker (struct checker * CHECKER, uint MAJOR);
 
 /* Return the name of a symbol most appropriate for address START..END.
    Returns NULL if no symbol could be found.  */
@@ -206,9 +206,17 @@ extern const char *  annocheck_find_symbol_for_address_range
 
 /* Return the name of a symbol most appropriate for address START..END.
    Returns NULL if no symbol could be found.
+   If non-NULL SEC is examined first, if it is a symbol section.
    If a name is found, and the symbol's ELF type is available, return it in TYPE_RETURN.  */
 extern const char *  annocheck_get_symbol_name_and_type
   (annocheck_data * DATA, annocheck_section * SEC, ulong START, ulong ADDR, bool PREFER_FUNC, uint * TYPE_RETURN);
+
+/* Look for symbol NAME.
+   Returns TRUE if found, FALSE otherwise.
+   If found returns the symbol's value in VALUE_RETURN (if non-NULL)
+   and the section index in SECTION_RETURN (again if non-NULL).  */
+extern bool annocheck_find_symbol_by_name
+  (annocheck_data * DATA, const char * NAME, ulong * VALUE_RETURN, uint * SECTION_RETURN);
 
 /* Runs the given CHECKER over the sections and segments in FD.
    The filename associated with FD is assumed to be EXTRA_FILENAME.
