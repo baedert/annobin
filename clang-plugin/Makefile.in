@@ -5,11 +5,12 @@ LLVM_OPTIONS = \
   -D_GNU_SOURCE \
   -D__STDC_CONSTANT_MACROS \
   -D__STDC_FORMAT_MACROS \
-  -D__STDC_LIMIT_MACROS \
+  -D__STDC_LIMIT_MACROS
 
 PLUGIN_OPTIONS = \
   -shared \
-  -fPIC
+  -fPIC \
+  -Wl,-z,now
 
 INCDIR = @srcdir@/..
 
@@ -19,16 +20,20 @@ PLUGIN_INSTALL_DIR = `clang --print-seach-dirs | gawk -e'BEGIN { FS = ":" } /lib
 
 PLUGIN_NAME = annobin-for-clang.so
 
-all: $(PLUGIN_NAME)
+all: $(PLUGIN_NAME) Makefile
 
 $(PLUGIN_NAME): annobin.cpp
-	clang++ $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) -I$(INCDIR) $(CLANG_LIBS) $< -o $@
+	clang++ $(CLANG_TARGET_OPTIONS) $(LLVM_OPTIONS) $(PLUGIN_OPTIONS) -I$(INCDIR) $(CLANG_LIBS) $< -o $@
 
 install: $(PLUGIN_NAME)
 	install -Dpm0755 -t ${PLUGIN_INSTALL_DIR} $<
 
 clean:
 	rm -f $(PLUGIN_NAME) clang-plugin-test.out hello.o
+
+Makefile: Makefile.in
+
+# -- TESTING -------------------------------------------------------
 
 CLANG=clang
 READELF=readelf

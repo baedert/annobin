@@ -235,7 +235,7 @@ usage (void)
   einfo (INFO, "   --debug-file=<FILE>[Find separate dwarf debug information in <FILE>]");
   einfo (INFO, "   --debug-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
   einfo (INFO, "   --help             [Display this message & exit]");
-  einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types][default]");
+  einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types]");
   einfo (INFO, "   --report-unknown   [Do complain about unknown file types]");
   einfo (INFO, "   --quiet            [Do not print anything, just return an exit status]");
   einfo (INFO, "   --verbose          [Produce informational messages whilst working.  Repeat for more information]");
@@ -1538,6 +1538,7 @@ process_rpm_file (const char * filename)
 		    "--prefix \"", lbasename (filename), "\"",
 		    /* Increment the recursion level.  */
 		    " --level ", itoa (level + 1),
+		    " --ignore-unknown",
 		    /* Pass on the name of the temporary data directory, if created.  */
 		    tmpdir == NULL ? "" : " --tmpdir ",
 		    tmpdir == NULL ? "" : tmpdir,
@@ -1578,34 +1579,31 @@ process_file (const char * filename)
   /* Fast track ignoring of debuginfo files.
      FIXME: Maybe add other file extensions ?
      FIXME: Maybe check that the extension is at the end of the filename ?  */
-  if (ignore_unknown == ignore_not_set && ends_with (filename, ".debug", 6))
+  if (ignore_unknown != do_not_ignore && ends_with (filename, ".debug", 6))
     return true;
 
-  switch (ignore_unknown)
+  res = lstat (filename, & statbuf);
+
+  if (res == 0 && S_ISLNK (statbuf.st_mode))
     {
-    case ignore_not_set:
-      /* When processing rpms we default to not following symbolic links.  */
-      if (ends_with (filename, ".rpm", 4))
-	res = lstat (filename, & statbuf);
-      else
-	res = stat (filename, & statbuf);
-      break;
+      switch (ignore_unknown)
+	{
+	case do_not_ignore:
+	  return einfo (WARN, "'%s' is a symbolic link.  Run %s with -i to follow the link", filename, progname);
 
-    case do_ignore:
-      /* If we are ignoring unknown files then we follow links.  */
-      res = stat (filename, & statbuf);
-      break;
-      
-    case do_not_ignore:
-      /* If we are reporting unknown files, then links are considered unknown.  */
-      res = lstat (filename, & statbuf);
-      break;
+	case do_ignore:
+	  /* If we are ignoring unknown files then ignore the link.
+	     This is because the ignore option is usually only set when parsing rpm files,
+	     and symbolic links in those files should be ignored.  */
+	  return true;
 
-    default:
-      res = -1;
-      break;
+	default:
+	  /* Default behaviour is to follow the link.  */
+	  res = stat (filename, & statbuf);
+	  break;
+	}
     }
-      
+  
   if (res < 0)
     {
       if (errno == ENOENT)
@@ -1618,11 +1616,6 @@ process_file (const char * filename)
 	}
 
       return einfo (SYS_WARN, "Could not locate '%s'", filename);
-    }
-
-  if (S_ISLNK (statbuf.st_mode))
-    {
-      return einfo (WARN, "'%s' is a symbolic link.  Run %s with -i to follow the link", filename, progname);
     }
 
   if (S_ISDIR (statbuf.st_mode))

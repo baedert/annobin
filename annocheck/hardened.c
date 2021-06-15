@@ -833,7 +833,15 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       uint form = dwarf_whatform (attr);
 
       if (form == DW_FORM_GNU_strp_alt)
-	warn (data, "DW_FORM_GNU_strp_alt not yet handled");
+	{
+	  static bool warned = false;
+
+	  if (! warned)
+	    {
+	      warn (data, "DW_FORM_GNU_strp_alt not yet handled");
+	      warned = true;
+	    }
+	}
       else
 	warn (data, "DWARF DW_AT_producer attribute uses non-string form");
       /* Keep scanning - there may be another DW_AT_producer attribute.  */
@@ -2935,8 +2943,23 @@ check_code_section (annocheck_data *     data,
 	{
 	  uint version, revision;
 
-	  if (sscanf (go_version + 4, "%u.%u", & version, & revision) == 2)
-	    add_producer (data, TOOL_GO, version, SOURCE_RODATA_SECTION, false);
+	  go_version += 4;
+
+	  if (sscanf (go_version, "%u.%u", & version, & revision) == 2)
+	    {
+	      add_producer (data, TOOL_GO, version, SOURCE_RODATA_SECTION, false);
+
+	      /* Paranoia - check to see if there is a second, similar string.  */
+	      go_version = memmem (go_version, sec->data->d_size - (go_version - (const char *) sec->data->d_buf),
+				   "go1.", 4);
+	      uint other_version;
+	      if (go_version != NULL
+		  && sscanf (go_version, "%u.%u", & other_version, & revision) == 2
+		  && other_version != version)
+		maybe (data, TEST_GO_REVISION, SOURCE_RODATA_SECTION, "multiple, different GO version strings found");
+	    }
+	  else
+	    einfo (VERBOSE2, ".go1 string found in .rodata, but could not parse version info");
 	}
       return true;
     }
