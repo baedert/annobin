@@ -2871,10 +2871,11 @@ check_dynamic_section (annocheck_data *    data,
 	  aarch64_pac_plt_seen = true;
 	  break;
 
+#ifdef DF_1_PIE
 	case DT_FLAGS_1:
 	  per_file.has_pie_flag = (dyn->d_un.d_val & DF_1_PIE) != 0;
 	  break;
-
+#endif
 	case DT_SONAME:
 	  per_file.has_soname = true;
 	  break;
@@ -3049,9 +3050,11 @@ is_shared_lib (void)
   if (tests[TEST_DYNAMIC_SEGMENT].state != STATE_PASSED)
     return false;
 
+#ifdef DF_1_PIE
   /* If it has a PIE flag it is an executable.  */
   if (per_file.has_pie_flag != 0)
     return false;
+#endif
 
   /* Treat a DT_SONAME tag as a strong indicator that this is a shared
      object.  */
