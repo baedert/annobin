@@ -25,9 +25,6 @@
 #include <elfutils/debuginfod.h>
 #endif
 
-/* Maximum number of input files.  FIXME: Use a linked list instead.  */
-#define MAX_NUM_FILES 256
-
 /* Prefix used to isolate annobin symbols from program symbols.  */
 #define ANNOBIN_SYMBOL_PREFIX ".annobin_"
 
@@ -42,7 +39,8 @@ enum ignore_enum
   };
 
 static ulong         	num_files = 0;
-static const char *     files[MAX_NUM_FILES];
+static ulong            num_allocated_files = 0;
+static const char **    files;
 static const char *     full_progname;
 static const char *     progname;
 static enum ignore_enum ignore_unknown = ignore_not_set;
@@ -203,8 +201,11 @@ einfo (einfo_type type, const char * format, ...)
 static void
 add_file (const char * filename)
 {
-  if (num_files == MAX_NUM_FILES)
-    return;
+  if (num_files == num_allocated_files)
+    {
+      num_allocated_files += 128;
+      files = xrealloc (files, num_allocated_files * sizeof (char *));
+    }
 
   files[num_files ++] = filename;
 }
@@ -1884,7 +1885,6 @@ main (int argc, const char ** argv)
 {
   checker *     tool;
   bool          self_made_tmpdir = false;
-
 
   if (argv != NULL && argv[0] != NULL)
     {
