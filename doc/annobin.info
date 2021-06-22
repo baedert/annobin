@@ -642,8 +642,22 @@ that are used regardless of which tools are enabled.
 
 '--report-unknown'
 '--ignore-unknown'
-     Report file types not recognised by 'annocheck'.  The default
-     behaviour can be restored by the '--ignore-unknown' option.
+     These options have two separate effects (and should really be
+     separated into different options).  If enabled, unknown file types
+     are reported when they are encountered.  This includes non-ELF
+     format files, block devices and so on.  Directories are not
+     considered to be unknown and are automatically decended.
+
+     The second effect is how symbolic links are handled.  If reporting
+     is enabled then they are treated as unknown and reported.  If
+     reporting is disabled then they are followed, if possible.
+     Otherwise they are reported as being unresolveable.
+
+     The default setting depends upon the file being processed.  For rpm
+     files the default is to ignore unknowns, since these often contain
+     non-executable files, and dangling symbolic links.  For other file
+     types, including directories, the default is to report unknown
+     files.
 
 '--prefix=TEXT'
      Include TEXT in the output description.
@@ -2004,18 +2018,18 @@ Node: The CF Encoding18957
 Node: The ENUM Encoding20029
 Node: The INSTRUMENT Encoding20418
 Node: Annocheck21792
-Node: Built-By24321
-Node: Hardened25851
-Node: Notes32864
-Node: Section-Size33508
-Node: Timing35662
-Node: Configure Options36309
-Node: Legacy Scripts38594
-Node: Who Built Me39369
-Node: ABI Checking42129
-Node: Hardening Checks44243
-Node: Checking Archives48329
-Node: GNU FDL50751
+Node: Built-By25082
+Node: Hardened26612
+Node: Notes33625
+Node: Section-Size34269
+Node: Timing36423
+Node: Configure Options37070
+Node: Legacy Scripts39355
+Node: Who Built Me40130
+Node: ABI Checking42890
+Node: Hardening Checks45004
+Node: Checking Archives49090
+Node: GNU FDL51512
 
 End Tag Table
 

@@ -165,6 +165,9 @@ extern bool           annobin_enable_stack_size_notes;
 extern unsigned long  annobin_total_static_stack_usage;
 extern unsigned long  annobin_max_stack_size;
 
+extern bool           in_lto (void);
+
+
 /* GCC stores lots of information in the global_options structure.
    But unfortunately it is auto-magicaly constructed and the offsets of fields
    within it can change between revisions of gcc, even minor ones.  Hence it is

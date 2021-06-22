@@ -133,7 +133,7 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 annocheck_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(annocheck_CFLAGS) \
-	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+	$(CFLAGS) $(annocheck_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -333,7 +333,8 @@ AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
 annocheck_SOURCES = annocheck.c timing.c size.c notes.c hardened.c built-by.c annocheck.h ../annobin-global.h
 annocheck_LDADD = -lelf -ldw $(RPMLIBS) -liberty $(LIBDEBUGINFOD)
-annocheck_CFLAGS = -O2 -ansi -g -Wall -Werror
+annocheck_LDFLAGS = -Wl,-z,now
+annocheck_CFLAGS = -O2 -ansi -g -Wall -Werror -fpie -D_FORTIFY_SOURCE=2 -fplugin=annobin -fstack-protector-strong
 all: all-am
 
 .SUFFIXES:

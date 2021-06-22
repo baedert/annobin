@@ -179,7 +179,7 @@ ice (const char * text)
   annobin_inform (INFORM_ALWAYS, "ICE: Please contact the annobin maintainer with details of this problem");
 }
 
-static inline bool
+bool
 in_lto (void)
 {
   /* Testing in_lto_p does not appear to be reliable.  Unsure why.  */
@@ -963,36 +963,145 @@ record_GOW_settings (unsigned int gow,
       gow >>= 8;
     }
 
-  annobin_output_note (buffer, i + 1, false, /* The name is not ASCII */
+  annobin_output_note (buffer, i + 1, false, /* The name is not ASCII.  */
 		       "numeric: -g/-O/-Wall", is_open, info);
+}
+
+static void
+record_stack_protector_note (bool is_global, annobin_function_info * info)
+{
+  int optval = GET_INT_OPTION_BY_INDEX (OPT_fstack_protector);
+
+  if (optval < 1 && is_global && in_lto ())
+    {
+      /* The LTO compiler determines stack protector enablement on a per-function
+	 basis unless enabled globally.  So do not record a negative global setting.
+
+	 FIXME: We should check the option's flags to make sure that CL_OPTIMIZATION
+	 is set.  */
+      annobin_inform (INFORM_VERBOSE, "Not recording unset global stack protector setting when in LTO mode");
+      return;
+    }
+  /* See BZ 1563141 for an example where global_stack_protection can be -1.  */
+  else if (optval == -1)
+    {
+      annobin_inform (INFORM_VERBOSE, "Not recording stack protector value of -1");
+      return;
+    }
+
+  const char * setting;
+  switch (optval)
+    {
+    case 0: setting = "none"; break;
+    case 1: setting = "basic"; break;
+    case 4: setting = "explicit"; break;
+    case 2: setting = "all"; break;
+    case 3: setting = "strong"; break;
+    default: setting = "unknown"; break;
+    }
+
+  if (is_global)
+    annobin_inform (INFORM_VERBOSE, "Recording global stack protector setting of '%s'", setting);
+  else
+    annobin_inform (INFORM_VERBOSE, "Recording local stack protector setting of '%s' for %s",
+		    setting, info->func_name);
+
+  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, optval,
+			     "numeric: -fstack-protector status",
+			     is_global, info);
 }
 
 #ifdef flag_stack_clash_protection
 static void
-record_stack_clash_note (bool is_open, annobin_function_info * info)
+record_stack_clash_note (bool is_global, annobin_function_info * info)
 {
-  char buffer [128];
-  unsigned len = sprintf (buffer, "GA%cstack_clash",
-			  GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection) ? BOOL_T : BOOL_F);
+  int  optval = GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection);
 
+  if (optval == 0 && is_global && in_lto ())
+    {
+      /* The LTO compiler determines stack_clash_protection on a per-function basis
+	 unless enabled globally.  So do not record a negative global setting.
+
+	 FIXME: We should check the option's flags to make sure that CL_OPTIMIZATION
+	 is set.  */
+      annobin_inform (INFORM_VERBOSE, "Not recording unset global stack clash protection setting when in LTO mode");
+      return;
+    }
+  else if (is_global)
+    annobin_inform (INFORM_VERBOSE, "Recording global stack clash protection setting of '%s'",
+		    optval ? "enabled" : "disabled");
+  else
+    annobin_inform (INFORM_VERBOSE, "Recording local stack clash protection status of '%s' for %s",
+		    optval ? "enabled" : "disabled", info->func_name);
+
+  char buffer [128];
+  unsigned len = sprintf (buffer, "GA%cstack_clash", optval ? BOOL_T : BOOL_F);
+  
   annobin_output_note (buffer, len + 1, true, /* The name is ASCII.  */
-		       "bool: -fstack-clash-protection status", is_open, info);
+		       "bool: -fstack-clash-protection status", is_global, info);
 }
 #endif
 
 #ifdef flag_cf_protection
 static void
-record_cf_protection_note (bool is_open, annobin_function_info * info)
+record_cf_protection_note (bool is_global, annobin_function_info * info)
 {
+  int optval = GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_);
+
+  if (optval == 0 && is_global && in_lto ())
+    {
+      /* The LTO compiler determines cf_protection on a per-function basis
+	 unless enabled globally.  So do not record a negative global setting.
+
+	 FIXME: We should check the option's flags to make sure that CL_TARGET
+	 is set.  */
+      annobin_inform (INFORM_VERBOSE, "Not recording unset global cf_protection setting when in LTO mode");
+      return;
+    }
+
+  const char * setting;
+  switch (optval)
+    {
+    case CF_NONE:
+    case CF_NONE | CF_SET:
+      setting = "none";
+      break;
+      
+    case CF_RETURN:
+    case CF_RETURN | CF_SET:
+      setting = "return only";
+      break;
+      
+    case CF_BRANCH:
+    case CF_BRANCH | CF_SET:
+      setting = "branch only";
+      break;
+      
+    case CF_FULL:
+    case CF_FULL | CF_SET:
+      setting = "full";
+      break;
+
+    default:
+      setting = "unknown";
+      break;
+    }
+
+  if (is_global)
+    annobin_inform (INFORM_VERBOSE, "Recording global cf_protection setting of '%s'", setting);
+  else
+    annobin_inform (INFORM_VERBOSE, "Recording local cf_protection status of '%s' for %s",
+		    setting, info->func_name);
+  
   char buffer [128];
   unsigned len = sprintf (buffer, "GA%ccf_protection", NUMERIC);
 
   /* We bias the cf_protection enum value by 1 so that we do not get confused by a zero value.  */
-  buffer[++len] = GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_) + 1;
+  buffer[++len] = optval + 1;
   buffer[++len] = 0;
 
   annobin_output_note (buffer, len + 1, false, /* The name is not ASCII.  */
-		       "numeric: -fcf-protection status", is_open, info);
+		       "numeric: -fcf-protection status", is_global, info);
 }
 #endif
 
@@ -1094,16 +1203,9 @@ annobin_emit_function_notes (bool force)
   int current_val;
 
   current_val = GET_INT_OPTION_BY_INDEX (OPT_fstack_protector);
-  if (current_val != -1
-      && (force || global_stack_prot_option != current_val))
+  if (force || global_stack_prot_option != current_val)
     {
-      annobin_inform (INFORM_VERBOSE, "Recording stack protection status of %d for %s",
-		      current_val, local_info.func_name);
-
-      annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT, current_val,
-				   "numeric: -fstack-protector status",
-				   false /* not OPEN.  */, & local_info);
-
+      record_stack_protector_note (false /* local */, & local_info);
       /* We no longer need to include the symbols in the notes we generate.  */
       local_info.start_sym = local_info.end_sym = NULL;
     }
@@ -1112,10 +1214,7 @@ annobin_emit_function_notes (bool force)
   current_val = GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection);
   if (force || global_stack_clash_option != current_val)
     {
-      annobin_inform (INFORM_VERBOSE, "Recording stack clash protection status of %d for %s",
-		      current_val, local_info.func_name);
-
-      record_stack_clash_note (false /* not OPEN.  */, & local_info);
+      record_stack_clash_note (false /* not global */, & local_info);
       local_info.start_sym = local_info.end_sym = NULL;
     }
 #endif
@@ -1124,10 +1223,7 @@ annobin_emit_function_notes (bool force)
   current_val = GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_);
   if (force || global_cf_option != current_val)
     {
-      annobin_inform (INFORM_VERBOSE, "Recording control flow protection status of %d for %s",
-		      current_val, local_info.func_name);
-
-      record_cf_protection_note (false /* not OPEN.  */, & local_info);
+      record_cf_protection_note (false /* local */, & local_info);
       local_info.start_sym = local_info.end_sym = NULL;
     }
 #endif
@@ -1824,26 +1920,16 @@ emit_global_notes (const char * suffix)
 		       & info);
 
   /* Record -fstack-protector option.  */
-  annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_STACK_PROT,
-			       /* See BZ 1563141 for an example where global_stack_protection can be -1.  */
-			       global_stack_prot_option >= 0 ? global_stack_prot_option : 0,
-			       "numeric: -fstack-protector status",
-			       true /* An OPEN note.  */, & info);
-  annobin_inform (INFORM_VERBOSE, "Record global stack protector setting of %d",
-		  global_stack_prot_option >= 0 ? global_stack_prot_option : 0);
+  record_stack_protector_note (true /* global */, & info);
 
 #ifdef flag_stack_clash_protection
   /* Record -fstack-clash-protection option.  */
-  record_stack_clash_note (true /* An OPEN note.  */, & info);
-  annobin_inform (INFORM_VERBOSE, "Record global stack clash protection setting of %d",
-		  GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection));
+  record_stack_clash_note (true /* global */, & info);
 #endif
 
 #ifdef flag_cf_protection
   /* Record -fcf-protection option.  */
-  record_cf_protection_note (true /* An OPEN note.  */, & info);
-  annobin_inform (INFORM_VERBOSE, "Record global cf protection setting of %d",
-		  GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_));
+  record_cf_protection_note (true /* global */, & info);
 #endif
 
   record_fortify_level (global_fortify_level, true /* An OPEN note.  */, & info);
@@ -2042,17 +2128,30 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
 #ifdef flag_stack_clash_protection
   global_stack_clash_option = GET_INT_OPTION_BY_INDEX (OPT_fstack_clash_protection);
+  /* The LTO compiler determines stack_clash_protection on a per-function basis
+     unless enabled globally.  So do not record a negative global setting.  */
+  if (global_stack_clash_option == 0 && in_lto ())
+    global_stack_clash_option = -1;
 #endif
 
-#if 0
 #ifdef flag_cf_protection
   global_cf_option = GET_INT_OPTION_BY_INDEX (OPT_fcf_protection_);
-  if ((global_cf_option & CF_FULL) == 0)
+  /* The LTO compiler determines cf_protection on a per-function basis
+     unless enabled globally.  So do not record a negative global setting.  */
+  if (global_cf_option == 0 && in_lto ())
+    global_cf_option = -1;
+#if 0
+  else if ((global_cf_option & CF_FULL) == 0)
     annobin_active_check error ("-fcf-protection=full needed");
 #endif
 #endif
 
   global_stack_prot_option = GET_INT_OPTION_BY_INDEX (OPT_fstack_protector);
+  /* The LTO compiler determines stack_protector on a per-function basis
+     unless enabled globally.  So do not record a negative global setting.  */
+  if (global_stack_prot_option == 0 && in_lto ())
+    global_stack_prot_option = -1;
+  
   global_pic_option = compute_pic_option ();
   global_short_enums = GET_INT_OPTION_BY_INDEX (OPT_fshort_enums);
   global_GOWall_options = compute_GOWall_options ();

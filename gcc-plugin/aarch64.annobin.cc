@@ -42,6 +42,35 @@ annobin_get_target_pointer_size (void)
   return 64;
 }
 
+static void
+record_branch_protection_note (bool is_global, annobin_function_info * info)
+{
+  char buffer [128];
+  const char * optval = GET_STR_OPTION_BY_INDEX (OPT_mbranch_protection_);
+
+  if (optval == NULL && is_global && in_lto ())
+    {
+      /* The LTO compiler determines branch protections on a per-function basis
+	 unless enabled globally.  So do not record a negative global setting.  */
+      annobin_inform (INFORM_VERBOSE, "Not recording unset global branch protection setting when in LTO mode");
+      return;
+    }
+
+  if (optval == NULL)
+    optval = "default";
+
+  if (is_global)
+    annobin_inform (INFORM_VERBOSE, "AArch64: Recording global AArch64 branch protection of '%s'", optval);
+  else
+    annobin_inform (INFORM_VERBOSE, "AArch64: Recording local AArch64 branch protection of '%s' for function '%s'",
+		    optval, info->func_name);
+
+  unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
+			   GNU_BUILD_ATTRIBUTE_TYPE_STRING, optval);
+  annobin_output_note (buffer, len + 1, true, "string: -mbranch-protection status",
+		       is_global, info);
+}
+
 void
 annobin_record_global_target_notes (annobin_function_info * info)
 {
@@ -54,17 +83,7 @@ annobin_record_global_target_notes (annobin_function_info * info)
 
 #ifdef aarch64_branch_protection_string
   saved_branch_protection_string = GET_STR_OPTION_BY_INDEX (OPT_mbranch_protection_);
-
-  char buffer [128];
-  const char * sbps = saved_branch_protection_string;
-  if (sbps == NULL)
-    sbps = "default";
-
-  annobin_inform (INFORM_VERBOSE, "AArch64: Recording global AArch64 branch protection of '%s'", sbps);
-  unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
-			   GNU_BUILD_ATTRIBUTE_TYPE_STRING, sbps);
-  annobin_output_note (buffer, len + 1, true, "string: -mbranch-protection status",
-		       true /* Is OPEN.  */, info);
+  record_branch_protection_note (true /* global */, info);
 #endif
 }
 
@@ -91,19 +110,7 @@ annobin_target_specific_function_notes (annobin_function_info * info, bool force
   
   if (force || saved_branch_protection_string != abps)
     {
-      char buffer [128];
-      if (abps == NULL)
-	abps = "default";
-
-      annobin_inform (INFORM_VERBOSE, "AArch64: Recording AArch64 branch protection of '%s' for function '%s'",
-		      abps, info->func_name);
-
-      unsigned len = snprintf (buffer, sizeof buffer - 1, "GA%cbranch_protection:%s",
-			       GNU_BUILD_ATTRIBUTE_TYPE_STRING, abps);
-      annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
-			   "string: -mbranch-protection status",
-			   false /* Is not OPEN.  */, info);
-
+      record_branch_protection_note (false /* local */, info);
       /* We no longer need to include the start/end symbols in any
 	 further notes that we genenerate.  */
       info->start_sym = info->end_sym = NULL;

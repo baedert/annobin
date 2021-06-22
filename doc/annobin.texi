@@ -732,8 +732,21 @@ Display this message & exit.
 
 @item --report-unknown
 @itemx --ignore-unknown
-Report file types not recognised by @command{annocheck}.  The default
-behaviour can be restored by the @option{--ignore-unknown} option.
+These options have two separate effects (and should really be
+separated into different options).  If enabled, unknown file types are
+reported when they are encountered.  This includes non-ELF format
+files, block devices and so on.  Directories are not considered to be
+unknown and are automatically decended.
+
+The second effect is how symbolic links are handled.  If reporting is
+enabled then they are treated as unknown and reported.  If reporting
+is disabled then they are followed, if possible.  Otherwise they are
+reported as being unresolveable.
+
+The default setting depends upon the file being processed.  For rpm
+files the default is to ignore unknowns, since these often contain
+non-executable files, and dangling symbolic links.  For other file
+types, including directories, the default is to report unknown files.
 
 @item --prefix=@var{text}
 Include @var{text} in the output description.
