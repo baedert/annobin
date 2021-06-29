@@ -742,7 +742,9 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
 
     case DW_LANG_C_plus_plus:
     case DW_LANG_ObjC_plus_plus:
+#ifdef DW_LANG_C_plus_plus_03
     case DW_LANG_C_plus_plus_03:
+#endif
     case DW_LANG_C_plus_plus_11:
     case DW_LANG_C_plus_plus_14:
       if (! fixed_format_messages)
@@ -754,10 +756,11 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
       set_lang (data, LANG_GO, SOURCE_DW_AT_LANGUAGE);
       break;
 
+#ifdef DW_LANG_Rust
     case DW_LANG_Rust:
       set_lang (data, LANG_RUST, SOURCE_DW_AT_LANGUAGE);
       break;
-
+#endif
     case DW_LANG_lo_user + 1:
       /* Some of the GO runtime uses this value,  */
       set_lang (data, LANG_ASSEMBLER, SOURCE_DW_AT_LANGUAGE);
