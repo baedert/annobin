@@ -2402,7 +2402,7 @@ build_note_checker (annocheck_data *     data,
 
 	    case 0:
 	      if (! skip_test_for_current_func (data, TEST_STACK_REALIGN))
-		fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-fstack-realign not enabled");
+		fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-mstack-realign not enabled");
 	      break;
 
 	    case 1:
