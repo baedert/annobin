@@ -34,6 +34,19 @@ $GCC -fplugin=$PLUGIN $PLUGIN_OPTS \
 # Run objcopy to merge the notes
 
 $OBJCOPY --merge-notes objcopy-test.exe objcopy-merged.exe
+if [ $? != 0 ];
+then
+    $OBJCOPY objcopy-test.exe objcopy-merged.exe
+    if [ $? != 0 ];
+    then
+	echo "objcopy-test: FAIL: could not copy test executable"
+	exit 1
+    fi
+    echo "objcopy-test: objcopy does not support --merge-notes, skipping test"
+    end_test
+    exit 0
+fi
+
 
 # Run annocheck, but only enable the LTO test.
 

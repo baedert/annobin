@@ -21,17 +21,30 @@ OPTS="-g -c -O2 -fpie"
 
 start_test
 
-$GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS $srcdir/hello.c
-$GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS $srcdir/hello2.c
-$GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS $srcdir/hello3.c
-$GCC -Wl,-a,--generate-missing-build-notes=yes $OPTS -shared $srcdir/hello_lib.c -o libhello.so
+$GCC -Wa,--generate-missing-build-notes=yes $OPTS $srcdir/hello.c
+if [ $? != 0 ];
+then
+    $GCC $OPTS $srcdir/hello.c
+    if [ $? != 0 ];
+    then
+	echo "glibc-notes-test: FAIL: Could not compile source files"
+	exit 1
+    fi
+    echo "glibc-notes-test: Assembler does not support --generate-missing-build-notes, skipping test"
+    end_test
+    exit 0
+fi
+
+$GCC -Wa,--generate-missing-build-notes=yes $OPTS $srcdir/hello2.c
+$GCC -Wa,--generate-missing-build-notes=yes $OPTS $srcdir/hello3.c
+$GCC -Wa,--generate-missing-build-notes=yes $OPTS -shared $srcdir/hello_lib.c -o libhello.so
 
 # Link without system files as these may not have been hardened.
 $GCC -pie -Wl,-z,now hello.o hello2.o hello3.o -L. -lhello -o glibc-notes.exe
 
 # Run annocheck
 
-$ANNOCHECK glibc-notes.exe --skip-cf-protection --skip-property-note --skip-stack-realign --ignore-gaps > glibc-notes.out
+$ANNOCHECK glibc-notes.exe --skip-cf-protection --skip-property-note --skip-stack-realign --ignore-gaps --skip-entry > glibc-notes.out
 grep -e "PASS" glibc-notes.out
 if [ $? != 0 ];
 then
