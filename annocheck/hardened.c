@@ -1300,14 +1300,115 @@ skip_this_func (const char ** func_names, unsigned int num_names, const char * c
   return false;
 }
 
+static char reason[1280]; /* FIXME: Use a dynamic buffer ? */
+
+static bool
+skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
+{
+  const static char * non_fortify_funcs[] =
+    {
+      /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "_GLOBAL__sub_I_main",
+      "__libc_init_first",
+      "__libc_start_main",
+      "_start",
+      "free_derivation",
+      "free_mem"
+    };
+
+  if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is part of the C library, and as such it does not need fortification",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  return false;
+}
+
+static bool
+skip_pic_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
+{
+  const static char * non_pie_funcs[] =
+    {
+      /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "_GLOBAL__sub_I_main",
+      "_start",
+      /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+      "atexit"
+    };
+
+  if (skip_this_func (non_pie_funcs, ARRAY_SIZE (non_pie_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is used to start/end program execution and as such does not need to compiled with PIE support",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  return false;
+}
+
+static bool
+skip_stack_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
+{
+  /* Note - this list has been developed over time in response to bug reports.
+     It does not have a well defined set of criteria for name inclusion.  */
+  const static char * startup_funcs[] =
+    { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "_GLOBAL__sub_I_main",
+      "__libc_csu_fini",
+      "__libc_csu_init",
+      "__libc_init_first",
+      "__libc_start_main",
+      "_dl_relocate_static_pie",
+      "_dl_start",
+      "_fini",
+      "_init",
+      "_start",
+      "check_one_fd",
+      "get_common_indices.constprop.0",
+      "is_dst",
+      "static_reloc.c"
+    };
+
+  if (skip_this_func (startup_funcs, ARRAY_SIZE (startup_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is part of the C library's startup code, which executes before stack protection is established",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  /* The function used to check for stack checking do not pass these tests either.  */
+  const static char * stack_check_funcs[] =
+    { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "__stack_chk_fail_local",
+      "stack_chk_fail_local.c"
+    };
+
+  if (skip_this_func (stack_check_funcs, ARRAY_SIZE (stack_check_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is part of the stack checking code and as such does not need stack protection itself",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  return false;
+}
+
 /* Decides if a given test should be skipped for a the current component.
    If it should be skipped then a SKIP result is generated.  */
 
 static bool
 skip_test_for_current_func (annocheck_data * data, enum test_index check)
 {
-  char reason[1280]; /* FIXME: Use a dynamic buffer ? */
-
   /* BZ 1923439: IFuncs are compiled without some of the security
      features because they execute in a special enviroment.  */
   if (ELF64_ST_TYPE (per_file.component_type) == STT_GNU_IFUNC)
@@ -1343,101 +1444,23 @@ function %s is part of the C library's startup code, which executes before a sec
       return true;
     }
 
-  /* Certain tests cannot be applied to C library startup code...  */
-  if (check == TEST_STACK_PROT || check == TEST_STACK_CLASH || check == TEST_STACK_REALIGN)
+  switch (check)
     {
-      /* Note - this list has been developed over time in response to bug reports.
-	 It does not have a well defined set of criteria for name inclusion.  */
-      const static char * startup_funcs[] =
-	{ /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-	  "__libc_csu_fini",
-	  "__libc_csu_init",
-	  "__libc_init_first",
-	  "__libc_start_main",
-	  "_dl_relocate_static_pie",
-	  "_dl_start",
-	  "_fini",
-	  "_init",
-	  "_start",
-	  "check_one_fd",
-	  "get_common_indices.constprop.0",
-	  "is_dst",
-	  "static_reloc.c"
-	};
+    case TEST_STACK_PROT:
+    case TEST_STACK_CLASH:
+    case TEST_STACK_REALIGN:
+      return skip_stack_checks_for_function (data, check, component_name);
 
-      if (skip_this_func (startup_funcs, ARRAY_SIZE (startup_funcs), component_name))
-	{
-	  sprintf (reason, "\
-function %s is part of the C library's startup code, which executes before stack protection is established",
-		   component_name);
-	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
-	  return true;
-	}
+    case TEST_PIC:
+    case TEST_PIE:
+      return skip_pic_checks_for_function (data, check, component_name);
+      
+    case TEST_FORTIFY:
+      return skip_fortify_checks_for_function (data, check, component_name);
 
-      /* The function used to check for stack checking do not pass these tests either.  */
-      const static char * stack_check_funcs[] =
-	{ /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-	  "__stack_chk_fail_local",
-	  "stack_chk_fail_local.c"
-	};
-
-      if (skip_this_func (stack_check_funcs, ARRAY_SIZE (stack_check_funcs), component_name))
-	{
-	  sprintf (reason, "\
-function %s is part of the stack checking code and as such does not need stack protection itself",
-		   component_name);
-	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
-	  return true;
-	}
-
+    default:
       return false;
     }
-
-  if (check == TEST_PIC || check == TEST_PIE)
-    {
-      /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
-      const static char * non_pie_funcs[] =
-	{
-	  /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-	  "atexit"
-	};
-
-      if (skip_this_func (non_pie_funcs, ARRAY_SIZE (non_pie_funcs), component_name))
-	{
-	  sprintf (reason, "\
-function %s is used to end program execution and as such does not need to compiled with PIE support",
-		   component_name);
-	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
-	  return true;
-	}
-
-      return false;
-    }
-
-  if (check == TEST_FORTIFY)
-    {
-      const static char * non_fortify_funcs[] =
-	{
-	  /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-	  "__libc_init_first",
-	  "__libc_start_main",
-	  "free_derivation",
-	  "free_mem"
-	};
-
-      if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
-	{
-	  sprintf (reason, "\
-function %s is part of the C library, and as such it does not need fortification",
-		   component_name);
-	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
-	  return true;
-	}
-
-      return false;
-    }
-  
-  return false;
 }
 
 static bool
