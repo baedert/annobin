@@ -228,7 +228,7 @@ static test tests [TEST_MAX] =
   TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8+ only)"),
   TEST (dynamic-segment,    DYNAMIC_SEGMENT,    "There is at most one dynamic segment/section"),
-  TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI present (AArch64 only)"),
+  TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI *not* present (AArch64 only)"),
   TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 executables only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
@@ -1372,6 +1372,7 @@ skip_stack_checks_for_function (annocheck_data * data, enum test_index check, co
       "check_one_fd",
       "get_common_indices.constprop.0",
       "is_dst",
+      "notify_audit_modules_of_loaded_object",
       "static_reloc.c"
     };
 
@@ -2038,16 +2039,18 @@ build_note_checker (annocheck_data *     data,
 	      || streq (attr, "(null)")
 	      || streq (attr, "default"))
 	    /* FIXME: Turn into a FAIL once -mbranch-protection is required by the security spec.  */
-	    info (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
+	    pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
 	  else if (streq (attr, "bti+pac-ret")
 		   || (streq (attr, "standard"))
 		   || const_strneq (attr, "pac-ret+bti"))
-	    pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, NULL);
+	    /* FIXME: Turn into a PASS once -mbranch-protection is required by the security spec.  */
+	    fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, NULL);
 	  else if (streq (attr, "bti")
 		   || const_strneq (attr, "pac-ret"))
-	    fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially enabled");
+	    fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "partially enabled");
 	  else if (streq (attr, "none"))
-	    fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection disabled");
+	    /* FIXME: Turn into a FAIL once -mbranch-protection is required by the security spec.  */
+	    pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection disabled");
 	  else
 	    {
 	      maybe (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "unexpected note value");
@@ -3947,10 +3950,14 @@ finish (annocheck_data * data)
 	      else if (per_file.tool_version < 9)
 		skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
 	      else
+#if 0 /* Disable until branch protection support is enabled.  */
 		/* FIXME: Only inform the user for now.  Once -mbranch-protection has
 		   been added to the rpm macros then change this result to a maybe().  */
 		/* maybe (data, "The -mbranch-protection setting was not recorded");  */
 		future_fail (data, "The -mbranch-protection setting was not recorded");
+#else
+	      pass (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
+#endif
 	      break;
 
 	    case TEST_GO_REVISION:

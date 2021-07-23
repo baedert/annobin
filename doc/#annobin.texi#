@@ -953,7 +953,7 @@ then the check for GNU Property notes will also be disabled.
 
 @item Branch protection
 For @var{AArch64} binaries the @option{-mbranch-protection} option,
-if available, must have been used.
+if available, must have either not.
 Disabled by @option{--skip-branch-protection}.
 
 @item Stack realignment

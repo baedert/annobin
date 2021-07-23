@@ -643,6 +643,8 @@ COND_ANNOCHECK_FALSE
 COND_ANNOCHECK_TRUE
 COND_TESTS_FALSE
 COND_TESTS_TRUE
+COND_DOCS_FALSE
+COND_DOCS_TRUE
 target_noncanonical
 lt_host_flags
 HAVE_DEBUGINFOD_FALSE
@@ -804,6 +806,7 @@ with_libelf
 with_clang
 with_gcc_plugin
 with_llvm
+with_docs
 enable_maintainer_mode
 with_debuginfod
 enable_rpath
@@ -1478,6 +1481,7 @@ Optional Packages:
   --with-clang            build the clang plugin
   --without-gcc_plugin    do not build the gcc plugin
   --with-llvm             build the llvm plugin
+  --without-docs          do not build the documentation
   --with-debuginfod       Enable debuginfo lookups with debuginfod
                           (auto/yes/no)
 
@@ -18255,6 +18259,18 @@ else
 fi
 
 
+# Determine if we should build the documentation
+
+
+
+# Check whether --with-docs was given.
+if test "${with_docs+set}" = set; then :
+  withval=$with_docs; with_docs=no
+else
+  :
+fi
+
+
 
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable maintainer-specific portions of Makefiles" >&5
@@ -18556,6 +18572,14 @@ $as_echo "#define HAVE_SYS_WAIT_H 1" >>confdefs.h
 fi
 
 
+ if test "$with_docs" != no; then
+  COND_DOCS_TRUE=
+  COND_DOCS_FALSE='#'
+else
+  COND_DOCS_TRUE='#'
+  COND_DOCS_FALSE=
+fi
+
  if test "$with_tests" != no; then
   COND_TESTS_TRUE=
   COND_TESTS_FALSE='#'
@@ -18597,8 +18621,12 @@ else
 fi
 
 
-ac_config_files="$ac_config_files doc/Makefile Makefile"
+ac_config_files="$ac_config_files Makefile"
 
+if test "$with_docs" != no; then
+  ac_config_files="$ac_config_files doc/Makefile"
+
+fi
 if test "$with_tests" != no; then
   ac_config_files="$ac_config_files tests/Makefile"
 
@@ -18761,6 +18789,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${HAVE_DEBUGINFOD_TRUE}" && test -z "${HAVE_DEBUGINFOD_FALSE}"; then
   as_fn_error $? "conditional \"HAVE_DEBUGINFOD\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${COND_DOCS_TRUE}" && test -z "${COND_DOCS_FALSE}"; then
+  as_fn_error $? "conditional \"COND_DOCS\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${COND_TESTS_TRUE}" && test -z "${COND_TESTS_FALSE}"; then
@@ -19761,8 +19793,8 @@ do
     "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
     "libtool-rpath-patch") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool-rpath-patch" ;;
-    "doc/Makefile") CONFIG_FILES="$CONFIG_FILES doc/Makefile" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
+    "doc/Makefile") CONFIG_FILES="$CONFIG_FILES doc/Makefile" ;;
     "tests/Makefile") CONFIG_FILES="$CONFIG_FILES tests/Makefile" ;;
     "annocheck/Makefile") CONFIG_FILES="$CONFIG_FILES annocheck/Makefile" ;;
     "clang-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES clang-plugin/Makefile" ;;

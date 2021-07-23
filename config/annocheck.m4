@@ -1,12 +1,13 @@
 dnl file      : config/annocheck.m4
 dnl copyright : Copyright (c) 2020 Theobroma Systems Design und Consulting GmbH
+dnl copyright : Copyright (c) 2021 Red Hat
 dnl license   : MIT; see accompanying LICENSE file
 dnl
 dnl ANNOCHECK
 dnl
 dnl
 
-AC_DEFUN([ANNOCHECK], [
+AC_DEFUN([BUILD_ANNOCHECK], [
 
 AC_ARG_WITH(
   [annocheck],
@@ -30,7 +31,7 @@ AC_SUBST(RPMLIBS)
 
 ])
 
-AC_DEFUN([CLANG_PLUGIN], [
+AC_DEFUN([BUILD_CLANG_PLUGIN], [
 
 AC_ARG_WITH(
   [clang],
@@ -48,12 +49,21 @@ AC_ARG_WITH(
   [:])
 ])
 
-AC_DEFUN([LLVM_PLUGIN], [
+AC_DEFUN([BUILD_LLVM_PLUGIN], [
 
 AC_ARG_WITH(
   [llvm],
   [AC_HELP_STRING([--with-llvm],[build the llvm plugin])],
   [with_llvm_plugin=yes],
+  [:])
+])
+
+AC_DEFUN([BUILD_DOCS], [
+
+AC_ARG_WITH(
+  [docs],
+  [AC_HELP_STRING([--without-docs],[do not build the documentation])],
+  [with_docs=no],
   [:])
 ])
 

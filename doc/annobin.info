@@ -1072,6 +1072,9 @@ configure options available to customise the build:
 '--without-gcc-plugin'
      Do not build the gcc plugin.
 
+'--without-docs'
+     Do not build the documentation.
+
 '--enable-maintainer-mode'
      This enables the regeneration of the 'Makefile' and 'configure'
      files when building the 'annobin' sources.
@@ -2024,12 +2027,12 @@ Node: Notes33625
 Node: Section-Size34269
 Node: Timing36423
 Node: Configure Options37070
-Node: Legacy Scripts39355
-Node: Who Built Me40130
-Node: ABI Checking42890
-Node: Hardening Checks45004
-Node: Checking Archives49090
-Node: GNU FDL51512
+Node: Legacy Scripts39410
+Node: Who Built Me40185
+Node: ABI Checking42945
+Node: Hardening Checks45059
+Node: Checking Archives49145
+Node: GNU FDL51567
 
 End Tag Table
 

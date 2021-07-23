@@ -55,13 +55,15 @@ GCC_PLUGIN
 GMP
 
 # Determine if we should build annocheck.
-ANNOCHECK
+BUILD_ANNOCHECK
 # Determine if we should build the clang-plugin
-CLANG_PLUGIN
+BUILD_CLANG_PLUGIN
 # Determine if we should build the gcc-plugin
 BUILD_GCC_PLUGIN
 # Determine if we should build the llvm-plugin
-LLVM_PLUGIN
+BUILD_LLVM_PLUGIN
+# Determine if we should build the documentation
+BUILD_DOCS
 
 
 AC_MSG_CHECKING([whether to enable maintainer-specific portions of Makefiles])
@@ -144,13 +146,17 @@ AC_TYPE_INT64_T
 AC_TYPE_UINT64_T
 AC_HEADER_SYS_WAIT
 
+AM_CONDITIONAL([COND_DOCS],       [test "$with_docs" != no])
 AM_CONDITIONAL([COND_TESTS],      [test "$with_tests" != no])
 AM_CONDITIONAL([COND_ANNOCHECK],  [test "$with_annocheck" != no])
 AM_CONDITIONAL([COND_CLANG],      [test "$with_clang_plugin" == yes])
 AM_CONDITIONAL([COND_GCC_PLUGIN], [test "$with_gcc_plugin" != no])
 AM_CONDITIONAL([COND_LLVM],       [test "$with_llvm_plugin" == yes])
 
-AC_CONFIG_FILES(doc/Makefile Makefile)
+AC_CONFIG_FILES(Makefile)
+if test "$with_docs" != no; then
+  AC_CONFIG_FILES(doc/Makefile)
+fi
 if test "$with_tests" != no; then
   AC_CONFIG_FILES(tests/Makefile)
 fi
