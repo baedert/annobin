@@ -838,7 +838,7 @@ code to support the test.
 
 'Branch protection'
      For AARCH64 binaries the '-mbranch-protection' option, if
-     available, must have been used.  Disabled by
+     available, must have either not.  Disabled by
      '--skip-branch-protection'.
 
 'Stack realignment'
@@ -2023,16 +2023,16 @@ Node: The INSTRUMENT Encoding20418
 Node: Annocheck21792
 Node: Built-By25082
 Node: Hardened26612
-Node: Notes33625
-Node: Section-Size34269
-Node: Timing36423
-Node: Configure Options37070
-Node: Legacy Scripts39410
-Node: Who Built Me40185
-Node: ABI Checking42945
-Node: Hardening Checks45059
-Node: Checking Archives49145
-Node: GNU FDL51567
+Node: Notes33626
+Node: Section-Size34270
+Node: Timing36424
+Node: Configure Options37071
+Node: Legacy Scripts39411
+Node: Who Built Me40186
+Node: ABI Checking42946
+Node: Hardening Checks45060
+Node: Checking Archives49146
+Node: GNU FDL51568
 
 End Tag Table
 

@@ -1845,9 +1845,10 @@ static bool
 process_files (void)
 {
   bool result = true;
-
-  while (num_files)
-    result &= process_file (files [-- num_files]);
+  ulong i;
+  
+  for (i = 0; i < num_files; i++)
+    result &= process_file (files [i]);
 
   return result;
 }
