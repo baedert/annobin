@@ -91,7 +91,7 @@ enum short_enum_state
 };
 
 /* The contents of this structure are used on a per-input-file basis.
-   The fields are initialised by start().  */
+   The fields are initialised by start(), which by default sets them to 0/false.  */
 static struct per_file
 {
   Elf64_Half  e_type;
@@ -139,7 +139,7 @@ static struct per_file
   bool	      has_soname;
   bool	      has_program_interpreter;
   bool	      has_dt_debug;
-
+  bool        has_cf_protection;
 } per_file;
 
 /* Extensible array of note ranges  */
@@ -1581,7 +1581,8 @@ build_note_checker (annocheck_data *     data,
 	{
 	  /* The range has changed.  Check the old range.  If it was non-zero
 	     in length then record the last known producer for code in that region.  */
-	  if (per_file.note_data.start != per_file.note_data.end)
+	  if (per_file.note_data.start != per_file.note_data.end
+	      && per_file.current_tool != TOOL_UNKNOWN)
 	    add_producer (data, per_file.current_tool, per_file.tool_version, SOURCE_ANNOBIN_NOTES, false);
 
 	  /* Update the saved range.  */
@@ -2527,6 +2528,7 @@ handle_aarch64_property_note (annocheck_data *      data,
 			      ulong                 size,
 			      const unsigned char * notedata)
 {
+#if 0 /* ARM hardware does not currently support BTI/PAC, so we do not need these tests.  */
   /* These are not defined in the RHEL-7 build environment.  */
 #ifndef GNU_PROPERTY_AARCH64_FEATURE_1_AND
 #define GNU_PROPERTY_AARCH64_FEATURE_1_AND	0xc0000000
@@ -2564,6 +2566,7 @@ handle_aarch64_property_note (annocheck_data *      data,
     }
 
   einfo (VERBOSE2, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", get_filename (data));
+#endif
   return NULL;
 }
 
@@ -2610,6 +2613,7 @@ handle_x86_property_note (annocheck_data *      data,
     }
 
   pass (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, NULL);
+  per_file.has_cf_protection = true;
   return NULL;
 }
 
@@ -2684,6 +2688,12 @@ property_note_checker (annocheck_data *     data,
 
   uint remaining = note->n_descsz;
   const unsigned char * notedata = sec->data->d_buf + data_offset;
+  if (is_x86 () && remaining == 0)
+    {
+      reason = "note section present but empty";
+      goto fail;
+    }
+
   while (remaining)
     {
       ulong type = get_4byte_value (notedata);
@@ -2705,6 +2715,9 @@ property_note_checker (annocheck_data *     data,
       notedata  += ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
       remaining -= ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
     }
+
+  if (is_x86 () && ! per_file.has_cf_protection)
+    fail (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, "CET enabling note missing");
 
   pass (data, TEST_PROPERTY_NOTE, SOURCE_PROPERTY_NOTES, NULL);
   return true;
@@ -2746,8 +2759,10 @@ check_note_section (annocheck_data *    data,
       res = annocheck_walk_notes (data, sec, build_note_checker, NULL);
 
       per_file.component_name = NULL;
-      if (per_file.note_data.start != per_file.note_data.end)
+      if (per_file.note_data.start != per_file.note_data.end
+	  && per_file.current_tool != TOOL_UNKNOWN)
 	add_producer (data, per_file.current_tool, 0, "annobin notes", false);
+
       return res;
     }
 

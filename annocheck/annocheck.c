@@ -343,14 +343,29 @@ process_command_line (uint argc, const char * argv[])
 	      else
 		parameter ++;
 
-	      if (const_strneq (arg, "dwarf-dir")) /* Old name for --debug-dir.  */
-		debug_path = parameter;
-	      else if (const_strneq (arg, "debug-dir") || const_strneq (arg, "debugdir"))
-		debug_path = parameter;
+	      if (const_strneq (arg, "dwarf-dir") /* Old name for --debug-dir.  */
+		  || const_strneq (arg, "debug-dir")
+		  || const_strneq (arg, "debugdir"))
+		{
+		  if (debug_path != NULL)
+		    einfo (WARN, "overriding previous --debug-dir option (%s) with %s",
+			   debug_path, parameter);
+		  debug_path = parameter;
+		}
 	      else if (const_strneq (arg, "debug-rpm") || const_strneq (arg, "debugrpm"))
-		debug_rpm = parameter;
+		{
+		  if (debug_rpm != NULL)
+		    einfo (WARN, "overriding previous --debug-rpm option (%s) with %s",
+			   debug_rpm, parameter);
+		  debug_rpm = parameter;
+		}
 	      else if (const_strneq (arg, "debug-file") || const_strneq (arg, "debugfile"))
-		debug_file = parameter;
+		{
+		  if (debug_file != NULL)
+		    einfo (WARN, "overriding previous --debug-file option (%s) with %s",
+			   debug_file, parameter);
+		  debug_file = parameter;
+		}
 	      else
 		goto unknown_arg;
 
