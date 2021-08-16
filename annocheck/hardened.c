@@ -3677,13 +3677,14 @@ check_for_gaps (annocheck_data * data)
 	}
     }
 
-  if (! gap_found)
-    pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
-  else
-    fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "gaps were detected in the annobin coverage");
+  if (gap_found)
+    {
+      fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "gaps were detected in the annobin coverage");
+      return;
+    }
 
   /* Now check to see that the notes covered the whole of the .text section.  */
-  /* FIXME: We should actually do this for an executable section.  */
+  /* FIXME: We should actually do this for every executable section.  */
   
   /* Scan forward through the ranges array looking for overlaps with the start of the .text section.  */
   if (per_file.text_section_range.end != 0)
@@ -3692,7 +3693,7 @@ check_for_gaps (annocheck_data * data)
 	{
 	  if (ranges[i].start <= per_file.text_section_range.start
 	      && ranges [i].end > per_file.text_section_range.start)
-	    /* We have found a note range the occludes the start of the text section.
+	    /* We have found a note range that occludes the start of the text section.
 	       Move the start up to the end of this note, aligned to 16 bytes.  */
 	    {
 	      per_file.text_section_range.start = align (ranges[i].end, 16);
@@ -3727,14 +3728,13 @@ check_for_gaps (annocheck_data * data)
 
   if (per_file.text_section_range.end > 0)
     {
-      /* This test does not account for ranges that occlude part
-	 of the .text section, so make it an INFO result for now.
-	 Nor does it allow for linker generated code that have no notes.  */
-      einfo (VERBOSE, "%s: info: not all of the .text section is covered by notes",
-	     get_filename (data));
-      einfo (VERBOSE, "%s: info: addr range not covered: %lx..%lx",
+      /* FIXME: This test does not allow for linker generated code that have no notes.  */
+      maybe (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "not all of the .text section is covered by notes");
+      einfo (VERBOSE, "%s: debug: address range not covered: %lx..%lx",
 	     get_filename (data), per_file.text_section_range.start, per_file.text_section_range.end);
     }
+  else
+    pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
 }
 
 
