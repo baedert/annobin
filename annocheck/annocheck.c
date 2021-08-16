@@ -1361,22 +1361,19 @@ annocheck_get_symbol_name_and_type (annocheck_data *     data,
 				    bool                 prefer_func,
 				    uint *               type_return)
 {
-  static const char * previous_result;
-  static ulong        previous_start;
-  static ulong        previous_end;
-  static uint         previous_type;
+  static const char * previous_result = NULL;
+  static ulong        previous_start = 0;
+  static ulong        previous_end = 0;
+  static uint         previous_type = 0;
 
   Elf64_Shdr   sym_shdr;
   Elf_Scn *    sym_sec = NULL;
-  find_symbol_return data_return;
 
   if (type_return != NULL)
     * type_return = 0;
 
   if (start > end)
     return NULL;
-
-  data_return.name = NULL;
 
   if (start == previous_start && end == previous_end)
     {
@@ -1391,6 +1388,9 @@ annocheck_get_symbol_name_and_type (annocheck_data *     data,
   previous_end   = end;
 
   einfo (VERBOSE2, "Look for a symbol matching address %#lx..%#lx", start, end);
+
+  find_symbol_return data_return;
+  memset (& data_return, 0, sizeof data_return);
 
   /* If the provided section has a link then try this first.  */
   if (sec != NULL && sec->shdr.sh_link)
@@ -1442,7 +1442,18 @@ annocheck_get_symbol_name_and_type (annocheck_data *     data,
   else
     previous_type = 0;
 
-  return previous_result = data_return.name;
+  if (previous_result != NULL)
+    {
+      if (data_return.name != NULL
+	  && streq (previous_result, data_return.name))
+	return previous_result;
+      free ((void *) previous_result);
+    }
+  if (data_return.name != NULL)
+    previous_result = strdup (data_return.name);
+  else
+    previous_result = NULL;
+  return previous_result;
 }
 
 /* -------------------------------------------------------------------- */

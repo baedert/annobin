@@ -140,6 +140,8 @@ static struct per_file
   bool	      has_program_interpreter;
   bool	      has_dt_debug;
   bool        has_cf_protection;
+  bool        has_modinfo;
+  bool        has_gnu_linkonce_this_module;
 } per_file;
 
 /* Extensible array of note ranges  */
@@ -816,6 +818,18 @@ is_object_file (void)
   return per_file.e_type == ET_REL;
 }
 
+/* Returns true if the current file is a loadable kernel module.
+   The heuristic has been copied from eu-elfclassify's is_linux_kernel_module() function.  */
+
+static bool
+is_kernel_module (annocheck_data * data)
+{
+  return elf_kind (data->elf) == ELF_K_ELF
+    && per_file.e_type == ET_REL
+    && per_file.has_modinfo
+    && per_file.has_gnu_linkonce_this_module;
+}
+  
 static inline bool
 skip_test (enum test_index check)
 {
@@ -1076,7 +1090,7 @@ interesting_sec (annocheck_data *     data,
   if (streq (sec->secname, ".stack"))
     {
       if ((sec->shdr.sh_flags & (SHF_WRITE | SHF_EXECINSTR)) != SHF_WRITE)
-	fail (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, ".stack section has permissions other than just WRITE");
+	fail (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "the .stack section has incorrect permissions");
       else if (tests[TEST_GNU_STACK].state == STATE_PASSED)
 	maybe (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "multiple stack sections detected");
       else
@@ -1104,6 +1118,12 @@ interesting_sec (annocheck_data *     data,
       return false;
     }
 
+  if (streq (sec->secname, ".modinfo"))
+    per_file.has_modinfo = true;
+
+  if (streq (sec->secname, ".gnu.linkonce.this_module"))
+    per_file.has_gnu_linkonce_this_module = true;
+  
   if (is_object_file () && streq (sec->secname, ".note.GNU-stack"))
     {
       /* The permissions of the .note-GNU-stack section are used to set the permissions of the GNU_STACK segment,
@@ -3781,7 +3801,9 @@ finish (annocheck_data * data)
 	  switch (i)
 	    {
 	    case TEST_GNU_STACK:
-	      if (is_object_file ())
+	      if (is_kernel_module (data))
+		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules do not need a GNU type stack section");
+	      else if (is_object_file ())
 		{
 		  fail (data, i, SOURCE_FINAL_SCAN, "no .note.GNU-stack section found");
 		  if (includes_assembler (per_file.seen_tools))
@@ -3852,6 +3874,11 @@ finish (annocheck_data * data)
 		  skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides preprocessor and warning options");
 		  break;
 		}
+	      else if (is_kernel_module (data))
+		{
+		  skip (data, i, SOURCE_FINAL_SCAN, "kernel modules are not compiled with this feature");
+		  break;
+		}
 	      else if (is_C_compiler (per_file.seen_tools))
 		{
 		  fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used");
@@ -3907,7 +3934,7 @@ finish (annocheck_data * data)
 
 	    case TEST_STACK_CLASH:
 	      if (per_file.e_machine == EM_ARM)
-		skip (data, i, SOURCE_FINAL_SCAN, "not support on ARM architectures");
+		skip (data, i, SOURCE_FINAL_SCAN, "not supported on ARM architectures");
 	      else if (per_file.seen_tools == TOOL_GAS
 		       || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
@@ -3915,6 +3942,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO is stack safe");
 	      else if (is_C_compiler (per_file.seen_tools))
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
+	      else if (is_kernel_module (data))
+		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules do not support stack clash protection");
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this test");
 	    break;
