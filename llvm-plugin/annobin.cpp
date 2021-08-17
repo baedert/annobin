@@ -1,4 +1,7 @@
 #include "llvm/Pass.h"
+#if __clang_major__ > 12
+#include "llvm/Passes/PassPlugin.h"
+#endif
 #include "llvm/IR/Module.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/LegacyPassManager.h"
@@ -71,7 +74,11 @@ namespace
     exit (EXIT_FAILURE);
   }
 
+#if __clang_major__ > 12
+  struct AnnobinModule
+#else
   class AnnobinModulePass : public ModulePass
+#endif
   {
   private:
     const unsigned int  version = ANNOBIN_VERSION;
@@ -256,8 +263,12 @@ namespace
     }
 
   public:
+#if __clang_major__ > 12
+    AnnobinModule()
+#else
     static char ID;
     AnnobinModulePass() : ModulePass (ID)
+#endif
     {
       if (getenv ("ANNOBIN_VERBOSE") != NULL
 	  && ! streq (getenv ("ANNOBIN_VERBOSE"), "false"))
@@ -276,8 +287,13 @@ namespace
       return "Annobin Module Pass";
     }
     
+#if __clang_major__ > 12
+    bool
+    run (Module & module)
+#else
     virtual bool
     runOnModule (Module & module)
+#endif
     {
       static char buf [6400]; // FIXME: Use a dynamic string.
       std::string filename = module.getSourceFileName ();
@@ -463,6 +479,75 @@ namespace
       buffer << '\n';
     }
 
+#if __clang_major__ > 12
+  }; // End of struct AnnobinModule
+
+  struct AnnobinModulePass : llvm::PassInfoMixin<AnnobinModulePass>
+  {
+    llvm::PassBuilder::OptimizationLevel OptLevel;
+
+    AnnobinModulePass(llvm::PassBuilder::OptimizationLevel OptLevel) : OptLevel(OptLevel) {}
+    llvm::PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM)
+    {
+      AnnobinModule Annobin;
+      Annobin.setOptLevel(OptLevel.getSizeLevel());
+      Annobin.run(M);
+      return llvm::PreservedAnalyses::all();
+    }
+  };
+} // end of llvm namespace
+
+llvm::PassPluginLibraryInfo getAnnobinLLVMPluginInfo ()
+{
+  return
+    { LLVM_PLUGIN_API_VERSION, "Annobin LLVM",
+      LLVM_VERSION_STRING, [](llvm::PassBuilder &PB)
+      {
+	PB.registerPipelineStartEPCallback
+	  ([](llvm::ModulePassManager &PM,
+	      llvm::PassBuilder::OptimizationLevel Level)
+	  {
+	    PM.addPass(AnnobinModulePass(Level));
+	  });
+      }
+    };
+}
+
+extern "C" LLVM_ATTRIBUTE_WEAK llvm::PassPluginLibraryInfo
+llvmGetPassPluginInfo ()
+{
+  return getAnnobinLLVMPluginInfo ();
+}
+
+class AnnobinModulePassLegacy : public ModulePass
+{
+public:
+  static char ID;
+  int OptLevel;
+  AnnobinModulePassLegacy() : ModulePass (ID) { }
+
+  virtual bool runOnModule (Module & module)
+  {
+    AnnobinModule Annobin;
+    Annobin.setOptLevel(OptLevel);
+    return Annobin.run(module);
+  }
+};
+
+Pass *
+createAnnobinModulePassLegacy (int optLevel)
+{
+  AnnobinModulePassLegacy * p;
+ 
+  verbose ("Creating Module Pass");
+  p = new AnnobinModulePassLegacy;
+  // FIXME: There must surely be a way to access this information from within the Module class.
+  p->OptLevel = optLevel;
+  return p;
+}
+
+#else /* not clang 13+ */
+
   }; // End of class AnnobinModulePass 
 
   Pass *
@@ -472,31 +557,55 @@ namespace
 
     verbose ("Creating Module Pass");
     p = new AnnobinModulePass;
-    // FIXME: There must surely be a way to access this information from with the Module class.
+    // FIXME: There must surely be a way to access this information from within the Module class.
     p->setOptLevel (optLevel);
     return p;
   }
-}
+} // end of llvm namespace
 
+#endif /* clang 13+ */
+
+#if __clang_major__ > 12
+char AnnobinModulePassLegacy::ID = 0;
+#else
 char AnnobinModulePass::ID = 0;
+#endif
 
 static void
+#if __clang_major__ > 12
+registerAnnobinModulePassLegacy (const PassManagerBuilder & PMB,
+				 legacy::PassManagerBase & PM)
+#else
 registerAnnobinModulePass (const PassManagerBuilder & PMB,
 			   legacy::PassManagerBase & PM)
+#endif
 {
+#if __clang_major__ > 12
+  static RegisterPass<AnnobinModulePassLegacy> X("annobin", "Annobin Module Pass");
+  PM.add (createAnnobinModulePassLegacy ((int) PMB.OptLevel));
+#else
   static RegisterPass<AnnobinModulePass> X("annobin", "Annobin Module Pass");
   PM.add (createAnnobinModulePass ((int) PMB.OptLevel));
+#endif
 }
 
 // NB. The choice of when to run the passes is critical.  Using
 // EP_EarlyAsPossible for example will run all the passes as Function passes,
 // even if they are Module passes.  Whist using EP_ModuleOptimizerEarly will
 // not run the pass at -O0.  Hence we use three different pass levels.
+#if __clang_major__ > 12
+static RegisterStandardPasses
+RegisterMyPass2 (PassManagerBuilder::EP_EnabledOnOptLevel0, registerAnnobinModulePassLegacy);
+ 
+static RegisterStandardPasses
+RegisterMyPass3 (PassManagerBuilder::EP_ModuleOptimizerEarly, registerAnnobinModulePassLegacy);
+#else
 static RegisterStandardPasses
 RegisterMyPass2 (PassManagerBuilder::EP_EnabledOnOptLevel0, registerAnnobinModulePass);
 
 static RegisterStandardPasses
 RegisterMyPass3 (PassManagerBuilder::EP_ModuleOptimizerEarly, registerAnnobinModulePass);
+#endif
 
 // -------------------------------------------------------------------------------------
 // Function Pass

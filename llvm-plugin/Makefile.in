@@ -47,10 +47,21 @@ PLUGIN_TEST_OPTIONS = \
 
 #   -fcf-protection \
 
-check: @srcdir@/hello.c
-	@ $(CLANG) -Xclang -load -Xclang $(PLUGIN)  $(PLUGIN_TEST_OPTIONS) -c @srcdir@/hello.c
+check: check-legacy check-newpm
+
+check-legacy:
+	$(MAKE) check-run LOAD_PLUGIN_ARG="-flegacy-pass-manager -fplugin=$(PLUGIN)"
+
+check-newpm:
+	$(MAKE) check-run LOAD_PLUGIN_ARG="-fpass-plugin=$(PLUGIN)"
+
+check-pre-clang-13:
+	$(MAKE) check-run LOAD_PLUGIN_ARG="-Xclang -load -Xclang $(PLUGIN)"
+
+check-run: @srcdir@/hello.c
+	@ $(CLANG) $(LOAD_PLUGIN_ARG)  $(PLUGIN_TEST_OPTIONS) -c @srcdir@/hello.c
 	@ $(READELF) --wide --notes hello.o > llvm-plugin-test.out
 	@ grep --silent -e "annobin built by llvm version" llvm-plugin-test.out
 	@ grep --silent -e "running on LLVM version" llvm-plugin-test.out
 	@ grep --silent -e "stack_clash" llvm-plugin-test.out
-	@ echo "PASS LLVM plugin test"
+	@ echo "PASS LLVM plugin test [$(LOAD_PLUGIN_ARG)]"

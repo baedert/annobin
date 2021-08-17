@@ -3685,6 +3685,14 @@ check_for_gaps (annocheck_data * data)
 
   /* Now check to see that the notes covered the whole of the .text section.  */
   /* FIXME: We should actually do this for every executable section.  */
+  /* FIXME: we know that the PPC64 and S390 will put linker generated code at the start and/or
+     end of the .text section, so we skip this next test.  Ideally we would have a way to detect
+     linker generated code...  */
+  if (per_file.e_machine == EM_PPC64 || per_file.e_machine == EM_S390)
+    {
+      pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
+      return;
+    }
   
   /* Scan forward through the ranges array looking for overlaps with the start of the .text section.  */
   if (per_file.text_section_range.end != 0)

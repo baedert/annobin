@@ -692,6 +692,12 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	pop_component ();
       }
 
+  if (data.dwarf_fd != -1 && data.dwarf_fd != data.fd)
+    {
+      close (data.dwarf_fd);
+      data.dwarf_fd = -1; /* Paranoia.  */
+    }
+
   return ret;
 }
 
@@ -782,6 +788,8 @@ follow_debuglink (annocheck_data * data)
 
   /* Initialise the dwarf specific fields of the data structure.  */
   data->dwarf = NULL;
+  if (data->dwarf_fd != -1 && data->dwarf_fd != data->fd)
+    close (data->dwarf_fd);
   data->dwarf_fd = -1;
   data->dwarf_filename = NULL;
   
