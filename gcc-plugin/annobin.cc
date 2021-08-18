@@ -944,10 +944,11 @@ record_GOW_settings (unsigned int gow,
   char buffer [128];
   unsigned i;
 
-  annobin_inform (INFORM_VERBOSE, "Record status of -g (%d), -O (%d) and -Wall (%s) for %s",
+  annobin_inform (INFORM_VERBOSE, "Record status of -g (%d), -O (%d), -Wall (%s) and LTO (%s) for %s",
 		  (gow >> 4) & 3,
 		  (gow >> 9) & 3,
 		  gow & (3 << 14) ? "enabled" : "disabled",
+		  gow & (1 << 16) ? "enabled" : "not enabled",
 		  is_open ? "<global>" : info->func_name);
   
   (void) sprintf (buffer, "GA%cGOW", NUMERIC);
@@ -1339,15 +1340,19 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
   unsigned int  count;
   bool          force;
 
-  if (asm_out_file == NULL)
-    return;
-
   if (current_func.func_name != NULL)
     ice ("new function encountered whilst still processing old function");
 
   current_func.func_name = current_function_name ();
   current_func.asm_name  = function_asm_name ();
 
+  if (asm_out_file == NULL)
+    {
+      annobin_inform (INFORM_VERBOSE, "Output file not available - unable to generate notes for %s",
+		      current_func.func_name);
+      return;
+    }
+  
   if (current_func.func_name == NULL)
     {
       current_func.func_name = current_func.asm_name;
@@ -1673,7 +1678,10 @@ static void
 annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 {
   if (asm_out_file == NULL)
-    return;
+    {
+      annobin_inform (INFORM_VERBOSE, "unable to create function end symbols.");
+      return;
+    }
 
   if (current_func.end_sym == NULL)
     return;
@@ -2092,24 +2100,26 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
     {
       /* This happens during LTO compilation.  Compilation is triggered
 	 before any output file has been opened.  Since we do not have
-	 the file handle we cannot emit any notes.  On the other hand,
-	 the recompilation process will repeat later on with a real
-	 output file and so the notes can be generated then.  */
-      annobin_inform (INFORM_VERBOSE, "Output file not available - unable to generate notes");
+	 the file handle we cannot emit any notes.  If we are lucky however
+	 the recompilation process will be repeated later on with a real
+	 output file and so the notes can be generated then.
+
+	 FIXME: This does not always happen however and we can end up
+	 with LTO output containing no notes.  We need to find some way
+	 to inject notes into an LTO generated meta-object file...  */
+      annobin_inform (INFORM_VERBOSE, "Output file not available - unable to generate global notes");
       return;
     }
 
   /* Record global information.
      Note - we do this here, rather than in plugin_init() as some
-     information, PIC status or POINTER_SIZE, may not be initialised
+     information, eg PIC status and POINTER_SIZE, may not be initialised
      until after the target backend has had a chance to process its
      command line options, and this happens *after* plugin_init.  */
 
-  /* Compute the default data size.
-     Note - we used to examine POINTER_SIZE, but that has turned
-     out to be unreliable.  */
+  /* Compute the default data size.  */
   unsigned psize = annobin_get_target_pointer_size ();
-  annobin_inform (INFORM_VERBOSE, "Target's pointer size: %d bits", psize);
+  annobin_inform (INFORM_VERBOSE, "Target's pointer size: %u bits", psize);
   switch (psize)
     {
     case 16:
@@ -2168,6 +2178,9 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      last version of the option, should multiple versions be set.  */
 
   int i;
+
+  annobin_inform (INFORM_VERY_VERBOSE, "There are %d options in the saved_decoded_options array",
+		  save_decoded_options_count);
 
   for (i = save_decoded_options_count; i--;)
     {
@@ -2464,7 +2477,10 @@ static void
 annobin_finish_unit (void * gcc_data, void * user_data)
 {
   if (asm_out_file == NULL)
-    return;
+    {
+      annobin_inform (INFORM_VERBOSE, "no unit end notes.");
+      return;
+    }
 
   /* It is possible that there is no code in the .text section.
      Eg because the compilation was run with the -ffunction-sections option.
@@ -2482,7 +2498,7 @@ annobin_finish_unit (void * gcc_data, void * user_data)
 static void
 annobin_display_version (void)
 {
-  annobin_inform (INFORM_ALWAYS, "Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
+  annobin_inform (INFORM_ALWAYS, "Annobin GCC Plugin Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
 }
 
 static bool
@@ -2700,7 +2716,7 @@ plugin_init (struct plugin_name_args *    plugin_info,
   run_version   = concat ("running gcc ", version->basever, " ", version->datestamp, NULL);
   build_version = concat ("annobin gcc ", gcc_version.basever, " ", gcc_version.datestamp, NULL);
 
-  annobin_inform (INFORM_VERBOSE, "Annobin built by %s, running on %s", build_version + 8, run_version + 8);
+  annobin_inform (INFORM_VERBOSE, "Plugin built by %s, running on %s", build_version + 8, run_version + 8);
 
   if (annobin_save_target_specific_information () == 1)
     return 1;
