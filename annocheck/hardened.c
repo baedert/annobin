@@ -227,14 +227,14 @@ static test tests [TEST_MAX] =
 {
   TEST (notes,              NOTES,              "Annobin note coverage"),
   TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
-#ifdef AARCh64_BRANCH_PROTECTION_SUPPORTED
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
   TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
 #else
   TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled without -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
 #endif
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8+ only)"),
   TEST (dynamic-segment,    DYNAMIC_SEGMENT,    "There is at most one dynamic segment/section"),
-#ifdef AARCh64_BRANCH_PROTECTION_SUPPORTED
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
   TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI present (AArch64 only)"),
 #else
   TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI *not* present (AArch64 only)"),
@@ -251,7 +251,11 @@ static test tests [TEST_MAX] =
   TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
   TEST (production,         PRODUCTION,         "Built by a production compiler"),
-  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, aarch64, PowerPC)"),
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
+  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, AArch64, PowerPC)"),
+#else
+  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, PowerPC)"),
+#endif
   TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
   TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
   TEST (short-enum,         SHORT_ENUM,         "Compiled with consistent use of -fshort-enum"),
@@ -2086,7 +2090,7 @@ build_note_checker (annocheck_data *     data,
 	      || streq (attr, "(null)")
 	      || streq (attr, "default"))
 	    {
-#ifdef AARCh64_BRANCH_PROTECTION_SUPPORTED
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
 #else
 	      pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
@@ -2096,7 +2100,7 @@ build_note_checker (annocheck_data *     data,
 		   || (streq (attr, "standard"))
 		   || const_strneq (attr, "pac-ret+bti"))
 	    {
-#ifdef AARCh64_BRANCH_PROTECTION_SUPPORTED
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection enabled");
 #else
 	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection enabled");
@@ -2107,7 +2111,7 @@ build_note_checker (annocheck_data *     data,
 	    fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "partially enabled");
 	  else if (streq (attr, "none"))
 	    {
-#ifdef AARCh64_BRANCH_PROTECTION_SUPPORTED
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection disabled");
 #else
 	      pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection disabled");
@@ -2565,11 +2569,13 @@ future_fail (annocheck_data * data, const char * message)
   ffail (data, message, INFO);
 }
 
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 static void
 vfuture_fail (annocheck_data * data, const char * message)
 {
   ffail (data, message, VERBOSE);
 }
+#endif
 
 static const char *
 handle_ppc64_property_note (annocheck_data *      data,
@@ -2589,7 +2595,7 @@ handle_aarch64_property_note (annocheck_data *      data,
 			      ulong                 size,
 			      const unsigned char * notedata)
 {
-#if 0 /* ARM hardware does not currently support BTI/PAC, so we do not need these tests.  */
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
   /* These are not defined in the RHEL-7 build environment.  */
 #ifndef GNU_PROPERTY_AARCH64_FEATURE_1_AND
 #define GNU_PROPERTY_AARCH64_FEATURE_1_AND	0xc0000000
@@ -2627,6 +2633,8 @@ handle_aarch64_property_note (annocheck_data *      data,
     }
 
   einfo (VERBOSE2, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", get_filename (data));
+#else
+  einfo (VERBOSE2, "%s: info: AArch64 property notes are not currently expected", get_filename (data));
 #endif
   return NULL;
 }
@@ -2882,6 +2890,55 @@ not_rooted_at_usr (const char * str)
   return false;
 }
 
+/* Returns TRUE iff STR contains a search path that starts with $ORIGIN
+   and which occurs after a path that does not start with $ORIGIN.  */
+
+static bool
+origin_path_after_non_origin_path (const char * str)
+{
+  bool non_origin_seen = false;
+
+  while (str)
+    {
+      if (strstr (str, "$ORIGIN"))
+	{
+	  if (non_origin_seen)
+	    return true;
+	}
+      else
+	non_origin_seen = true;
+
+      str = strchr (str, ':');
+      if (str)
+	str++;
+    }
+  return false;
+}
+
+/* Check the runtime search paths found in a dynamic tag.  These checks attempt
+   to match the logic in /usr/lib/rpm/check-rpaths-worker, except that we do not
+   complain about the presence of standard library search paths.  Return true if
+   the paths were OK and false otherwise.  */
+
+static bool
+check_runtime_search_paths (annocheck_data * data, const char * path)
+{
+  if (path[0] == 0)
+    /* An empty path is useless.  */
+    maybe (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RPATH/DT_RUNPATH dynamic tag exists but is empty");
+  else if (not_rooted_at_usr (path))
+    fail (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RPATH/DT_RUNPATH dynamic tag contains a path that does not start with /usr");
+  else if (strstr (path, "..") != NULL)
+    /* If a path contains .. then it may not work if the portion before it is a symlink.  */
+    fail (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RPATH/DT_RUNPATH dynamic tag has a path that contains '..'");
+  else if (origin_path_after_non_origin_path (path))
+    /* Placing $ORIGIN paths after non-$ORIGIN paths is probably a mistake.  */
+    maybe (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RPATH/DT_RUNPATH dynamic tag has $ORIGIN after a non-$ORIGIN path");
+  else
+    return true;
+  return false;
+}
+
 static bool
 check_dynamic_section (annocheck_data *    data,
 		       annocheck_section * sec)
@@ -2941,31 +2998,24 @@ check_dynamic_section (annocheck_data *    data,
 	  break;
 
 	case DT_RPATH:
-	  {
-	    if (skip_test (TEST_RUN_PATH))
-	      break;
+	  if (! skip_test (TEST_RUN_PATH))
+	    {
+	      const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
 
-	    const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
-
-	    if (not_rooted_at_usr (path))
-	      fail (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, NULL);
-	    else
-	      vfuture_fail (data, "The RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead");
-	  }
+	      if (check_runtime_search_paths (data, path))
+		maybe (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION,
+		       "the RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead");
+	    }
 	  break;
 
 	case DT_RUNPATH:
-	  {
-	    if (skip_test (TEST_RUN_PATH))
-	      break;
+	  if (! skip_test (TEST_RUN_PATH))
+	    {
+	      const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
 
-	    const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
-
-	    if (not_rooted_at_usr (path))
-	      fail (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, NULL);
-	    else
-	      pass (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, NULL);
-	  }
+	      if (check_runtime_search_paths (data, path))
+		pass (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RUNPATH dynamic tag is present and correct");
+	    }
 	  break;
 
 	case DT_AARCH64_BTI_PLT:
@@ -3909,10 +3959,12 @@ finish (annocheck_data * data)
 	    case TEST_DYNAMIC_TAGS:
 	      if (per_file.e_machine != EM_AARCH64)
 		skip (data, i, SOURCE_FINAL_SCAN, "AArch64 specific");
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      else if (is_object_file ())
 		skip (data, i, SOURCE_FINAL_SCAN, "not needed in object files");
 	      else
 		future_fail (data, "no dynamic tags found");
+#endif
 	      break;
 
 	    case TEST_GLIBCXX_ASSERTIONS:
@@ -4010,8 +4062,10 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed in object files");
 	      else if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed for GO binaries");
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      else if (per_file.e_machine == EM_AARCH64)
 		future_fail (data, ".note.gnu.property section not found");
+#endif
 	      else
 		fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section found");
 	      break;
@@ -4050,10 +4104,10 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
 	      else
 		{
-#ifdef AARCh64_BRANCH_PROTECTION_SUPPORTED
-		fail (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
+		  fail (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
 #else
-		pass (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
+		  pass (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
 #endif
 		}
 	      break;
