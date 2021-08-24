@@ -1304,7 +1304,12 @@ find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * 
   size_t         nlines;
   Dwarf_Lines *  lines;
 
-  dwarf_getsrclines (die, & lines, & nlines);
+  if (dwarf_getsrclines (die, & lines, & nlines) != 0)
+    {
+      /* FIXME: We could report dwarf_errmsg() here.  */
+      einfo (VERBOSE2, "Unable to retrieve a DWARF line table");
+      return false;
+    }
 
   if (lines != NULL && nlines > 0)
     {
@@ -1313,7 +1318,7 @@ find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * 
       ulong        best_distance_so_far = ULONG_MAX;
       const char * best_name = NULL;
 
-      einfo (VERBOSE2, "Scanning %ld lines in the DWARF line table", (unsigned long) nlines);
+      einfo (VERBOSE2, "Scanning %lu lines in the DWARF line table", (unsigned long) nlines);
       while ((line = dwarf_onesrcline (lines, indx)) != NULL)
 	{
 	  Dwarf_Addr addr;

@@ -3825,9 +3825,12 @@ check_for_gaps (annocheck_data * data)
 	}
     }
 
-  if (per_file.text_section_range.end > 0)
+  /* FIXME _ SCAN FOR NOPS!  */
+  /* The AArch64 target can insert up to 0x3c bytes of padding...
+     cf BZ 1995224.  */
+  if ((per_file.text_section_range.end - per_file.text_section_range.start) > 0x3c
+      || (per_file.e_machine != EM_AARCH64 && (per_file.text_section_range.end > per_file.text_section_range.start)))
     {
-      /* FIXME: This test does not allow for linker generated code that have no notes.  */
       maybe (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "not all of the .text section is covered by notes");
       einfo (VERBOSE, "%s: debug: address range not covered: %lx..%lx",
 	     get_filename (data), per_file.text_section_range.start, per_file.text_section_range.end);
