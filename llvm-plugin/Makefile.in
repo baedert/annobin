@@ -47,9 +47,13 @@ PLUGIN_TEST_OPTIONS = \
 
 #   -fcf-protection \
 
-
-CLANG_TESTS=check-legacy check-newpm
-check: $(CLANG_TESTS)
+check: 
+	if [ `echo | clang -dM -E - | grep __clang_major__ | cut -f 3 -d ' '` -gt 12 ] ; \
+	then \
+		make check-legacy check-newpm ; \
+	else \
+		make check-pre-clang-13 ; \
+	fi
 
 check-legacy:
 	$(MAKE) check-run LOAD_PLUGIN_ARG="-flegacy-pass-manager -fplugin=$(PLUGIN)"
