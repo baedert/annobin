@@ -582,7 +582,15 @@ set_lang (annocheck_data *  data,
 	{
 	  /* FIXME: This FAIL is only true if CET is not enabled.  */
 	  if (tests[TEST_ONLY_GO].state != STATE_FAILED)
-	    fail (data, TEST_ONLY_GO, source, "combining GO and non-GO object files on x86 systems is not safe - it disables CET");
+	    {
+	      /* FIXME: This FAIL is currently disabled as the user can do nothing to correct the problem.
+		 The GO compiler itself needs to be fixed to support CET.  */
+#if 0
+	      fail (data, TEST_ONLY_GO, source, "combining GO and non-GO object files on x86 systems is not safe - it disables CET");
+#else
+	      skip (data, TEST_ONLY_GO, source, "although mixed GO & C programs are unsafe on x86 (because CET is not supported) this is a GO compiler problem not a program builder problem");
+#endif
+	    }
 	}
 
       /* FIXME: What to do ?
@@ -2786,7 +2794,12 @@ property_note_checker (annocheck_data *     data,
     }
 
   if (is_x86 () && ! per_file.has_cf_protection)
-    fail (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, "CET enabling note missing");
+    {
+      if (per_file.seen_tools & TOOL_GO)
+	skip (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, "CET not enabled because the GO compiler does not support it");
+      else
+	fail (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, "CET enabling note missing");
+    }
 
   pass (data, TEST_PROPERTY_NOTE, SOURCE_PROPERTY_NOTES, NULL);
   return true;
@@ -3324,6 +3337,11 @@ check_seg (annocheck_data *    data,
     {
       Elf64_Addr entry_point = per_file.e_entry - seg->phdr->p_vaddr;
 
+      if (seg->data == NULL
+	  || entry_point + 3 >= seg->data->d_size)
+	/* Fuzzing can create binaries like this.  */
+	return false;
+
       /* We are only interested in PT_LOAD segmments if we are checking
 	 the entry point instruction.  However we should not check shared
 	 libraries, so test for them here.  */
@@ -3333,7 +3351,6 @@ check_seg (annocheck_data *    data,
 	  return true;
 	}
 
-      assert (entry_point + 3 < seg->data->d_size);
       memcpy (entry_bytes, seg->data->d_buf + entry_point, sizeof entry_bytes);
 
       if (per_file.e_machine == EM_386)
@@ -4005,7 +4022,7 @@ finish (annocheck_data * data)
 		 if all that we have seen is assembler produced code.  */
 	      if (per_file.seen_tools == TOOL_GAS
 		  || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
-		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
+		skip (data, i, SOURCE_FINAL_SCAN, "no C/C++ compiled code found");
 	      /* There may be notes on this test, but the are for a zero-length range.  */
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
@@ -4065,10 +4082,14 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed in object files");
 	      else if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed for GO binaries");
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      else if (per_file.e_machine == EM_AARCH64)
-		future_fail (data, ".note.gnu.property section not found");
+		{
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
+		  future_fail (data, ".note.gnu.property section not found");
+#else
+		  skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed for AArch64 binaries");
 #endif
+		}
 	      else
 		fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section found");
 	      break;
@@ -4127,7 +4148,13 @@ finish (annocheck_data * data)
 	      else if (per_file.seen_tools == TOOL_GO)
 		pass (data, i, SOURCE_FINAL_SCAN, "only GO compiled code found");
 	      else if (per_file.seen_tools & TOOL_GO)
-		fail (data, i, SOURCE_FINAL_SCAN, "mixed GO and another language found");
+		{
+#if 0
+		  fail (data, i, SOURCE_FINAL_SCAN, "mixed GO and another language found");
+#else
+		  skip (data, i, SOURCE_FINAL_SCAN, "mixed GO and another language found, but ignored for now");
+#endif
+		}
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "no GO compiled code found");
 	      break;

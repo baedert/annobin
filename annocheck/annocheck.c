@@ -601,6 +601,8 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	  sec.scn = scn;
 	  read_section_header (& data, scn, & sec.shdr);
 	  sec.secname = elf_strptr (elf, shstrndx, sec.shdr.sh_name);	  
+	  if (sec.secname == NULL)
+	    continue;
 
 	  /* Note - do not skip empty sections, they may still be interesting to some tools.
 	     If a tool is not interested in an empty section, it can always determine this
@@ -657,6 +659,10 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	  seg.phdr = gelf_getphdr (elf, cnt, & mem);
 	  seg.number = cnt;
 
+	  if (seg.phdr == NULL)
+	    /* Fuzzzing can produce segments like this.  */
+	    continue;
+			       
 	  einfo (VERBOSE2, "%s: considering segment %lu", filename, (unsigned long) cnt);
 
 	  for (tool = first_seg_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next_seg)
@@ -772,6 +778,7 @@ extract_rpm_file (const char * filename)
 #define TRY_DEBUG(format,args...)					\
   do									\
     {									\
+      if (debugfile == NULL) return false; /* Pacify Address Sanitizer */\
       sprintf (debugfile, format, args);				\
       einfo (VERBOSE2, "%s:  try: %s", data->filename, debugfile);	\
       if ((fd = open (debugfile, O_RDONLY)) != -1)			\
@@ -785,6 +792,9 @@ follow_debuglink (annocheck_data * data)
   char *  canon_dir = NULL;
   char *  debugfile = NULL;
   int     fd;
+
+  if (data->filename == NULL)
+    return false;
 
   /* Initialise the dwarf specific fields of the data structure.  */
   data->dwarf = NULL;
@@ -1796,6 +1806,10 @@ annocheck_process_extra_file (checker *     checker,
       read_section_header (& data, scn, & sec.shdr);
       sec.secname = elf_strptr (elf, shstrndx, sec.shdr.sh_name);	  
 
+      if (sec.secname == NULL)
+	/* Fuzzing can produce sections like this.  */
+	continue;
+      
       /* Note - do not skip empty sections, they may still be interesting to some tools.
 	 If a tool is not interested in an empty section, it can always determine this
 	 in its interesting_sec() function.  */
@@ -1841,6 +1855,11 @@ annocheck_process_extra_file (checker *     checker,
       memset (& seg, 0, sizeof seg);
 
       seg.phdr = gelf_getphdr (elf, cnt, & mem);
+
+      if (seg.phdr == NULL)
+	/* Fuzzing can produce segments like this.  */
+	continue;
+
       seg.number = cnt;
 
       einfo (VERBOSE2, "%s: considering segment %lu", extra_filename, (unsigned long) cnt);
