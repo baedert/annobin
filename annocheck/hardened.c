@@ -1653,8 +1653,19 @@ build_note_checker (annocheck_data *     data,
 	}
     }
 
+  if (name_offset >= sec->data->d_size)
+    goto corrupt_note;
+  
   const char *  namedata = sec->data->d_buf + name_offset;
+  uint          bytes_left = sec->data->d_size - name_offset;
+
+  if (bytes_left < 1 || note->n_namesz > bytes_left)
+    goto corrupt_note;
+
   uint          pos = (namedata[0] == 'G' ? 3 : 1);
+  if (pos > bytes_left)
+    goto corrupt_note;
+  
   char          attr_type = namedata[pos - 1];
   const char *  attr = namedata + pos;
 
@@ -1672,7 +1683,10 @@ build_note_checker (annocheck_data *     data,
   if (! isprint (* attr))
     pos ++;
   else
-    pos += strlen (namedata + pos) + 1;
+    pos += strnlen (namedata + pos, bytes_left - pos) + 1;
+
+  if (pos > bytes_left)
+    goto corrupt_note;
 
   const char *  string = namedata + pos;
   uint          value = -1;
@@ -1687,6 +1701,9 @@ build_note_checker (annocheck_data *     data,
 	value = 0;
 	if (bytes > 0)
 	  bytes --;
+	else if (bytes < 0)
+	  goto corrupt_note;
+
 	while (bytes --)
 	  {
 	    uint byte = (* string ++) & 0xff;
@@ -2558,6 +2575,10 @@ build_note_checker (annocheck_data *     data,
     }
 
   return true;
+
+ corrupt_note:
+  einfo (FAIL, "%s: Corrupt annobin note", get_filename (data));
+  return false;
 }
 
 static void
@@ -2936,7 +2957,9 @@ origin_path_after_non_origin_path (const char * str)
 static bool
 check_runtime_search_paths (annocheck_data * data, const char * path)
 {
-  if (path[0] == 0)
+  if (path == NULL)
+    fail (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RPATH/DT_RUNPATH dynamic tag is corrupt");
+  else if (path[0] == 0)
     /* An empty path is useless.  */
     maybe (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RPATH/DT_RUNPATH dynamic tag exists but is empty");
   else if (not_rooted_at_usr (path))
@@ -3404,6 +3427,8 @@ check_seg (annocheck_data *    data,
   size_t     offset = 0;
 
   offset = gelf_getnote (seg->data, offset, & note, & name_off, & data_off);
+  if (offset == 0)
+    return false;
 
   if (seg->phdr->p_align != 8)
     {
@@ -3704,7 +3729,7 @@ check_for_gaps (annocheck_data * data)
 	    continue;
 
 	  const char * sym = annocheck_find_symbol_for_address_range (data, NULL, gap.start, gap.end, false);
-	  if (sym && skip_gap_sym (data, sym))
+	  if (sym != NULL && skip_gap_sym (data, sym))
 	    {
 	      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym);
 
@@ -3722,9 +3747,7 @@ check_for_gaps (annocheck_data * data)
 	      const char * sym2;
 
 	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
-	      if (sym2 != NULL
-		  && (sym == NULL || ! streq (sym, sym2))
-		  && strstr (sym2, ".end") == NULL)
+	      if (sym2 != NULL && strstr (sym2, ".end") == NULL)
 		{
 		  if (skip_gap_sym (data, sym2))
 		    {
@@ -3733,8 +3756,11 @@ check_for_gaps (annocheck_data * data)
 		      continue;
 		    }
 
-		  gap.start = align (gap.start, 16);
-		  sym = sym2;
+		  if (sym == NULL)
+		    {
+		      gap.start = align (gap.start, 16);
+		      sym = sym2;
+		    }
 		}
 	    }
 
@@ -3746,9 +3772,7 @@ check_for_gaps (annocheck_data * data)
 
 	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, start, start + 32, false);
 
-	      if (sym2 != NULL
-		  && (sym == NULL || ! streq (sym, sym2))
-		  && strstr (sym2, ".end") == NULL)
+	      if (sym2 != NULL && strstr (sym2, ".end") == NULL)
 		{
 		  if (skip_gap_sym (data, sym2))
 		    {
@@ -3756,6 +3780,9 @@ check_for_gaps (annocheck_data * data)
 		      /* See comment above.  */
 		      continue;
 		    }
+
+		  if (sym == NULL)
+		    sym = sym2;
 		}
 	    }
 

@@ -529,12 +529,18 @@ annocheck_walk_notes (annocheck_data * data, annocheck_section * sec, note_walke
 
 /* Read in the section header for SECTION.  */
 
-static void
+static bool
 read_section_header (annocheck_data * data, Elf_Scn * section, Elf64_Shdr * s64hdr)
 {
+  if (data == NULL || section == NULL || s64hdr == NULL)
+    return false;
+
   if (data->is_32bit)
     {
       Elf32_Shdr * shdr = elf32_getshdr (section);
+
+      if (shdr == NULL)
+	return false;
 
       s64hdr->sh_name = shdr->sh_name;
       s64hdr->sh_type = shdr->sh_type;
@@ -548,7 +554,15 @@ read_section_header (annocheck_data * data, Elf_Scn * section, Elf64_Shdr * s64h
       s64hdr->sh_entsize = shdr->sh_entsize;
     }
   else
-    memcpy (s64hdr, elf64_getshdr (section), sizeof * s64hdr);
+    {
+      Elf64_Shdr * shdr = elf64_getshdr (section);
+
+      if (shdr == NULL)
+	return false;
+      memcpy (s64hdr, shdr, sizeof * s64hdr);
+    }
+
+  return true;
 }
   
 /* -------------------------------------------------------------------- */
@@ -599,7 +613,9 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	  memset (& sec, 0, sizeof sec);
 
 	  sec.scn = scn;
-	  read_section_header (& data, scn, & sec.shdr);
+	  if (! read_section_header (& data, scn, & sec.shdr))
+	    continue;
+
 	  sec.secname = elf_strptr (elf, shstrndx, sec.shdr.sh_name);	  
 	  if (sec.secname == NULL)
 	    continue;
@@ -1141,7 +1157,8 @@ annocheck_find_symbol_by_name (annocheck_data * data, const char * name,
     {
       Elf64_Shdr sym_shdr;
 
-      read_section_header (data, sym_sec, & sym_shdr);
+      if (! read_section_header (data, sym_sec, & sym_shdr))
+	continue;
 
       if ((sym_shdr.sh_type != SHT_SYMTAB) && (sym_shdr.sh_type != SHT_DYNSYM))
 	continue;
@@ -1188,7 +1205,10 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
 {
   Elf_Data * sym_data;
 
-  if (data_return == NULL)
+  if (data_return == NULL || sym_hdr == NULL)
+    return false;
+
+  if (sym_hdr->sh_entsize == 0)
     return false;
 
   if ((sym_data = elf_getdata (sym_sec, NULL)) == NULL)
@@ -1219,6 +1239,9 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
 	  && GELF_ST_VISIBILITY (sym.st_other) == STV_HIDDEN)
 	continue;
 
+      if (name == NULL)
+	continue;
+
       if (ends_with (name, "_end", strlen ("_end")))
 	continue;
 
@@ -1247,7 +1270,9 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
 	}
     }
 
-  assert (symndx == sym_hdr->sh_size / sym_hdr->sh_entsize);
+  if (symndx != sym_hdr->sh_size / sym_hdr->sh_entsize)
+    /* Something went wrong with the loop.  */
+    return false;
 
   if (best_name != NULL)
     {
@@ -1256,6 +1281,7 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
       data_return->distance = best_distance_so_far;
       return true;
     }
+
   if (second_best_name != NULL)
     {
       data_return->name = second_best_name;
@@ -1263,6 +1289,7 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
       data_return->distance = second_best_distance;
       return true;
     }
+
   return false;
 }
 
@@ -1292,7 +1319,8 @@ find_symbol_addr_using_dwarf (annocheck_data * data, Dwarf * dwarf, Dwarf_Die * 
 	{
 	  Elf64_Shdr   sym_shdr;
 
-	  read_section_header (data, sym_sec, & sym_shdr);
+	  if (! read_section_header (data, sym_sec, & sym_shdr))
+	    continue;
 
 	  if ((sym_shdr.sh_type == SHT_SYMTAB) || (sym_shdr.sh_type == SHT_DYNSYM))
 	    {
@@ -1419,14 +1447,16 @@ annocheck_get_symbol_name_and_type (annocheck_data *     data,
   if (sec != NULL && sec->shdr.sh_link)
     {
       sym_sec = elf_getscn (data->elf, sec->shdr.sh_link);
-      read_section_header (data, sym_sec, & sym_shdr);
 
-      if (sym_shdr.sh_type == SHT_SYMTAB || sym_shdr.sh_type == SHT_DYNSYM)
+      if (read_section_header (data, sym_sec, & sym_shdr))
 	{
-	  if (find_symbol_in (data->elf, sym_sec, start, end, & sym_shdr, prefer_func, & data_return))
+	  if (sym_shdr.sh_type == SHT_SYMTAB || sym_shdr.sh_type == SHT_DYNSYM)
 	    {
-	      if (data_return.distance == 0)
-		goto found;
+	      if (find_symbol_in (data->elf, sym_sec, start, end, & sym_shdr, prefer_func, & data_return))
+		{
+		  if (data_return.distance == 0)
+		    goto found;
+		}
 	    }
 	}
     }
@@ -1435,7 +1465,8 @@ annocheck_get_symbol_name_and_type (annocheck_data *     data,
   sym_sec = NULL;
   while ((sym_sec = elf_nextscn (data->elf, sym_sec)) != NULL)
     {
-      read_section_header (data, sym_sec, & sym_shdr);
+      if (! read_section_header (data, sym_sec, & sym_shdr))
+	continue;
 
       if ((sym_shdr.sh_type == SHT_SYMTAB) || (sym_shdr.sh_type == SHT_DYNSYM))
 	{
@@ -1472,10 +1503,12 @@ annocheck_get_symbol_name_and_type (annocheck_data *     data,
 	return previous_result;
       free ((void *) previous_result);
     }
+
   if (data_return.name != NULL)
     previous_result = strdup (data_return.name);
   else
     previous_result = NULL;
+
   return previous_result;
 }
 
@@ -1803,7 +1836,10 @@ annocheck_process_extra_file (checker *     checker,
       memset (& sec, 0, sizeof sec);
 
       sec.scn = scn;
-      read_section_header (& data, scn, & sec.shdr);
+
+      if (! read_section_header (& data, scn, & sec.shdr))
+	continue;
+
       sec.secname = elf_strptr (elf, shstrndx, sec.shdr.sh_name);	  
 
       if (sec.secname == NULL)
