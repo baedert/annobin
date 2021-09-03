@@ -40,6 +40,7 @@ the section entitled "GNU Free Documentation License".
 * Examining::              How to examine the information stored in the binary.
 * Annocheck::              Analysing your application's compilation.
 * Configure Options::      Configuring annobin and annocheck.
+* Waiving Annocheck Results::  How to ignore specific annocheck tests.
 * Legacy Scripts::         Other ways to use the information stored in the binary.
 * GNU FDL::                GNU Free Documentation License
 
@@ -756,12 +757,16 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-test-NAME]
        [-test-all]
        [-test-future]
+       [-profile-el9]
+       [-profile-rawhide]
        [-ignore-gaps]
        [-fixed-format-messages]
        [-disable-colour]
+       [-enable-colour]
        [-disable-hardened]
        [-enable-hardened]
        [-full-filenames]
+       [-base-filenames]
        FILE...
 
    The HARDENED tool checks that the specified files were compiled with
@@ -879,10 +884,6 @@ code to support the test.
 
    The tool does support a couple of other command line options as well:
 
-'--skip-future'
-     Do not report future fail tests.  These are tests for security
-     features which are not yet implemented.
-
 '--skip-all'
      Disable all tests.  Not really useful unless followed by...
 
@@ -890,14 +891,25 @@ code to support the test.
      Enable test NAME.
 
 '--test-future'
-     Enable the reporting of future fail tests.
+     Report _future fail_ tests.  These are tests for security features
+     which are not yet implemented, but are planned for the future.  The
+     '--skip-future' option can be used to restore the default behaviour
+     of skipping these tests.
 
-'--enable-hardened'
-     Enable the tool if it was previously disabled.  The option is the
-     default.
+'--profile-el9'
+'--profile-rawhide'
+     Rather than enabling and disabling specific tests a selection can
+     be chosen via a profile option.  The '--profile-el9' option will
+     select the tests suitable for _RHEL-9_ binaries.  The
+     '--profile-rawhide' option will select tests suitable for _Fedora
+     rawhide_ binaries.  Other profiles may be added in the future.
 
 '--disable-hardened'
      Disable the tool.
+
+'--enable-hardened'
+     Enable the tool if it was previously disabled.  The option is also
+     the default.
 
 '--ignore-gaps'
      Do not complain about gaps in the note data.
@@ -919,14 +931,22 @@ code to support the test.
             Hardened: FAIL: test: pie file: a.out.
 
 '--disable-colour'
+'--enable-colour'
+'--disable-color'
+'--enable-color'
      Do not use colour to enhance FAIL, MAYB and WARN messages.  By
      default annocheck will add colour to these messages so that they
      stand out when displayed by a terminal emulator.  This option can
-     be used in order to turn this feature off.
+     be used in order to turn this feature off.  The feature can be
+     re-enabled with '--enable-colour'.  The American spelling of color
+     is also supported.
 
 '--full-filenames'
+'--base-filenames'
      Use the full pathname for files.  Useful when recursing into
-     directories.  Disabled by default.
+     directories.  By default this feature is disabled in normal mode
+     and enabled in 'verbose' mode.  This option and its inverse
+     '--base-filenames' can be used to set a fixed choice.
 
 
 File: annobin.info,  Node: Notes,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
@@ -1021,7 +1041,7 @@ with the '--nsec'.  The default can be restored with the '--usec'
 option.
 
 
-File: annobin.info,  Node: Configure Options,  Next: Legacy Scripts,  Prev: Annocheck,  Up: Top
+File: annobin.info,  Node: Configure Options,  Next: Waiving Annocheck Results,  Prev: Annocheck,  Up: Top
 
 5 Configuring annobin and annocheck
 ***********************************
@@ -1080,9 +1100,31 @@ configure options available to customise the build:
      files when building the 'annobin' sources.
 
 
-File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Configure Options,  Up: Top
+File: annobin.info,  Node: Waiving Annocheck Results,  Next: Legacy Scripts,  Prev: Configure Options,  Up: Top
 
-6 How to use the information stored in the binary.
+6 How to waive the results of annocheck tests
+*********************************************
+
+Now that 'annocheck' is being used by the builders for Fedora and RHEL
+packages as part of a gating service to ensure that packages are
+constructed correctly it is possible that certain tests may need to be
+waived for certain packages.  This can be done on a per-package basis by
+editting the contents of the 'rpminspect.yaml' file and adding an entry
+like this:
+
+      annocheck:
+         - hardened: --skip-property-note --ignore-unknown --verbose
+
+   This example shows how the _property note_ test can be ignored.  Note
+that doing this overrides the default options that are passed to
+annocheck by the rpminspect framework, which is why the
+'--ignore-unknown' and '--verbose' options are also included in the
+example above.
+
+
+File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Waiving Annocheck Results,  Up: Top
+
+7 How to use the information stored in the binary.
 **************************************************
 
 The 'annobin' package includes some example scripts that demonstrate how
@@ -1105,7 +1147,7 @@ still included in the annobin sources.
 
 File: annobin.info,  Node: Who Built Me,  Next: ABI Checking,  Up: Legacy Scripts
 
-6.1 The built-by script
+7.1 The built-by script
 =======================
 
      built-by
@@ -1207,7 +1249,7 @@ version of a tool that was built between a range of dates.
 
 File: annobin.info,  Node: ABI Checking,  Next: Hardening Checks,  Prev: Who Built Me,  Up: Legacy Scripts
 
-6.2 The check-abi script
+7.2 The check-abi script
 ========================
 
      check-abi
@@ -1292,7 +1334,7 @@ used uniformly throughout the binary.
 
 File: annobin.info,  Node: Hardening Checks,  Next: Checking Archives,  Prev: ABI Checking,  Up: Legacy Scripts
 
-6.3 The hardened script
+7.3 The hardened script
 =======================
 
      hardened
@@ -1439,7 +1481,7 @@ compiled with '-O2' or higher and the '-fstack-protector-strong',
 
 File: annobin.info,  Node: Checking Archives,  Prev: Hardening Checks,  Up: Legacy Scripts
 
-6.4 The run-on-binaries-in script
+7.4 The run-on-binaries-in script
 =================================
 
      run-on-binaries-in
@@ -2010,29 +2052,30 @@ their use in free software.
 
 Tag Table:
 Node: Top705
-Node: Introduction1785
-Node: Plugins3834
-Node: Examining11959
-Node: The Version Encoding14688
-Node: The STACK Encoding15928
-Node: The PIC Encoding16526
-Node: The GOW Encoding17154
-Node: The CF Encoding18957
-Node: The ENUM Encoding20029
-Node: The INSTRUMENT Encoding20418
-Node: Annocheck21792
-Node: Built-By25082
-Node: Hardened26612
-Node: Notes33626
-Node: Section-Size34270
-Node: Timing36424
-Node: Configure Options37071
-Node: Legacy Scripts39411
-Node: Who Built Me40186
-Node: ABI Checking42946
-Node: Hardening Checks45060
-Node: Checking Archives49146
-Node: GNU FDL51568
+Node: Introduction1856
+Node: Plugins3905
+Node: Examining12030
+Node: The Version Encoding14759
+Node: The STACK Encoding15999
+Node: The PIC Encoding16597
+Node: The GOW Encoding17225
+Node: The CF Encoding19028
+Node: The ENUM Encoding20100
+Node: The INSTRUMENT Encoding20489
+Node: Annocheck21863
+Node: Built-By25153
+Node: Hardened26683
+Node: Notes34587
+Node: Section-Size35231
+Node: Timing37385
+Node: Configure Options38032
+Node: Waiving Annocheck Results40383
+Node: Legacy Scripts41320
+Node: Who Built Me42103
+Node: ABI Checking44863
+Node: Hardening Checks46977
+Node: Checking Archives51063
+Node: GNU FDL53485
 
 End Tag Table
 

@@ -574,7 +574,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 
   memset (& data, 0, sizeof data);
   data.full_filename = filename;
-  data.filename = BE_VERBOSE ? filename : lbasename (filename);
+  data.filename = lbasename (filename);
   data.fd = fd;
   data.dwarf_fd = -1;
   data.elf = elf;

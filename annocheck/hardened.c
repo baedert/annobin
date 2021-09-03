@@ -58,6 +58,7 @@ static bool disabled = false;
 static bool ignore_gaps = false;
 static bool fixed_format_messages = false;
 static bool enable_colour = true;
+static bool full_filenames_set = false;
 static bool full_filenames = false;
 
 #define FIXED_FORMAT_STRING "%s: test: %s file: %s"
@@ -184,9 +185,11 @@ enum test_index
   
   TEST_BIND_NOW,
   TEST_BRANCH_PROTECTION,
+  TEST_NOT_BRANCH_PROTECTION,
   TEST_CF_PROTECTION,
   TEST_DYNAMIC_SEGMENT,
   TEST_DYNAMIC_TAGS,
+  TEST_NOT_DYNAMIC_TAGS,
   TEST_ENTRY,
   TEST_FORTIFY,
   TEST_GLIBCXX_ASSERTIONS,
@@ -227,18 +230,12 @@ static test tests [TEST_MAX] =
 {
   TEST (notes,              NOTES,              "Annobin note coverage"),
   TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
-  TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
-#else
-  TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled without -mbranch-protection=bti (AArch64 only, gcc 9+ only"),
-#endif
+  TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only, Fedora"),
+  TEST (not-branch-protection,  NOT_BRANCH_PROTECTION,  "Compiled without -mbranch-protection=bti (AArch64 only, gcc 9+ only, RHEL-9"),
   TEST (cf-protection,      CF_PROTECTION,      "Compiled with -fcf-protection=all (x86 only, gcc 8+ only)"),
   TEST (dynamic-segment,    DYNAMIC_SEGMENT,    "There is at most one dynamic segment/section"),
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
-  TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI present (AArch64 only)"),
-#else
-  TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for PAC & BTI *not* present (AArch64 only)"),
-#endif
+  TEST (dynamic-tags,       DYNAMIC_TAGS,       "Dynamic tags for BTI (and optionally PAC) present (AArch64 only, Fedora)"),
+  TEST (not-dynamic-tags,   NOT_DYNAMIC_TAGS,   "Dynamic tags for PAC & BTI *not* present (AArch64 only, RHEL-9)"),
   TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 executables only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
@@ -251,11 +248,7 @@ static test tests [TEST_MAX] =
   TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
   TEST (production,         PRODUCTION,         "Built by a production compiler"),
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
-  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, AArch64, PowerPC)"),
-#else
-  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes (x86_64, PowerPC)"),
-#endif
+  TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes"),
   TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
   TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
   TEST (short-enum,         SHORT_ENUM,         "Compiled with consistent use of -fshort-enum"),
@@ -1025,6 +1018,31 @@ start (annocheck_data * data)
   if (disabled)
     return false;
 
+  if (! full_filenames_set)
+    {
+      full_filenames = BE_VERBOSE ? true : false;
+      full_filenames_set = true;
+    }
+  
+  /* Handle mutually exclusive tests.  */
+  if (tests [TEST_BRANCH_PROTECTION].enabled && tests [TEST_NOT_BRANCH_PROTECTION].enabled)
+    {
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
+      tests [TEST_NOT_BRANCH_PROTECTION].enabled = false;
+#else
+      tests [TEST_BRANCH_PROTECTION].enabled = false;
+#endif
+    }
+
+  if (tests [TEST_DYNAMIC_TAGS].enabled && tests [TEST_NOT_DYNAMIC_TAGS].enabled)
+    {
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
+      tests [TEST_NOT_DYNAMIC_TAGS].enabled = false;
+#else
+      tests [TEST_DYNAMIC_TAGS].enabled = false;
+#endif
+    }
+  
   /* (Re) Set the results for the tests.  */
   int i;
 
@@ -2105,46 +2123,38 @@ build_note_checker (annocheck_data *     data,
       if (const_strneq (attr, "branch_protection:"))
 	{
 	  if (per_file.e_machine != EM_AARCH64)
+	    /* FIXME: A branch protection note for a non AArch64 binary is suspicious...  */
 	    break;
 
-	  if (skip_test (TEST_BRANCH_PROTECTION))
+	  if (skip_test (TEST_BRANCH_PROTECTION) && skip_test (TEST_NOT_BRANCH_PROTECTION))
 	    break;
 
 	  attr += strlen ("branch_protection:");
 	  if (* attr == 0
 	      || streq (attr, "(null)")
-	      || streq (attr, "default"))
+	      || streq (attr, "default")
+	      || streq (attr, "none"))
 	    {
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
-#else
-	      pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
-#endif
+	      pass (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "disabled");
 	    }
 	  else if (streq (attr, "bti+pac-ret")
 		   || (streq (attr, "standard"))
 		   || const_strneq (attr, "pac-ret+bti"))
 	    {
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection enabled");
-#else
-	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection enabled");
-#endif
+	      fail (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection enabled");
 	    }
 	  else if (streq (attr, "bti")
 		   || const_strneq (attr, "pac-ret"))
-	    fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "partially enabled");
-	  else if (streq (attr, "none"))
 	    {
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
-	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection disabled");
-#else
-	      pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection disabled");
-#endif
+	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially enabled");
+	      fail (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially enabled");
 	    }
 	  else
 	    {
 	      maybe (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      maybe (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "unexpected note value");
 	      einfo (VERBOSE2, "debug: stack prot note value: %s", attr);
 	    }
 	}
@@ -2598,7 +2608,7 @@ future_fail (annocheck_data * data, const char * message)
   ffail (data, message, INFO);
 }
 
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
+#if 0
 static void
 vfuture_fail (annocheck_data * data, const char * message)
 {
@@ -2624,7 +2634,6 @@ handle_aarch64_property_note (annocheck_data *      data,
 			      ulong                 size,
 			      const unsigned char * notedata)
 {
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
   /* These are not defined in the RHEL-7 build environment.  */
 #ifndef GNU_PROPERTY_AARCH64_FEATURE_1_AND
 #define GNU_PROPERTY_AARCH64_FEATURE_1_AND	0xc0000000
@@ -2634,8 +2643,8 @@ handle_aarch64_property_note (annocheck_data *      data,
   
   if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
     {
-      einfo (VERBOSE2, "%s: Ignoring property note type %lx", get_filename (data), type);
-      return NULL;
+      einfo (VERBOSE2, "%s: debug: property note type %lx", get_filename (data), type);
+      return "Unexpected property note type";
     }
 
   if (size != 4)
@@ -2649,22 +2658,20 @@ handle_aarch64_property_note (annocheck_data *      data,
 
   if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_BTI) == 0)
     {
-      einfo (VERBOSE2, "debug: property bits = %lx", property);
-      vfuture_fail (data, "The BTI property is not enabled");
-      return NULL;
+      if (tests[TEST_BRANCH_PROTECTION].enabled)
+	return "The BTI property is not enabled";
     }
 
   if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_PAC) == 0)
     {
-      einfo (VERBOSE2, "debug: property bits = %lx", property);
-      vfuture_fail (data, "The PAC property is not enabled");
-      return NULL;
+#if 0
+      if (tests[TEST_BRANCH_PROTECTION].enabled)
+	return "The PAC property is not enabled";
+#else
+      future_fail (data, "PAC property is not enabled");
+#endif
     }
 
-  einfo (VERBOSE2, "%s: PASS: Both the BTI and PAC properties are present in the GNU Property note", get_filename (data));
-#else
-  einfo (VERBOSE2, "%s: info: AArch64 property notes are not currently expected", get_filename (data));
-#endif
   return NULL;
 }
 
@@ -2710,7 +2717,7 @@ handle_x86_property_note (annocheck_data *      data,
       return "The SHSTK property is not enabled";
     }
 
-  pass (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, NULL);
+  pass (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, "correct flags found in .note.gnu.property note");
   per_file.has_cf_protection = true;
   return NULL;
 }
@@ -3094,7 +3101,10 @@ check_dynamic_section (annocheck_data *    data,
   if (per_file.e_machine == EM_AARCH64)
     {
       if (is_object_file ())
-	skip (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "not needed in object files");
+	{
+	  skip (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "not used in object files");
+	  skip (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "not used in object files");
+	}
       else
 	{
 	  uint res = aarch64_bti_plt_seen ? 1 : 0;
@@ -3103,16 +3113,21 @@ check_dynamic_section (annocheck_data *    data,
 	  switch (res)
 	  {
 	  case 0:
-	    future_fail (data, "BTI_PLT and PAC_PLT tags missing from dynamic tags");
+	    fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT and PAC_PLT flags missing from the dynamic tags");
+	    pass (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT and PAC_PLT flags not in the dynamic tags");
 	    break;
 	  case 1:
-	    future_fail (data, "PAC_PLT tag is missing from dynamic tags");
+	    future_fail (data, "PAC_PLT flag is missing from dynamic tags");
+	    pass (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is present in the dynamic tags");
+	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is present in the dynamic tags");
 	    break;
 	  case 2:
-	    future_fail (data, "BTI_PLT tag is missing from dynamic tags");
+	    fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is missing from the dynamic tags");
+	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "PAC_PLT flag is present in the dynamic tags");
 	    break;
 	  case 3:
 	    pass (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, NULL);
+	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "The BTI and PAC flags are present in the dynamic tags");
 	    break;
 	  }
 	}
@@ -4003,15 +4018,17 @@ finish (annocheck_data * data)
 		fail (data, i, SOURCE_FINAL_SCAN, "not linked with -Wl,-z,relro");
 	      break;
 
+	    case TEST_NOT_DYNAMIC_TAGS:
 	    case TEST_DYNAMIC_TAGS:
 	      if (per_file.e_machine != EM_AARCH64)
 		skip (data, i, SOURCE_FINAL_SCAN, "AArch64 specific");
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 	      else if (is_object_file ())
-		skip (data, i, SOURCE_FINAL_SCAN, "not needed in object files");
+		skip (data, i, SOURCE_FINAL_SCAN, "not used in object files");
 	      else
-		future_fail (data, "no dynamic tags found");
-#endif
+		{
+		  fail (data, TEST_DYNAMIC_TAGS, SOURCE_FINAL_SCAN, "no dynamic tags found");
+		  pass (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_FINAL_SCAN, "no dynamic tags found");
+		}
 	      break;
 
 	    case TEST_GLIBCXX_ASSERTIONS:
@@ -4111,11 +4128,10 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed for GO binaries");
 	      else if (per_file.e_machine == EM_AARCH64)
 		{
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
-		  future_fail (data, ".note.gnu.property section not found");
-#else
-		  skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed for AArch64 binaries");
-#endif
+		  if (tests[TEST_BRANCH_PROTECTION].enabled)
+		    fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section not found (it is needed for branch protection support)");
+		  else
+		    skip (data, i, SOURCE_FINAL_SCAN, "property note test only useful if branch protection is being checked");
 		}
 	      else
 		fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section found");
@@ -4146,6 +4162,7 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "not an x86 executable");
 	      break;
 
+	    case TEST_NOT_BRANCH_PROTECTION:
 	    case TEST_BRANCH_PROTECTION:
 	      if (per_file.e_machine != EM_AARCH64)
 		skip (data, i, SOURCE_FINAL_SCAN, "not an AArch64 binary");
@@ -4155,11 +4172,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
 	      else
 		{
-#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
 		  fail (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
-#else
 		  pass (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
-#endif
 		}
 	      break;
 
@@ -4212,7 +4226,7 @@ finish (annocheck_data * data)
 static void
 version (void)
 {
-  einfo (INFO, "Version 1.4");
+  einfo (INFO, "Version 1.5");
 }
 
 static void
@@ -4226,8 +4240,20 @@ usage (void)
     einfo (INFO, "    --skip-%-19sDisables: %s", tests[i].name, tests[i].description);
 
   einfo (INFO, "    --skip-%-19sDisables all tests", "all");
-  einfo (INFO, "  To enable a disabled test use --test-<name>");
-  
+  einfo (INFO, "  To enable a disabled test use:");
+  einfo (INFO, "    --test-<name>             Enables the named test");
+
+  einfo (INFO, "  Some tests report potential future problems that are not enforced at the moment");
+  einfo (INFO, "    --skip-future             Disables these future fail tests");
+  einfo (INFO, "    --test-future             Enable the future fail tests");
+
+  einfo (INFO, "  To enable/disable tests for a specific environment use:");
+  einfo (INFO, "    --profile-el9             Ensure that only tests suitable for RHEL-9 are run");
+  einfo (INFO, "    --profile-rawhide         Ensure that only tests suitable for Fedora Rawhide are run");
+#if 0 /* Not implemented yet.  */
+  einfo (INFO, "    --profile-fc35            Ensure that only tests suitable for Fedora 35 are run");
+  einfo (INFO, "    --profile-automotive      Ensure that only tests suitable for Automotive are run");
+#endif
   einfo (INFO, "  The tool will also report missing annobin data unless:");
   einfo (INFO, "    --ignore-gaps             Ignore missing annobin data");
 
@@ -4235,11 +4261,41 @@ usage (void)
   einfo (INFO, "    --disable-hardened        Disables the hardening checker");
   einfo (INFO, "    --enable-hardened         Reenables the hardening checker");
 
-  einfo (INFO, "   The tool will generate messages based upon the verbosity level");
-  einfo (INFO, "   but the format is not fixed.  In order to have a consistent");
-  einfo (INFO, "   output enable this option:");
-  einfo (INFO, "     --fixed-format-messages");
+  einfo (INFO, "   The tool will generate messages based upon the verbosity level but the format is not fixed");
+  einfo (INFO, "   In order to have a consistent output enable this option:");
+  einfo (INFO, "     --fixed-format-messages  Display messages in a fixed format");
+  einfo (INFO, "    By default when not opeating in verbose more only the filename of input files will be displayed in messages");
+  einfo (INFO, "    This can be changed with:");
+  einfo (INFO, "      --full-filenames        Display the full path of input files");
+  einfo (INFO, "      --base-filenames        Display only the filename of input files");
+  
+  einfo (INFO, "   When the output is directed to a terminal colouring will be used to highlight significant messages");
+  einfo (INFO, "   This can be controlled by:");
+  einfo (INFO, "     --disable-colour         Disables coloured messages");
+  einfo (INFO, "     --disable-color          Disables colored messages");
+  einfo (INFO, "     --enable-colour          Enables coloured messages");
+  einfo (INFO, "     --enable-color           Enables colored messages");
 }
+
+#define MAX_DISABLED 10
+
+static const struct profiles
+{
+  const char *      name;
+  enum  test_index  disabled_tests[MAX_DISABLED];
+  enum  test_index  enabled_tests[MAX_DISABLED];
+} profiles[] =
+{
+#if 0
+  { "fc35",       {}, {} },
+  { "automotive", {}, {} },
+#endif
+  { "el9",        { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS },
+                  { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
+  { "rawhide",    { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS },
+                  { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS } }
+};
+
 
 static bool
 process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
@@ -4336,12 +4392,65 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return true;
     }
 
-  if (streq (arg, "--full-filenames"))
+  if (streq (arg, "--enable-colour") || streq (arg, "--enable-color"))
     {
-      full_filenames = true;
+      enable_colour = true;
       return true;
     }
 
+  if (streq (arg, "--full-filenames"))
+    {
+      full_filenames = true;
+      full_filenames_set = true;
+      return true;
+    }
+
+  if (streq (arg, "--base-filenames"))
+    {
+      full_filenames = false;
+      full_filenames_set = true;
+      return true;
+    }
+
+  if (const_strneq (arg, "--profile-"))
+    {
+      arg += strlen ("--profile-");
+
+      uint i;
+
+      for (i = ARRAY_SIZE (profiles); i--;)
+	{
+	  if (streq (arg, profiles[i].name))
+	    {
+	      uint j;
+
+	      for (j = 0; j < MAX_DISABLED; j++)
+		{
+		  enum test_index index = profiles[i].disabled_tests[j];
+
+		  if (index == TEST_NOTES)
+		    break;
+		  tests[index].enabled = false;
+		}
+	      
+	      for (j = 0; j < MAX_DISABLED; j++)
+		{
+		  enum test_index index = profiles[i].enabled_tests[j];
+
+		  if (index == TEST_NOTES)
+		    break;
+		  tests[index].enabled = true;
+		}
+	      
+	      return true;
+	    }
+	}
+
+      einfo (ERROR, "Argument to --profile- option not recognised");
+      /* Consume the argument so that the annocheck framework does not mistake it for the -p option.  */
+      return true;
+    }
+    
   return false;
 }
 

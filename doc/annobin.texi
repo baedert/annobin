@@ -861,12 +861,16 @@ annocheck
   [@b{--test-@var{name}}]
   [@b{--test-all}]
   [@b{--test-future}]
+  [@b{--profile-el9}]
+  [@b{--profile-rawhide}]
   [@b{--ignore-gaps}]
   [@b{--fixed-format-messages}]
   [@b{--disable-colour}]
+  [@b{--enable-colour}]
   [@b{--disable-hardened}]
   [@b{--enable-hardened}]
   [@b{--full-filenames}]
+  [@b{--base-filenames}]
   @var{file}@dots{}
 @c man end
 @end smallexample
@@ -1003,10 +1007,6 @@ The tool does support a couple of other command line options as well:
 
 @table @code
 
-@item --skip-future
-Do not report future fail tests.  These are tests for security
-features which are not yet implemented.
-
 @item --skip-all
 Disable all tests.  Not really useful unless followed by...
 
@@ -1014,14 +1014,26 @@ Disable all tests.  Not really useful unless followed by...
 Enable test @var{name}.
 
 @item --test-future
-Enable the reporting of future fail tests.
+Report @emph{future fail} tests.  These are tests for security
+features which are not yet implemented, but are planned for the
+future.  The @option{--skip-future} option can be used to restore
+the default behaviour of skipping these tests.
 
-@item --enable-hardened
-Enable the tool if it was previously disabled.  The option is the
-default.
+@item --profile-el9
+@itemx --profile-rawhide
+Rather than enabling and disabling specific tests a selection can be
+chosen via a profile option.  The @option{--profile-el9} option will
+select the tests suitable for @emph{RHEL-9} binaries.  The
+@option{--profile-rawhide} option will select tests suitable for
+@emph{Fedora rawhide} binaries.  Other profiles may be added in the
+future.
 
 @item --disable-hardened
 Disable the tool.
+
+@item --enable-hardened
+Enable the tool if it was previously disabled.  The option is also
+the default.
 
 @item --ignore-gaps
 Do not complain about gaps in the note data.
@@ -1046,14 +1058,22 @@ Here is an example:
 @end smallexample
 
 @item --disable-colour
+@itemx --enable-colour
+@itemx --disable-color
+@itemx --enable-color
 Do not use colour to enhance FAIL, MAYB and WARN messages.  By default
 annocheck will add colour to these messages so that they stand out
 when displayed by a terminal emulator.  This option can be used in
-order to turn this feature off.
+order to turn this feature off.  The feature can be re-enabled with
+@option{--enable-colour}.  The American spelling of color is also
+supported.
 
 @item --full-filenames
+@itemx --base-filenames
 Use the full pathname for files.  Useful when recursing into
-directories.   Disabled by default.
+directories.   By default this feature is disabled in normal mode and
+enabled in @option{verbose} mode.  This option and its inverse
+@option{--base-filenames} can be used to set a fixed choice.
 
 @end table
 
