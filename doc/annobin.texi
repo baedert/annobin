@@ -91,9 +91,8 @@ in the section entitled ``GNU Free Documentation License''.
 * Introduction::           What is Binary Annotation ?
 * Plugins::                How to add Binary Annotations to your application.
 * Examining::              How to examine the information stored in the binary.
-* Annocheck::              Analysing your application's compilation.
+* Annocheck::              Analysing binary files.
 * Configure Options::      Configuring annobin and annocheck.
-* Waiving Annocheck Results::  How to ignore specific annocheck tests.
 * Legacy Scripts::         Other ways to use the information stored in the binary.
 * GNU FDL::                GNU Free Documentation License
 @end menu
@@ -665,9 +664,9 @@ number means that the feature has been enabled in some way.
 @c -----------------------------------------------------------------
 @c -----------------------------------------------------------------
 @node Annocheck
-@chapter Analysing an application's compilation.
+@chapter Analysing binary files.
 
-@c man title annocheck Analysing an application's compilation.
+@c man title annocheck Analysing binary files.
 
 @smallexample
 @c man begin SYNOPSIS annocheck
@@ -687,7 +686,7 @@ annocheck
 
 @c man begin DESCRIPTION annocheck
 
-The @command{annocheck} program can analyse programs and report
+The @command{annocheck} program can analyse binary files and report
 information about them.  It is designed to be modular, with a set of
 self-contained tools providing the checking functionality.
 Currently the following tools are implemented:
@@ -771,7 +770,7 @@ Report the version of the tool and then exit.
 @section The builder checker.
 
 @smallexample
-@c man begin SYNOPSIS annocheck
+@c man begin SYNOPSIS annocheck: builtby
 
 annocheck
   [@b{--disable-hardened}]
@@ -783,7 +782,7 @@ annocheck
 @c man end
 @end smallexample
 
-@c man begin DESCRIPTION annocheck
+@c man begin DESCRIPTION annocheck: builtby
 
 The @var{built-by} tool is disabled by default, but it can be enabled
 by the command line option @option{--enable-builtby}.  The tool
@@ -824,10 +823,10 @@ built by a particular compiler.
 
 @c -----------------------------------------------------------------
 @node Hardened
-@section The security checker.
+@section The Hardened security checker.
 
 @smallexample
-@c man begin SYNOPSIS annocheck
+@c man begin SYNOPSIS annocheck: hardened
 
 annocheck
   [@b{--skip-all}]
@@ -875,32 +874,144 @@ annocheck
 @c man end
 @end smallexample
 
-@c man begin DESCRIPTION annocheck
+@c man begin DESCRIPTION annocheck: hardened
 The @var{hardened} tool checks that the specified files were compiled
-with the required security hardening options, as outlined in the
-elf-policy document.  It runs a series of tests checking compilation
-options and link time options.  These tests are outlined below, along
-with the command line option that can be used to disable each test.
+with specific security hardening features enabled.  The features that
+are tested can be specified via command line options, but the default
+is to test for all of them.
 
 New tests can be added to the @var{hardened} checker by adding an
 entry in the @var{tests} array defined in @file{hardened.c} and then
 creating the necessary code to support the test.
 
+Currently @var{hardened} can run the following tests:
+
+@menu
+* Test bind-now::                 The bind-now test
+* Test gnu-stack::                The gnu-stack test
+* Test writeable-got::            The writeable-got test
+* Undocumented Tests::            FIXME: Docs needed
+* Waiving Annocheck Results::     How to ignore specific annocheck tests.
+@end menu
+
+@c -----------------------------------------------------------------
+@node Test bind-now
+@subsection The bind-now test
+
+@smallexample
+  Summary:  An attacker could intercept calls to shared library functions
+  FAIL:     "not linked with -Wl,-z,now"
+  Fix By:   Add -Wl,-z,now to final link
+  Waive If: No shared libraries used
+@end smallexample
+
+This test checks that lazy binding is not enabled in the binary.  Lazy
+binding can be used to delay resolving the links between an
+application and any shared libraries that it uses: 
+
+@url{https://www.airs.com/blog/archives/41}
+
+Using lazy binding provides a faster start-up for an application since
+this resolving process is not performed until a function call is made
+to a specific library.  But it is also a security vulnerability since
+an attacker could replace the binding with a link to their own code.
+Hence for security purposes immediate binding rather than lazy binding
+should be used.
+
+The type of binding is selected via a linker command line option, and
+on a compiler command line the secure version usually looks like
+@option{-Wl,-z,now}.  The lazy binding option is @option{-Wl,-z,lazy}
+although somne linkers are configured to use lazy binding by default,
+in which case just the absence of the @option{-Wl,-z,now} option is
+enough to trigger this test.
+
+Whilst important, this test can be ignored if the binary does not use
+any shared libraries.  The test can be disabled via the
+@option{--skip-bind-now} option and re-enabled by the
+@option{--test-bind-now} option.
+
+@c -----------------------------------------------------------------
+@node Test gnu-stack
+@subsection The gnu-stack test
+
+@smallexample
+  Summary:  An attacker could place code on the stack and then run it
+  FAIL:     "the .stack section has incorrect permissions"
+  FAIL:     ".note.GNU-stack section has execute permission"
+  FAIL:     "the GNU stack segment has execute permission"
+  FAIL:     "the GNU stack segment does not have both read & write permissions"
+  FAIL:     "no .note.GNU-stack section found"
+  MAYBE:    "multiple stack sections detected"
+  Fix By:   Updating assembler sources and/or linker script
+  Waive If: The application really really needs to be able to dynamically create and execute code
+@end smallexample
+
+This test checks that it is not possible to place code onto the stack
+and then execute it.  Normally the stack just holds data and
+addresses, but never instructions.  A favourite tactic of attackers
+however is to discover a buffer overrun bug that addresses the stack
+and then place instructions there before forcing the processor to
+execute them.
+
+The test actually checks several different parts of a binary file in
+order to determine that its stack is safe, which is why there are
+several different potential failure messages.
+
+Most applications will have a section inserted into them by the
+compiler called @var{.note.GNU-stack}.  The section has no contents,
+but the read, write, and execute attribues of the section reflect the
+needs of the application's stack.
+
+Ordinary compiled code sholuld never see this problem, but the test
+failure can be triggered by programs built from assembler sources or
+linked with a custom made linker map.  To fix the problem either the
+linker map needs to be updated to ensure that the stack section is not
+executable or the assembler sources need to be extended to a note that
+the stack is not executable:
+
+@smallexample
+  .section .note.GNU-stack,"",%progbits
+@end smallexample
+
+If necessary the test can be disabled via the
+@option{--skip-gnu-stack} option and re-enabled via the
+@option{--test-gnu-stack} option.
+
+@c -----------------------------------------------------------------
+@node Test writeable-got
+@subsection The writeable-got test
+
+@smallexample
+  Summary:  An attacker could intercept and redirect shared library function calls
+  FAIL:     "the GOT/PLT relocs are writeable"
+  Fix By:   Link with -Wl,--secure-plt
+  Waive If: No shared libraries are used
+@end smallexample
+
+This test checks that the instructions to set up the @var{GOT} and
+@var{PLT} tables in a dynamic executable cannot be altered by an
+outside source.
+
+Dynamic executables use two tables to help them connect to shared
+libraries.  These tables - the @var{GOT} and the @var{PLT} - are set
+up when the program runs, based upon instructions held in special
+sections in the file.  If these sections are writeable then an
+attacker could change their contents and thus cause the program to
+call the wrong functions in the shared libraries.
+
+Under normal circumstances this test should never fail.  If it does
+then something unusal is going on.  One possible cure is to add the
+@option{-Wl,--secure-plt} option to the final link command line.
+
+If necessary the test can be disabled via the
+@option{--skip-writeable-got} option and re-enabled via the
+@option{--test-writeable-got} option.
+
+@c -----------------------------------------------------------------
+@node Undocumented Tests
+@subsection These tests need extended documentation
+
 @table @code
-
-@item BIND_NOW
-Lazy binding must not have been enabled via the linker option
-@option{-z lazy}.  Instead the @option{-z now} option must have been
-used.
-Disabled by @option{--skip-bind-now}.
-
-@item Non executable stack
-The program must not have a stack in an executable region of memory.
-Disabled by @option{--skip-gnu-stack}.
-
-@item Safe GOT relocations
-The relocations for the GOT table must be read only.
-Disabled by @option{--skip-writeable-got}.
 
 @item No RWX segments.
 No program segment should have all three of the read, write and
@@ -1080,6 +1191,27 @@ enabled in @option{verbose} mode.  This option and its inverse
 @c man end
 
 @c -----------------------------------------------------------------
+@node Waiving Annocheck Results
+@subsection How to waive the results of annocheck tests
+
+Now that @command{annocheck} is being used by the builders for Fedora
+and RHEL packages it is possible that certain tests may need to be
+waived for certain packages.  This can be done on a per-package 
+basis by editting the contents of the @file{rpminspect.yaml} file and
+adding an entry like this:
+
+@smallexample
+ annocheck:
+    - hardened: --skip-property-note --ignore-unknown --verbose
+@end smallexample
+
+This example shows how the @emph{property note} test can be ignored.
+Note that doing this overrides the default options that are passed to 
+annocheck by the rpminspect framework, which is why the
+@option{--ignore-unknown} and @option{--verbose} options are also
+included in the example.
+
+@c -----------------------------------------------------------------
 @node Notes
 @section The annobin note displayer
 
@@ -1252,27 +1384,6 @@ This enables the regeneration of the @file{Makefile} and
 
 @end table
 @c man end
-
-@c -----------------------------------------------------------------
-@node Waiving Annocheck Results
-@chapter How to waive the results of annocheck tests
-Now that @command{annocheck} is being used by the builders for Fedora
-and RHEL packages as part of a gating service to ensure that packages
-are constructed correctly it is possible that certain tests may need
-to be waived for certain packages.  This can be done on a per-package
-basis by editting the contents of the @file{rpminspect.yaml} file and
-adding an entry like this:
-
-@smallexample
- annocheck:
-    - hardened: --skip-property-note --ignore-unknown --verbose
-@end smallexample
-
-This example shows how the @emph{property note} test can be ignored.
-Note that doing this overrides the default options that are passed to 
-annocheck by the rpminspect framework, which is why the
-@option{--ignore-unknown} and @option{--verbose} options are also
-included in the example above.
 
 @c -----------------------------------------------------------------
 @node Legacy Scripts

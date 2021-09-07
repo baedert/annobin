@@ -31,6 +31,8 @@ install: $(PLUGIN_NAME)
 clean:
 	rm -f $(PLUGIN_NAME) clang-plugin-test.out hello.o
 
+html info: Makefile
+
 Makefile: Makefile.in
 
 # -- TESTING -------------------------------------------------------

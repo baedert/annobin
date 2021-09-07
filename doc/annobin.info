@@ -38,9 +38,8 @@ the section entitled "GNU Free Documentation License".
 * Introduction::           What is Binary Annotation ?
 * Plugins::                How to add Binary Annotations to your application.
 * Examining::              How to examine the information stored in the binary.
-* Annocheck::              Analysing your application's compilation.
+* Annocheck::              Analysing binary files.
 * Configure Options::      Configuring annobin and annocheck.
-* Waiving Annocheck Results::  How to ignore specific annocheck tests.
 * Legacy Scripts::         Other ways to use the information stored in the binary.
 * GNU FDL::                GNU Free Documentation License
 
@@ -586,8 +585,8 @@ number means that the feature has been enabled in some way.
 
 File: annobin.info,  Node: Annocheck,  Next: Configure Options,  Prev: Examining,  Up: Top
 
-4 Analysing an application's compilation.
-*****************************************
+4 Analysing binary files.
+*************************
 
      annocheck
        [-help]
@@ -601,10 +600,10 @@ File: annobin.info,  Node: Annocheck,  Next: Configure Options,  Prev: Examining
        [-prefix=TEXT]
        FILE...
 
-   The 'annocheck' program can analyse programs and report information
-about them.  It is designed to be modular, with a set of self-contained
-tools providing the checking functionality.  Currently the following
-tools are implemented:
+   The 'annocheck' program can analyse binary files and report
+information about them.  It is designed to be modular, with a set of
+self-contained tools providing the checking functionality.  Currently
+the following tools are implemented:
 
 * Menu:
 
@@ -721,8 +720,8 @@ behaviour:
 
 File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annocheck
 
-4.2 The security checker.
-=========================
+4.2 The Hardened security checker.
+==================================
 
 
      annocheck
@@ -770,27 +769,135 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        FILE...
 
    The HARDENED tool checks that the specified files were compiled with
-the required security hardening options, as outlined in the elf-policy
-document.  It runs a series of tests checking compilation options and
-link time options.  These tests are outlined below, along with the
-command line option that can be used to disable each test.
+specific security hardening features enabled.  The features that are
+tested can be specified via command line options, but the default is to
+test for all of them.
 
    New tests can be added to the HARDENED checker by adding an entry in
 the TESTS array defined in 'hardened.c' and then creating the necessary
 code to support the test.
 
-'BIND_NOW'
-     Lazy binding must not have been enabled via the linker option '-z
-     lazy'.  Instead the '-z now' option must have been used.  Disabled
-     by '--skip-bind-now'.
+   Currently HARDENED can run the following tests:
 
-'Non executable stack'
-     The program must not have a stack in an executable region of
-     memory.  Disabled by '--skip-gnu-stack'.
+* Menu:
 
-'Safe GOT relocations'
-     The relocations for the GOT table must be read only.  Disabled by
-     '--skip-writeable-got'.
+* Test bind-now::                 The bind-now test
+* Test gnu-stack::                The gnu-stack test
+* Test writeable-got::            The writeable-got test
+* Undocumented Tests::            FIXME: Docs needed
+* Waiving Annocheck Results::     How to ignore specific annocheck tests.
+
+
+File: annobin.info,  Node: Test bind-now,  Next: Test gnu-stack,  Up: Hardened
+
+4.2.1 The bind-now test
+-----------------------
+
+       Summary:  An attacker could intercept calls to shared library functions
+       FAIL:     "not linked with -Wl,-z,now"
+       Fix By:   Add -Wl,-z,now to final link
+       Waive If: No shared libraries used
+
+   This test checks that lazy binding is not enabled in the binary.
+Lazy binding can be used to delay resolving the links between an
+application and any shared libraries that it uses:
+
+   <https://www.airs.com/blog/archives/41>
+
+   Using lazy binding provides a faster start-up for an application
+since this resolving process is not performed until a function call is
+made to a specific library.  But it is also a security vulnerability
+since an attacker could replace the binding with a link to their own
+code.  Hence for security purposes immediate binding rather than lazy
+binding should be used.
+
+   The type of binding is selected via a linker command line option, and
+on a compiler command line the secure version usually looks like
+'-Wl,-z,now'.  The lazy binding option is '-Wl,-z,lazy' although somne
+linkers are configured to use lazy binding by default, in which case
+just the absence of the '-Wl,-z,now' option is enough to trigger this
+test.
+
+   Whilst important, this test can be ignored if the binary does not use
+any shared libraries.  The test can be disabled via the
+'--skip-bind-now' option and re-enabled by the '--test-bind-now' option.
+
+
+File: annobin.info,  Node: Test gnu-stack,  Next: Test writeable-got,  Prev: Test bind-now,  Up: Hardened
+
+4.2.2 The gnu-stack test
+------------------------
+
+       Summary:  An attacker could place code on the stack and then run it
+       FAIL:     "the .stack section has incorrect permissions"
+       FAIL:     ".note.GNU-stack section has execute permission"
+       FAIL:     "the GNU stack segment has execute permission"
+       FAIL:     "the GNU stack segment does not have both read & write permissions"
+       FAIL:     "no .note.GNU-stack section found"
+       MAYBE:    "multiple stack sections detected"
+       Fix By:   Updating assembler sources and/or linker script
+       Waive If: The application really really needs to be able to dynamically create and execute code
+
+   This test checks that it is not possible to place code onto the stack
+and then execute it.  Normally the stack just holds data and addresses,
+but never instructions.  A favourite tactic of attackers however is to
+discover a buffer overrun bug that addresses the stack and then place
+instructions there before forcing the processor to execute them.
+
+   The test actually checks several different parts of a binary file in
+order to determine that its stack is safe, which is why there are
+several different potential failure messages.
+
+   Most applications will have a section inserted into them by the
+compiler called .NOTE.GNU-STACK.  The section has no contents, but the
+read, write, and execute attribues of the section reflect the needs of
+the application's stack.
+
+   Ordinary compiled code sholuld never see this problem, but the test
+failure can be triggered by programs built from assembler sources or
+linked with a custom made linker map.  To fix the problem either the
+linker map needs to be updated to ensure that the stack section is not
+executable or the assembler sources need to be extended to a note that
+the stack is not executable:
+
+       .section .note.GNU-stack,"",%progbits
+
+   If necessary the test can be disabled via the '--skip-gnu-stack'
+option and re-enabled via the '--test-gnu-stack' option.
+
+
+File: annobin.info,  Node: Test writeable-got,  Next: Undocumented Tests,  Prev: Test gnu-stack,  Up: Hardened
+
+4.2.3 The writeable-got test
+----------------------------
+
+       Summary:  An attacker could intercept and redirect shared library function calls
+       FAIL:     "the GOT/PLT relocs are writeable"
+       Fix By:   Link with -Wl,--secure-plt
+       Waive If: No shared libraries are used
+
+   This test checks that the instructions to set up the GOT and PLT
+tables in a dynamic executable cannot be altered by an outside source.
+
+   Dynamic executables use two tables to help them connect to shared
+libraries.  These tables - the GOT and the PLT - are set up when the
+program runs, based upon instructions held in special sections in the
+file.  If these sections are writeable then an attacker could change
+their contents and thus cause the program to call the wrong functions in
+the shared libraries.
+
+   Under normal circumstances this test should never fail.  If it does
+then something unusal is going on.  One possible cure is to add the
+'-Wl,--secure-plt' option to the final link command line.
+
+   If necessary the test can be disabled via the '--skip-writeable-got'
+option and re-enabled via the '--test-writeable-got' option.
+
+
+File: annobin.info,  Node: Undocumented Tests,  Next: Waiving Annocheck Results,  Prev: Test writeable-got,  Up: Hardened
+
+4.2.4 These tests need extended documentation
+---------------------------------------------
 
 'No RWX segments.'
      No program segment should have all three of the read, write and
@@ -949,6 +1056,27 @@ code to support the test.
      '--base-filenames' can be used to set a fixed choice.
 
 
+File: annobin.info,  Node: Waiving Annocheck Results,  Prev: Undocumented Tests,  Up: Hardened
+
+4.2.5 How to waive the results of annocheck tests
+-------------------------------------------------
+
+Now that 'annocheck' is being used by the builders for Fedora and RHEL
+packages it is possible that certain tests may need to be waived for
+certain packages.  This can be done on a per-package basis by editting
+the contents of the 'rpminspect.yaml' file and adding an entry like
+this:
+
+      annocheck:
+         - hardened: --skip-property-note --ignore-unknown --verbose
+
+   This example shows how the _property note_ test can be ignored.  Note
+that doing this overrides the default options that are passed to
+annocheck by the rpminspect framework, which is why the
+'--ignore-unknown' and '--verbose' options are also included in the
+example.
+
+
 File: annobin.info,  Node: Notes,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
 
 4.3 The annobin note displayer
@@ -1041,7 +1169,7 @@ with the '--nsec'.  The default can be restored with the '--usec'
 option.
 
 
-File: annobin.info,  Node: Configure Options,  Next: Waiving Annocheck Results,  Prev: Annocheck,  Up: Top
+File: annobin.info,  Node: Configure Options,  Next: Legacy Scripts,  Prev: Annocheck,  Up: Top
 
 5 Configuring annobin and annocheck
 ***********************************
@@ -1100,31 +1228,9 @@ configure options available to customise the build:
      files when building the 'annobin' sources.
 
 
-File: annobin.info,  Node: Waiving Annocheck Results,  Next: Legacy Scripts,  Prev: Configure Options,  Up: Top
+File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Configure Options,  Up: Top
 
-6 How to waive the results of annocheck tests
-*********************************************
-
-Now that 'annocheck' is being used by the builders for Fedora and RHEL
-packages as part of a gating service to ensure that packages are
-constructed correctly it is possible that certain tests may need to be
-waived for certain packages.  This can be done on a per-package basis by
-editting the contents of the 'rpminspect.yaml' file and adding an entry
-like this:
-
-      annocheck:
-         - hardened: --skip-property-note --ignore-unknown --verbose
-
-   This example shows how the _property note_ test can be ignored.  Note
-that doing this overrides the default options that are passed to
-annocheck by the rpminspect framework, which is why the
-'--ignore-unknown' and '--verbose' options are also included in the
-example above.
-
-
-File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Waiving Annocheck Results,  Up: Top
-
-7 How to use the information stored in the binary.
+6 How to use the information stored in the binary.
 **************************************************
 
 The 'annobin' package includes some example scripts that demonstrate how
@@ -1147,7 +1253,7 @@ still included in the annobin sources.
 
 File: annobin.info,  Node: Who Built Me,  Next: ABI Checking,  Up: Legacy Scripts
 
-7.1 The built-by script
+6.1 The built-by script
 =======================
 
      built-by
@@ -1249,7 +1355,7 @@ version of a tool that was built between a range of dates.
 
 File: annobin.info,  Node: ABI Checking,  Next: Hardening Checks,  Prev: Who Built Me,  Up: Legacy Scripts
 
-7.2 The check-abi script
+6.2 The check-abi script
 ========================
 
      check-abi
@@ -1334,7 +1440,7 @@ used uniformly throughout the binary.
 
 File: annobin.info,  Node: Hardening Checks,  Next: Checking Archives,  Prev: ABI Checking,  Up: Legacy Scripts
 
-7.3 The hardened script
+6.3 The hardened script
 =======================
 
      hardened
@@ -1481,7 +1587,7 @@ compiled with '-O2' or higher and the '-fstack-protector-strong',
 
 File: annobin.info,  Node: Checking Archives,  Prev: Hardening Checks,  Up: Legacy Scripts
 
-7.4 The run-on-binaries-in script
+6.4 The run-on-binaries-in script
 =================================
 
      run-on-binaries-in
@@ -2052,30 +2158,34 @@ their use in free software.
 
 Tag Table:
 Node: Top705
-Node: Introduction1856
-Node: Plugins3905
-Node: Examining12030
-Node: The Version Encoding14759
-Node: The STACK Encoding15999
-Node: The PIC Encoding16597
-Node: The GOW Encoding17225
-Node: The CF Encoding19028
-Node: The ENUM Encoding20100
-Node: The INSTRUMENT Encoding20489
-Node: Annocheck21863
-Node: Built-By25153
-Node: Hardened26683
-Node: Notes34587
-Node: Section-Size35231
-Node: Timing37385
-Node: Configure Options38032
-Node: Waiving Annocheck Results40383
-Node: Legacy Scripts41320
-Node: Who Built Me42103
-Node: ABI Checking44863
-Node: Hardening Checks46977
-Node: Checking Archives51063
-Node: GNU FDL53485
+Node: Introduction1767
+Node: Plugins3816
+Node: Examining11941
+Node: The Version Encoding14670
+Node: The STACK Encoding15910
+Node: The PIC Encoding16508
+Node: The GOW Encoding17136
+Node: The CF Encoding18939
+Node: The ENUM Encoding20011
+Node: The INSTRUMENT Encoding20400
+Node: Annocheck21774
+Node: Built-By25036
+Node: Hardened26566
+Node: Test bind-now28536
+Node: Test gnu-stack30040
+Node: Test writeable-got32152
+Node: Undocumented Tests33401
+Node: Waiving Annocheck Results39376
+Node: Notes40220
+Node: Section-Size40864
+Node: Timing43018
+Node: Configure Options43665
+Node: Legacy Scripts46005
+Node: Who Built Me46780
+Node: ABI Checking49540
+Node: Hardening Checks51654
+Node: Checking Archives55740
+Node: GNU FDL58162
 
 End Tag Table
 

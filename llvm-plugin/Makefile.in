@@ -29,6 +29,8 @@ install: $(PLUGIN_NAME)
 clean:
 	rm -f $(PLUGIN_NAME) hello.o llvm-plugin-test.out
 
+html info: Makefile
+
 Makefile: Makefile.in
 
 # -- TESTING -------------------------------------------------------

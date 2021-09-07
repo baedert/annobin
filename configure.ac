@@ -48,9 +48,6 @@ case ${target} in
 esac
 AC_SUBST(target_plugin)
 
-# We need GCC plugin support.
-GCC_PLUGIN
-
 # Use an alternative GMP if requested.
 GMP
 
@@ -64,7 +61,6 @@ BUILD_GCC_PLUGIN
 BUILD_LLVM_PLUGIN
 # Determine if we should build the documentation
 BUILD_DOCS
-
 
 AC_MSG_CHECKING([whether to enable maintainer-specific portions of Makefiles])
 AC_ARG_ENABLE(maintainer-mode,
@@ -86,54 +82,58 @@ fi
 MAINT=$MAINTAINER_MODE_TRUE
 AC_SUBST(MAINT)dnl
 
-if test x$gcc_plugin_dir != xno; then
-  AC_DEFINE([ANNOBIN_GCC_PLUGIN_DIR], [1], [Plugin is in GCC plugin directory.])
-  plugindir=$gcc_plugin_dir
-# Otherwise, try to figure out a relative path from the driver (bindir) to
-# the plugin (libexecdir).
-#
-else
-  # Get the expanded values for bindir and libexecdir.
-  #
-  if test x$exec_prefix = xNONE; then
-    if test x$prefix = xNONE; then
-      e_exec_prefix=$ac_default_prefix
-     else
-      e_exec_prefix=$prefix
-    fi
+
+if test "x$with_gcc_plugin" != xno; then
+
+  # We need GCC plugin support.
+  GCC_PLUGIN
+
+  if test x$gcc_plugin_dir != xno; then
+    AC_DEFINE([ANNOBIN_GCC_PLUGIN_DIR], [1], [Plugin is in GCC plugin directory.])
+    plugindir=$gcc_plugin_dir
+  # Otherwise, try to figure out a relative path from the driver (bindir) to
+  # the plugin (libexecdir).
   else
-    e_exec_prefix=$exec_prefix
+    # Get the expanded values for bindir and libexecdir.
+    if test x$exec_prefix = xNONE; then
+      if test x$prefix = xNONE; then
+        e_exec_prefix=$ac_default_prefix
+       else
+        e_exec_prefix=$prefix
+      fi
+    else
+      e_exec_prefix=$exec_prefix
+    fi
+
+    e_pkglibexecdir=`echo "$libexecdir/$PACKAGE_NAME" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
+    e_bindir=`echo "$bindir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
+
+    # Try to find a common prefix.
+    common=$e_bindir
+    rel_plugindir=$e_pkglibexecdir
+
+    while test x$common != x/; do
+      suffix=`echo "$e_pkglibexecdir" | sed "s?^$common/*??"`
+      if test "x$suffix" != "x$e_pkglibexecdir"; then
+        # Replace all the remaining directories in bindir with ".."
+        # and append the suffix.
+        rel_plugindir=`echo "$e_bindir" | sed "s?^$common/*??"`
+        rel_plugindir=`echo "$rel_plugindir" | sed ['s?[^/][^/]*?..?g']`
+        if test "x$rel_plugindir" != x -a "x$suffix" != x; then
+          rel_plugindir="$rel_plugindir/$suffix"
+        else
+          rel_plugindir="$rel_plugindir$suffix"
+        fi
+        break
+      fi
+      common=`AS_DIRNAME(["$common"])`
+    done
+    AC_DEFINE_UNQUOTED([ANNOBIN_PLUGIN_PATH], ["$rel_plugindir"], [Plugin path.])
+    plugindir='$(pkglibexecdir)'
   fi
 
-  e_pkglibexecdir=`echo "$libexecdir/$PACKAGE_NAME" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
-  e_bindir=`echo "$bindir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
-
-  # Try to find a common prefix.
-  #
-  common=$e_bindir
-  rel_plugindir=$e_pkglibexecdir
-
-  while test x$common != x/; do
-    suffix=`echo "$e_pkglibexecdir" | sed "s?^$common/*??"`
-    if test "x$suffix" != "x$e_pkglibexecdir"; then
-      # Replace all the remaining directories in bindir with ".."
-      # and append the suffix.
-      rel_plugindir=`echo "$e_bindir" | sed "s?^$common/*??"`
-      rel_plugindir=`echo "$rel_plugindir" | sed ['s?[^/][^/]*?..?g']`
-      if test "x$rel_plugindir" != x -a "x$suffix" != x; then
-        rel_plugindir="$rel_plugindir/$suffix"
-      else
-        rel_plugindir="$rel_plugindir$suffix"
-      fi
-      break
-    fi
-    common=`AS_DIRNAME(["$common"])`
-  done
-  AC_DEFINE_UNQUOTED([ANNOBIN_PLUGIN_PATH], ["$rel_plugindir"], [Plugin path.])
-  plugindir='$(pkglibexecdir)'
+  AC_SUBST([plugindir])
 fi
-
-AC_SUBST([plugindir])
 
 # Check for debuginfod availability
 DEBUGINFOD

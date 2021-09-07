@@ -765,6 +765,7 @@ infodir
 docdir
 oldincludedir
 includedir
+runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -799,7 +800,6 @@ with_aix_soname
 with_gnu_ld
 with_sysroot
 enable_libtool_lock
-with_gcc_plugin_dir
 with_gmp
 with_annocheck
 with_libelf
@@ -808,6 +808,7 @@ with_gcc_plugin
 with_llvm
 with_docs
 enable_maintainer_mode
+with_gcc_plugin_dir
 with_debuginfod
 enable_rpath
 '
@@ -863,6 +864,7 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
+runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -1115,6 +1117,15 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
+  -runstatedir | --runstatedir | --runstatedi | --runstated \
+  | --runstate | --runstat | --runsta | --runst | --runs \
+  | --run | --ru | --r)
+    ac_prev=runstatedir ;;
+  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
+  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
+  | --run=* | --ru=* | --r=*)
+    runstatedir=$ac_optarg ;;
+
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1252,7 +1263,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir
+		libdir localedir mandir runstatedir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1405,6 +1416,7 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
+  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -1473,8 +1485,6 @@ Optional Packages:
   --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
   --with-sysroot[=DIR]    Search for dependent libraries within DIR (or the
                           compiler's sysroot if not specified).
-  --with-gcc-plugin-dir=DIR
-                          install annobin plugin into the GCC plugin directory
   --with-gmp=PATH         specify PATH to gmp
   --without-annocheck     do not build annocheck
   --without-libelf        remove libelf dependency
@@ -1482,6 +1492,8 @@ Optional Packages:
   --without-gcc_plugin    do not build the gcc plugin
   --with-llvm             build the llvm plugin
   --without-docs          do not build the documentation
+  --with-gcc-plugin-dir=DIR
+                          install annobin plugin into the GCC plugin directory
   --with-debuginfod       Enable debuginfo lookups with debuginfod
                           (auto/yes/no)
 
@@ -17817,212 +17829,6 @@ case ${target} in
 esac
 
 
-# We need GCC plugin support.
-
-static_plugin=$enable_static
-
-
-# Check whether --with-gcc-plugin-dir was given.
-if test "${with_gcc_plugin_dir+set}" = set; then :
-  withval=$with_gcc_plugin_dir; gcc_plugin_dir=$withval
-else
-  gcc_plugin_dir=test
-fi
-
-
-if test x"$static_plugin" = xyes; then
-  gcc_plugin_dir=no
-else
-  if test x"$cross_compiling" = xyes; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install into default GCC plugin dir" >&5
-$as_echo_n "checking whether to install into default GCC plugin dir... " >&6; }
-    case $gcc_plugin_dir in
-       yes)
-         as_fn_error $? "GCC plugin directory must be specified explicitly when cross-compiling" "$LINENO" 5
-         ;;
-       test)
-         # We cannot detect the plugin directory since there is no way to
-         # run host GCC. So assume no.
-         #
-         gcc_plugin_dir=no
-         ;;
-       no)
-         ;;
-       *)
-         # Add the include/ subdirectory of the plugin dir to CPPFLAGS since
-         # the plugin headers are normally installed there.
-         #
-         CPPFLAGS="$CPPFLAGS -I$gcc_plugin_dir/include"
-         ;;
-    esac
-  else
-    if test x"$GXX" != xyes; then
-      as_fn_error $? "$CXX is not a GNU C++ compiler" "$LINENO" 5
-    fi
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CXX supports plugins" >&5
-$as_echo_n "checking whether $CXX supports plugins... " >&6; }
-    dir=`$CXX -print-file-name=plugin 2>/dev/null`
-
-    if test x"$dir" = xplugin; then
-      { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-      as_fn_error $? "$CXX does not support plugins; reconfigure GCC with --enable-plugin" "$LINENO" 5
-    else
-      { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-    fi
-
-    CPPFLAGS="$CPPFLAGS -I$dir/include"
-
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install annobin plugin into default GCC plugin directory" >&5
-$as_echo_n "checking whether to install annobin plugin into default GCC plugin directory... " >&6; }
-    case $gcc_plugin_dir in
-       yes)
-         gcc_plugin_dir=$dir
-         ;;
-       test)
-         # Only install into the GCC plugin dir if both GCC and annobin are
-         # installed into the same prefix. Testing whether $libdir or
-         # $libexecdir is a prefix of the GCC plugin dir is a good
-         # approximation.
-         #
-
-         # Get the expanded values for libdir and libexecdir.
-         #
-         if test x$exec_prefix = xNONE; then
-           if test x$prefix = xNONE; then
-             e_exec_prefix=$ac_default_prefix
-           else
-             e_exec_prefix=$prefix
-           fi
-         else
-           e_exec_prefix=$exec_prefix
-         fi
-
-         # On some systems GCC is installed into $prefix/lib even though
-         # libdir is $prefix/lib64 and libexecdir is $prefix/libexec. To
-         # cover this special case, we will also test $prefix/lib.
-         #
-         e_libdir=`echo "$libdir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
-         e_libexecdir=`echo "$libexecdir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
-         e_libdir32=$e_exec_prefix/lib
-
-         # See if either one of them is a prefix of the plugin dir.
-         #
-         ld_suffix=`echo "$dir" | sed "s?^$e_libdir/*??"`
-         led_suffix=`echo "$dir" | sed "s?^$e_libexecdir/*??"`
-         l32d_suffix=`echo "$dir" | sed "s?^$e_libdir32/*??"`
-
-         if test x$ld_suffix != x$dir -o x$led_suffix != x$dir -o x$l32d_suffix != x$dir; then
-           gcc_plugin_dir=$dir
-         else
-           gcc_plugin_dir=no
-         fi
-         ;;
-       *)
-         # Add the include/ subdirectory of the plugin dir to CPPFLAGS since
-         # the plugin headers are normally installed there.
-         #
-         CPPFLAGS="$CPPFLAGS -I$gcc_plugin_dir/include"
-         ;;
-    esac
-  fi
-
-  if test x"$gcc_plugin_dir" != xno; then
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-  else
-    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-  fi
-fi
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GCC plugin headers" >&5
-$as_echo_n "checking for GCC plugin headers... " >&6; }
-
-
-
-ac_ext=cpp
-ac_cpp='$CXXCPP $CPPFLAGS'
-ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
-
-
-if test -d .libs; then
-  delete_libs_dir=no
-else
-  delete_libs_dir=yes
-fi
-
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-
-#include <bversion.h>
-
-#ifndef BUILDING_GCC_MAJOR
-#  error no BUILDING_GCC_MAJOR in bversion.h
-#endif
-
-int main () {}
-
-_ACEOF
-if ac_fn_cxx_try_compile "$LINENO"; then :
-
-  ac_try='./libtool --tag=CXX --mode=link $CXX -no-install $CXXFLAGS $LDFLAGS -o conftest conftest.$OBJEXT $LIBS >&5'
-  if { { case "(($ac_try" in
-  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
-  *) ac_try_echo=$ac_try;;
-esac
-eval ac_try_echo="\"\$as_me:${as_lineno-$LINENO}: $ac_try_echo\""
-$as_echo "$ac_try_echo"; } >&5
-  (eval "$ac_try") 2>&5
-  ac_status=$?
-  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-    libtool_link_ok=yes
-  else
-    libtool_link_ok=no
-  fi
-
-else
-
-  libtool_link_ok=no
-
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
-
-if test x"$delete_libs_dir" = xyes; then
-  rm -rf .libs
-fi
-
-if test x"$libtool_link_ok" = xyes; then
-gcc_plugin_headers=yes
-:
-else
-gcc_plugin_headers=no
-:
-fi
-
-ac_ext=cpp
-ac_cpp='$CXXCPP $CPPFLAGS'
-ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
-
-
-if test x"$gcc_plugin_headers" = xyes; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-  as_fn_error $? "GCC plugin headers not found; consider installing GCC plugin development package" "$LINENO" 5
-fi
-
-
 # Use an alternative GMP if requested.
 
 
@@ -18272,7 +18078,6 @@ fi
 
 
 
-
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable maintainer-specific portions of Makefiles" >&5
 $as_echo_n "checking whether to enable maintainer-specific portions of Makefiles... " >&6; }
 # Check whether --enable-maintainer-mode was given.
@@ -18295,50 +18100,256 @@ else
 fi
 MAINT=$MAINTAINER_MODE_TRUE
 
-if test x$gcc_plugin_dir != xno; then
+
+if test "x$with_gcc_plugin" != xno; then
+
+  # We need GCC plugin support.
+
+static_plugin=$enable_static
+
+
+# Check whether --with-gcc-plugin-dir was given.
+if test "${with_gcc_plugin_dir+set}" = set; then :
+  withval=$with_gcc_plugin_dir; gcc_plugin_dir=$withval
+else
+  gcc_plugin_dir=test
+fi
+
+
+if test x"$static_plugin" = xyes; then
+  gcc_plugin_dir=no
+else
+  if test x"$cross_compiling" = xyes; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install into default GCC plugin dir" >&5
+$as_echo_n "checking whether to install into default GCC plugin dir... " >&6; }
+    case $gcc_plugin_dir in
+       yes)
+         as_fn_error $? "GCC plugin directory must be specified explicitly when cross-compiling" "$LINENO" 5
+         ;;
+       test)
+         # We cannot detect the plugin directory since there is no way to
+         # run host GCC. So assume no.
+         #
+         gcc_plugin_dir=no
+         ;;
+       no)
+         ;;
+       *)
+         # Add the include/ subdirectory of the plugin dir to CPPFLAGS since
+         # the plugin headers are normally installed there.
+         #
+         CPPFLAGS="$CPPFLAGS -I$gcc_plugin_dir/include"
+         ;;
+    esac
+  else
+    if test x"$GXX" != xyes; then
+      as_fn_error $? "$CXX is not a GNU C++ compiler" "$LINENO" 5
+    fi
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CXX supports plugins" >&5
+$as_echo_n "checking whether $CXX supports plugins... " >&6; }
+    dir=`$CXX -print-file-name=plugin 2>/dev/null`
+
+    if test x"$dir" = xplugin; then
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+      as_fn_error $? "$CXX does not support plugins; reconfigure GCC with --enable-plugin" "$LINENO" 5
+    else
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+    fi
+
+    CPPFLAGS="$CPPFLAGS -I$dir/include"
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install annobin plugin into default GCC plugin directory" >&5
+$as_echo_n "checking whether to install annobin plugin into default GCC plugin directory... " >&6; }
+    case $gcc_plugin_dir in
+       yes)
+         gcc_plugin_dir=$dir
+         ;;
+       test)
+         # Only install into the GCC plugin dir if both GCC and annobin are
+         # installed into the same prefix. Testing whether $libdir or
+         # $libexecdir is a prefix of the GCC plugin dir is a good
+         # approximation.
+         #
+
+         # Get the expanded values for libdir and libexecdir.
+         #
+         if test x$exec_prefix = xNONE; then
+           if test x$prefix = xNONE; then
+             e_exec_prefix=$ac_default_prefix
+           else
+             e_exec_prefix=$prefix
+           fi
+         else
+           e_exec_prefix=$exec_prefix
+         fi
+
+         # On some systems GCC is installed into $prefix/lib even though
+         # libdir is $prefix/lib64 and libexecdir is $prefix/libexec. To
+         # cover this special case, we will also test $prefix/lib.
+         #
+         e_libdir=`echo "$libdir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
+         e_libexecdir=`echo "$libexecdir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
+         e_libdir32=$e_exec_prefix/lib
+
+         # See if either one of them is a prefix of the plugin dir.
+         #
+         ld_suffix=`echo "$dir" | sed "s?^$e_libdir/*??"`
+         led_suffix=`echo "$dir" | sed "s?^$e_libexecdir/*??"`
+         l32d_suffix=`echo "$dir" | sed "s?^$e_libdir32/*??"`
+
+         if test x$ld_suffix != x$dir -o x$led_suffix != x$dir -o x$l32d_suffix != x$dir; then
+           gcc_plugin_dir=$dir
+         else
+           gcc_plugin_dir=no
+         fi
+         ;;
+       *)
+         # Add the include/ subdirectory of the plugin dir to CPPFLAGS since
+         # the plugin headers are normally installed there.
+         #
+         CPPFLAGS="$CPPFLAGS -I$gcc_plugin_dir/include"
+         ;;
+    esac
+  fi
+
+  if test x"$gcc_plugin_dir" != xno; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+  else
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+  fi
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for GCC plugin headers" >&5
+$as_echo_n "checking for GCC plugin headers... " >&6; }
+
+
+
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+
+if test -d .libs; then
+  delete_libs_dir=no
+else
+  delete_libs_dir=yes
+fi
+
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+
+#include <bversion.h>
+
+#ifndef BUILDING_GCC_MAJOR
+#  error no BUILDING_GCC_MAJOR in bversion.h
+#endif
+
+int main () {}
+
+_ACEOF
+if ac_fn_cxx_try_compile "$LINENO"; then :
+
+  ac_try='./libtool --tag=CXX --mode=link $CXX -no-install $CXXFLAGS $LDFLAGS -o conftest conftest.$OBJEXT $LIBS >&5'
+  if { { case "(($ac_try" in
+  *\"* | *\`* | *\\*) ac_try_echo=\$ac_try;;
+  *) ac_try_echo=$ac_try;;
+esac
+eval ac_try_echo="\"\$as_me:${as_lineno-$LINENO}: $ac_try_echo\""
+$as_echo "$ac_try_echo"; } >&5
+  (eval "$ac_try") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+    libtool_link_ok=yes
+  else
+    libtool_link_ok=no
+  fi
+
+else
+
+  libtool_link_ok=no
+
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+if test x"$delete_libs_dir" = xyes; then
+  rm -rf .libs
+fi
+
+if test x"$libtool_link_ok" = xyes; then
+gcc_plugin_headers=yes
+:
+else
+gcc_plugin_headers=no
+:
+fi
+
+ac_ext=cpp
+ac_cpp='$CXXCPP $CPPFLAGS'
+ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
+ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
+ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
+
+
+if test x"$gcc_plugin_headers" = xyes; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+  as_fn_error $? "GCC plugin headers not found; consider installing GCC plugin development package" "$LINENO" 5
+fi
+
+
+  if test x$gcc_plugin_dir != xno; then
 
 $as_echo "#define ANNOBIN_GCC_PLUGIN_DIR 1" >>confdefs.h
 
-  plugindir=$gcc_plugin_dir
-# Otherwise, try to figure out a relative path from the driver (bindir) to
-# the plugin (libexecdir).
-#
-else
-  # Get the expanded values for bindir and libexecdir.
-  #
-  if test x$exec_prefix = xNONE; then
-    if test x$prefix = xNONE; then
-      e_exec_prefix=$ac_default_prefix
-     else
-      e_exec_prefix=$prefix
-    fi
+    plugindir=$gcc_plugin_dir
+  # Otherwise, try to figure out a relative path from the driver (bindir) to
+  # the plugin (libexecdir).
   else
-    e_exec_prefix=$exec_prefix
-  fi
-
-  e_pkglibexecdir=`echo "$libexecdir/$PACKAGE_NAME" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
-  e_bindir=`echo "$bindir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
-
-  # Try to find a common prefix.
-  #
-  common=$e_bindir
-  rel_plugindir=$e_pkglibexecdir
-
-  while test x$common != x/; do
-    suffix=`echo "$e_pkglibexecdir" | sed "s?^$common/*??"`
-    if test "x$suffix" != "x$e_pkglibexecdir"; then
-      # Replace all the remaining directories in bindir with ".."
-      # and append the suffix.
-      rel_plugindir=`echo "$e_bindir" | sed "s?^$common/*??"`
-      rel_plugindir=`echo "$rel_plugindir" | sed 's?[^/][^/]*?..?g'`
-      if test "x$rel_plugindir" != x -a "x$suffix" != x; then
-        rel_plugindir="$rel_plugindir/$suffix"
-      else
-        rel_plugindir="$rel_plugindir$suffix"
+    # Get the expanded values for bindir and libexecdir.
+    if test x$exec_prefix = xNONE; then
+      if test x$prefix = xNONE; then
+        e_exec_prefix=$ac_default_prefix
+       else
+        e_exec_prefix=$prefix
       fi
-      break
+    else
+      e_exec_prefix=$exec_prefix
     fi
-    common=`$as_dirname -- "$common" ||
+
+    e_pkglibexecdir=`echo "$libexecdir/$PACKAGE_NAME" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
+    e_bindir=`echo "$bindir" | sed "s?^\\\${exec_prefix}?$e_exec_prefix?"`
+
+    # Try to find a common prefix.
+    common=$e_bindir
+    rel_plugindir=$e_pkglibexecdir
+
+    while test x$common != x/; do
+      suffix=`echo "$e_pkglibexecdir" | sed "s?^$common/*??"`
+      if test "x$suffix" != "x$e_pkglibexecdir"; then
+        # Replace all the remaining directories in bindir with ".."
+        # and append the suffix.
+        rel_plugindir=`echo "$e_bindir" | sed "s?^$common/*??"`
+        rel_plugindir=`echo "$rel_plugindir" | sed 's?[^/][^/]*?..?g'`
+        if test "x$rel_plugindir" != x -a "x$suffix" != x; then
+          rel_plugindir="$rel_plugindir/$suffix"
+        else
+          rel_plugindir="$rel_plugindir$suffix"
+        fi
+        break
+      fi
+      common=`$as_dirname -- "$common" ||
 $as_expr X"$common" : 'X\(.*[^/]\)//*[^/][^/]*/*$' \| \
 	 X"$common" : 'X\(//\)[^/]' \| \
 	 X"$common" : 'X\(//\)$' \| \
@@ -18361,16 +18372,17 @@ $as_echo X"$common" |
 	    q
 	  }
 	  s/.*/./; q'`
-  done
+    done
 
 cat >>confdefs.h <<_ACEOF
 #define ANNOBIN_PLUGIN_PATH "$rel_plugindir"
 _ACEOF
 
-  plugindir='$(pkglibexecdir)'
+    plugindir='$(pkglibexecdir)'
+  fi
+
+
 fi
-
-
 
 # Check for debuginfod availability
 

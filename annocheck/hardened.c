@@ -1150,7 +1150,7 @@ interesting_sec (annocheck_data *     data,
 	  if (is_object_file ())
 	    skip (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, "Object file");
 	  else
-	    fail (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, NULL);
+	    fail (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, "the GOT/PLT relocs are writeable");
 	}
       else
 	pass (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, NULL);
