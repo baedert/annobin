@@ -247,19 +247,22 @@ usage (void)
   einfo (INFO, "   --tmpdir=<NAME>    [Absolute pathname of a temporary directory used to pass data between iterations]");
   einfo (INFO, "   --level=<N>        [Recursion level of the scanner]");
 
+  einfo (INFO, "Tools have their own options:");
+  einfo (INFO, "   --enable-<tool>    [Turn on <tool>][By default the hardened tool is enabled]");
+  einfo (INFO, "   --disable-<tool>   [Turn off <tool>]");
+  einfo (INFO, "   --<tool>-help      [Display help message for <tool> & exit]");
+  einfo (INFO, "   --help-<tool>      [Display help message for <tool> & exit]");
+  einfo (INFO, "   --<tool>-<option>  [Pass <option> to <tool>]");
+  einfo (INFO, "Tool names are case insensitive, so --hardened-help is the same as --Hardened-help");
+  einfo (INFO, "If an option is unique to a tool then it can be passed without the --tool prefix");
+  einfo (INFO, "For example the hardened tool's test skipping options can be passed as either");
+  einfo (INFO, "--hardened-skip-<test> or just --skip-<test>");
+  
   einfo (INFO, "The following scanning tools are available:");
 
   checker * tool;
   for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-    {
-      push_component (tool);
-      einfo (PARTIAL, "\n");
-      if (tool->usage)
-	tool->usage ();
-      else
-	einfo (INFO, "Does not have any specific options");
-      pop_component ();
-    }
+    einfo (INFO, "  %s\n", tool->name);
 }
 
 static void
@@ -293,17 +296,51 @@ process_command_line (uint argc, const char * argv[])
       const char *  arg = argv[a];
       bool          used = false;
       checker *     tool;
+      const char *  orig_arg = arg;
 
       ++ a;
 
       for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-	if (tool->process_arg != NULL)
-	  {
-	    push_component (tool);
-	    if (tool->process_arg (arg, argv, argc, & a))
-	      used = true;
-	    pop_component ();
-	  }
+	{
+	  if (arg[0] == '-' && arg[1] == '-' && strncasecmp (arg + 2, tool->name, strlen (tool->name)) == 0)
+	    {
+	      arg += 2 + strlen (tool->name);
+	      if (arg[0] == '-')
+		++arg;
+
+	      if (streq (arg, "help"))
+		{
+		  if (tool->usage)
+		    {
+		      push_component (tool);
+		      tool->usage ();
+		      pop_component ();
+		    }
+		  else
+		    einfo (INFO, "Tool %s does not have any specific options", tool->name);
+
+		  exit (EXIT_SUCCESS);
+		}	      
+
+	      if (tool->process_arg != NULL)
+		{
+		  push_component (tool);
+		  if (tool->process_arg (arg, argv, argc, & a))
+		    used = true;
+		  pop_component ();
+		}
+
+	      if (! used)
+		goto unknown_arg;
+	    }
+	  else if (tool->process_arg != NULL)
+	    {
+	      push_component (tool);
+	      if (tool->process_arg (arg, argv, argc, & a))
+		used = true;
+	      pop_component ();
+	    }
+	}
 
       if (used)
 	{
@@ -314,12 +351,26 @@ process_command_line (uint argc, const char * argv[])
       if (arg[0] == '-')
         {
 	  const char *  parameter;
-	  const char * orig_arg = arg;
 
 	  arg += (arg[1] == '-' ? 2 : 1);
 	  switch (*arg)
 	    {
 	    case 'h': /* --help */
+	      /* As an assit to users treat --help-<tool> as --<tool>-help.  */
+	      if (const_strneq (arg, "help-"))
+		{
+		  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+		    {
+		      if (tool->usage
+			  && strncasecmp (arg + strlen ("help-"), tool->name, strlen (tool->name)) == 0)
+			{
+			  push_component (tool);
+			  tool->usage ();
+			  pop_component ();
+			  exit (EXIT_SUCCESS);
+			}
+		    }
+		}
 	      usage ();
 	      exit (EXIT_SUCCESS);
 

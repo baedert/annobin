@@ -632,10 +632,15 @@ notes_end_file (annocheck_data * data)
 static bool
 notes_process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
-  if (streq (arg, "--enable-notes"))
+  if (arg[0] == '-')
+    ++ arg;
+  if (arg[0] == '-')
+    ++ arg;
+  
+  if (streq (arg, "enable-notes") || streq (arg, "enable"))
     disabled = false;
 
-  else if (streq (arg, "--disable-notes"))
+  else if (streq (arg, "disable-notes") || streq (arg, "disable"))
     disabled = true;
 
   else

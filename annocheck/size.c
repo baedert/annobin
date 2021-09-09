@@ -1,5 +1,5 @@
 /* Computes the cumulative size of section(s) in binary files. 
-   Copyright (c) 2018 - 2019 Red Hat.
+   Copyright (c) 2018 - 2021 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -262,9 +262,14 @@ size_end_scan (uint level, const char * datafile)
 static bool
 size_process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
-  if (const_strneq (arg, "--size-sec-flags="))
+  if (arg[0] == '-')
+    ++ arg;
+  if (arg[0] == '-')
+    ++ arg;
+  
+  if (const_strneq (arg, "size-sec-flags="))
     {
-      const char * flag = arg + strlen ("--size-sec-flags=");
+      const char * flag = arg + strlen ("size-sec-flags=");
       Elf64_Word * addto = & sec_need_flags;
       
       disabled = false;
@@ -300,8 +305,8 @@ size_process_arg (const char * arg, const char ** argv, const uint argc, uint * 
       return true;
     }
   
-  if (const_strneq (arg, "--section-size") /* Deprecated.  */
-      || const_strneq (arg, "--size-sec"))
+  if (const_strneq (arg, "section-size") /* Deprecated.  */
+      || const_strneq (arg, "size-sec"))
     {
       const char * parameter;
       const char * sought;
@@ -323,18 +328,18 @@ size_process_arg (const char * arg, const char ** argv, const uint argc, uint * 
       return true;
     }
 
-  if (streq (arg, "--human") /* Deprecated.  */
-      || streq (arg, "--size-human"))
+  if (streq (arg, "human") /* Deprecated.  */
+      || streq (arg, "size-human"))
     {
       human = true;
       return true;
     }
 
-  if (const_strneq (arg, "--size-seg-flags="))
+  if (const_strneq (arg, "size-seg-flags="))
     {
-      const char * flag = arg + strlen ("--size-seg-flags=");
+      const char * flag = arg + strlen ("size-seg-flags=");
       Elf64_Word * addto = & seg_need_flags;
-      
+
       disabled = false;
 
       while (*flag)
@@ -391,7 +396,7 @@ size_version (void)
 
 struct checker size_checker = 
 {
-  "Section Size",
+  "Size",
   NULL, /* file_start */
   size_interesting_sec,
   NULL, /* check_sec */

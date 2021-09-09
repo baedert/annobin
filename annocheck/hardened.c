@@ -60,6 +60,7 @@ static bool fixed_format_messages = false;
 static bool enable_colour = true;
 static bool full_filenames_set = false;
 static bool full_filenames = false;
+static bool provide_url = true;
 
 #define FIXED_FORMAT_STRING "%s: test: %s file: %s"
 
@@ -177,6 +178,7 @@ typedef struct test
   enum test_state   state;
   const char *      name;	  /* Also used as part of the command line option to disable the test.  */
   const char *      description;  /* Used in the --help output to describe the test.  */
+  const char *      doc_url;      /* Online description of the test.  */
 } test;
 
 enum test_index
@@ -205,14 +207,14 @@ enum test_index
   TEST_PROPERTY_NOTE,
   TEST_RUN_PATH,
   TEST_RWX_SEG,
-  TEST_SHORT_ENUM,
+  TEST_SHORT_ENUMS,
   TEST_STACK_CLASH,
   TEST_STACK_PROT,
   TEST_STACK_REALIGN,
   TEST_TEXTREL,
   TEST_THREADS,
   TEST_WARNINGS,
-  TEST_WRITEABLE_GOT,
+  TEST_WRITABLE_GOT,
 
   TEST_MAX
 };
@@ -221,8 +223,9 @@ enum test_index
 #define STR(a) #a
 #define MIN_GO_REV_STR(a,b,c) a STR(b) c
 
-#define TEST(name,upper,description) \
-  [ TEST_##upper ] = { true, false, false, STATE_UNTESTED, #name, description }
+#define TEST(name,upper,description)						\
+  [ TEST_##upper ] = { true, false, false, STATE_UNTESTED, #name, description,	\
+    "https://sourceware.org/annobin/annobin.html/Test-" #name ".html" }
 
 /* Array of tests to run.  Default to enabling them all.
    The result field is initialised in the start() function.  */
@@ -239,7 +242,7 @@ static test tests [TEST_MAX] =
   TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 executables only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
-  TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writeable"),
+  TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writable"),
   TEST (gnu-stack,          GNU_STACK,          "The stack is not executable"),
   TEST (go-revision,        GO_REVISION,        MIN_GO_REV_STR ("GO compiler revision >= ", MIN_GO_REVISION, " (go only)")),
   TEST (lto,                LTO,                "Compiled with -flto"),
@@ -249,16 +252,16 @@ static test tests [TEST_MAX] =
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
   TEST (production,         PRODUCTION,         "Built by a production compiler"),
   TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes"),
-  TEST (run-path,           RUN_PATH,           "All runpath entries are under /usr"),
-  TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writeable and executable"),
-  TEST (short-enum,         SHORT_ENUM,         "Compiled with consistent use of -fshort-enum"),
+  TEST (run-path,           RUN_PATH,           "All runpath entries are secure"),
+  TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writable and executable"),
+  TEST (short-enums,        SHORT_ENUMS,        "Compiled with consistent use of -fshort-enums"),
   TEST (stack-clash,        STACK_CLASH,        "Compiled with -fstack-clash-protection (not ARM)"),
   TEST (stack-prot,         STACK_PROT,         "Compiled with -fstack-protector-strong"),
   TEST (stack-realign,      STACK_REALIGN,      "Compiled with -mstackrealign (i686 only)"),
   TEST (textrel,            TEXTREL,            "There are no text relocations in the binary"),
   TEST (threads,            THREADS,            "Compiled with -fexceptions"),
   TEST (warnings,           WARNINGS,           "Compiled with -Wall"),
-  TEST (writeable-got,      WRITEABLE_GOT,      "The .got section is not writeable"),
+  TEST (writable-got,      WRITABLE_GOT,      "The .got section is not writable"),
 };
 
 /* Default to not reporting future fails - it could confuse ordinary users.  */
@@ -300,17 +303,41 @@ get_filename (annocheck_data * data)
   return full_filenames ? data->full_filename : data->filename;
 }
 
+static inline void
+go_red (void)
+{
+  if (enable_colour && isatty (1))
+    einfo (PARTIAL, RED_COLOUR);
+}
+
+static inline void
+go_default_colour (void)
+{
+  if (enable_colour && isatty (1))
+    einfo (PARTIAL, DEFAULT_COLOUR);
+}
+
+static inline void
+go_gold (void)
+{
+  if (enable_colour && isatty (1))
+    einfo (PARTIAL, GOLD_COLOUR);
+}
+
 static void
 warn (annocheck_data * data, const char * message)
 {
   if (fixed_format_messages)
     return;
+
   einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, get_filename (data));
-  if (enable_colour && isatty (1))
-    einfo (PARTIAL, RED_COLOUR);
+
+  go_red ();
+
   einfo (PARTIAL, "WARN: %s", message);
-  if (enable_colour && isatty (1))
-    einfo (PARTIAL, DEFAULT_COLOUR);
+
+  go_default_colour ();
+
   einfo (PARTIAL, "\n");
 }
 
@@ -453,8 +480,7 @@ fail (annocheck_data * data,
   else if (tests[testnum].state != STATE_FAILED || BE_VERBOSE)
     {
       einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, filename);
-      if (enable_colour && isatty (1))
-	einfo (PARTIAL, RED_COLOUR);
+      go_red ();
       einfo (PARTIAL, "FAIL: %s test ", tests[testnum].name);
       if (reason)
 	einfo (PARTIAL, "because %s ", reason);
@@ -467,11 +493,17 @@ fail (annocheck_data * data,
 	  else
 	    einfo (PARTIAL, "(%s) ", name);
 	}
+
+      go_default_colour ();
+
       if (BE_VERY_VERBOSE)
 	einfo (PARTIAL, "(source: %s)", source);
-      if (enable_colour && isatty (1))
-	einfo (PARTIAL, DEFAULT_COLOUR);
+
       einfo (PARTIAL, "\n");
+
+      if (provide_url)
+	einfo (INFO,  "%s:       For more information visit: %s",
+	       filename, tests[testnum].doc_url);
     }
 
   tests[testnum].state = STATE_FAILED;
@@ -499,18 +531,25 @@ maybe (annocheck_data * data,
   else if (tests[testnum].state == STATE_UNTESTED || BE_VERBOSE)
     {
       einfo (PARTIAL, "%s: %s: ", HARDENED_CHECKER_NAME, filename);
-      if (enable_colour && isatty (1))
-	einfo (PARTIAL, GOLD_COLOUR);
+
+      go_gold ();
+
       einfo (PARTIAL, "MAYB: test: %s ", tests[testnum].name);
       if (reason)
 	einfo (PARTIAL, "because %s ", reason);
       if (per_file.component_name)
 	einfo (PARTIAL, "(function: %s) ", per_file.component_name);
+
+      go_default_colour ();
+
       if (BE_VERY_VERBOSE)
 	einfo (PARTIAL, " (source: %s)", source);
-      if (enable_colour && isatty (1))
-	einfo (PARTIAL, DEFAULT_COLOUR);
+
       einfo (PARTIAL, "\n");
+
+      if (provide_url)
+	einfo (INFO,  "%s:       For more information visit: %s",
+	       filename, tests[testnum].doc_url);
     }
 
   if (tests[testnum].state != STATE_FAILED)
@@ -1148,12 +1187,12 @@ interesting_sec (annocheck_data *     data,
       if (sec->shdr.sh_flags & SHF_WRITE)
 	{
 	  if (is_object_file ())
-	    skip (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, "Object file");
+	    skip (data, TEST_WRITABLE_GOT, SOURCE_SECTION_HEADERS, "Object file");
 	  else
-	    fail (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, "the GOT/PLT relocs are writeable");
+	    fail (data, TEST_WRITABLE_GOT, SOURCE_SECTION_HEADERS, "the GOT/PLT relocs are writable");
 	}
       else
-	pass (data, TEST_WRITEABLE_GOT, SOURCE_SECTION_HEADERS, NULL);
+	pass (data, TEST_WRITABLE_GOT, SOURCE_SECTION_HEADERS, NULL);
 	
       return false;
     }
@@ -2103,20 +2142,20 @@ build_note_checker (annocheck_data *     data,
       break;
 
     case GNU_BUILD_ATTRIBUTE_SHORT_ENUM:
-      if (skip_test (TEST_SHORT_ENUM))
+      if (skip_test (TEST_SHORT_ENUMS))
 	break;
 
       enum short_enum_state state = value ? SHORT_ENUM_STATE_SHORT : SHORT_ENUM_STATE_LONG;
 
       if (value > 1)
 	{
-	  maybe (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	  maybe (data, TEST_SHORT_ENUMS, SOURCE_ANNOBIN_NOTES, "unexpected note value");
 	  einfo (VERBOSE2, "debug: enum note value: %x", value);
 	}
       else if (per_file.short_enum_state == SHORT_ENUM_STATE_UNSET)
 	per_file.short_enum_state = state;
       else if (per_file.short_enum_state != state)
-	fail (data, TEST_SHORT_ENUM, SOURCE_ANNOBIN_NOTES, "both short and long enums supported");
+	fail (data, TEST_SHORT_ENUMS, SOURCE_ANNOBIN_NOTES, "both short and long enums supported");
       break;
 
     case 'b':
@@ -2149,7 +2188,7 @@ build_note_checker (annocheck_data *     data,
 		   || const_strneq (attr, "pac-ret"))
 	    {
 	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially enabled");
-	      fail (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially enabled");
+	      fail (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially disabled");
 	    }
 	  else
 	    {
@@ -2271,7 +2310,7 @@ build_note_checker (annocheck_data *     data,
 	      if (per_file.current_tool == TOOL_GIMPLE)
 		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
 	      else if (! skip_test_for_current_func (data, TEST_FORTIFY))
-		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-D_FORTIFY_SOURCE=2 was not present on command line");
+		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-D_FORTIFY_SOURCE=2 was not present on the command line");
 	      break;
 
 	    case 0:
@@ -2644,14 +2683,14 @@ handle_aarch64_property_note (annocheck_data *      data,
   if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
     {
       einfo (VERBOSE2, "%s: debug: property note type %lx", get_filename (data), type);
-      return "Unexpected property note type";
+      return "unexpected property note type";
     }
 
   if (size != 4)
     {
       einfo (VERBOSE2, "debug: data note at offset %lx has size %lu, expected 4",
 	     (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
-      return "Property note data has invalid size";
+      return "the property note data has an invalid size";
     }
 
   ulong property = get_4byte_value (notedata);
@@ -2659,14 +2698,14 @@ handle_aarch64_property_note (annocheck_data *      data,
   if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_BTI) == 0)
     {
       if (tests[TEST_BRANCH_PROTECTION].enabled)
-	return "The BTI property is not enabled";
+	return "the BTI property is not enabled";
     }
 
   if ((property & GNU_PROPERTY_AARCH64_FEATURE_1_PAC) == 0)
     {
 #if 0
       if (tests[TEST_BRANCH_PROTECTION].enabled)
-	return "The PAC property is not enabled";
+	return "the PAC property is not enabled";
 #else
       future_fail (data, "PAC property is not enabled");
 #endif
@@ -2700,7 +2739,7 @@ handle_x86_property_note (annocheck_data *      data,
     {
       einfo (VERBOSE2, "debug: data note at offset %lx has size %lu, expected 4",
 	     (long)(notedata - (const unsigned char *) sec->data->d_buf), size);
-      return "Property note data has invalid size";
+      return "the property note data has an invalid size";
     }
 
   ulong property = get_4byte_value (notedata);
@@ -2708,13 +2747,13 @@ handle_x86_property_note (annocheck_data *      data,
   if ((property & GNU_PROPERTY_X86_FEATURE_1_IBT) == 0)
     {
       einfo (VERBOSE2, "debug: property bits = %lx", property);
-      return "The IBT property is not enabled";
+      return "the IBT property is not enabled";
     }
 
   if ((property & GNU_PROPERTY_X86_FEATURE_1_SHSTK) == 0)
     {
       einfo (VERBOSE2, "debug: property bits = %lx", property);
-      return "The SHSTK property is not enabled";
+      return "the SHSTK property is not enabled";
     }
 
   pass (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, "correct flags found in .note.gnu.property note");
@@ -2768,7 +2807,7 @@ property_note_checker (annocheck_data *     data,
       if (tests[TEST_PROPERTY_NOTE].state == STATE_PASSED)
 	{
 	  /* The loader will only process the first note, so having more than one is an error.  */
-	  reason = "More than one GNU Property note";
+	  reason = "there is more than one GNU Property note";
 	  goto fail;
 	}
     }
@@ -2776,7 +2815,7 @@ property_note_checker (annocheck_data *     data,
   if (note->n_namesz != sizeof ELF_NOTE_GNU
       || strncmp ((char *) sec->data->d_buf + name_offset, ELF_NOTE_GNU, strlen (ELF_NOTE_GNU)) != 0)
     {
-      reason = "Property note does not have expected name";
+      reason = "the property note does not have expected name";
       einfo (VERBOSE2, "debug: Expected name '%s', got '%.*s'", ELF_NOTE_GNU,
 	     (int) strlen (ELF_NOTE_GNU), (char *) sec->data->d_buf + name_offset);
       goto fail;
@@ -2785,7 +2824,7 @@ property_note_checker (annocheck_data *     data,
   uint expected_quanta = data->is_32bit ? 4 : 8;
   if (note->n_descsz < 8 || (note->n_descsz % expected_quanta) != 0)
     {
-      reason = "Property note data has the wrong size";
+      reason = "the property note data has the wrong size";
       einfo (VERBOSE2, "debug: Expected data size to be a multiple of %d but the size is 0x%x",
 	     expected_quanta, note->n_descsz);
       goto fail;
@@ -2795,7 +2834,7 @@ property_note_checker (annocheck_data *     data,
   const unsigned char * notedata = sec->data->d_buf + data_offset;
   if (is_x86 () && remaining == 0)
     {
-      reason = "note section present but empty";
+      reason = "the note section is present but empty";
       goto fail;
     }
 
@@ -2808,7 +2847,7 @@ property_note_checker (annocheck_data *     data,
       notedata  += 8;
       if (size > remaining)
 	{
-	  reason = "Property note data has invalid size";
+	  reason = "the property note data has an invalid size";
 	  einfo (VERBOSE2, "debug: data size for note at offset %lx is %lu but remaining data is only %u",
 		 (long)(notedata - (const unsigned char *) sec->data->d_buf), size, remaining);
 	  goto fail;
@@ -3037,7 +3076,7 @@ check_dynamic_section (annocheck_data *    data,
 	  if (is_object_file ())
 	    skip (data, TEST_TEXTREL, SOURCE_DYNAMIC_SECTION, "Object files are allowed text relocations");
 	  else
-	    fail (data, TEST_TEXTREL, SOURCE_DYNAMIC_SECTION, NULL);
+	    fail (data, TEST_TEXTREL, SOURCE_DYNAMIC_SECTION, "the DT_TEXTREL tag was detected");
 	  break;
 
 	case DT_RPATH:
@@ -3118,7 +3157,7 @@ check_dynamic_section (annocheck_data *    data,
 	    break;
 	  case 1:
 	    future_fail (data, "PAC_PLT flag is missing from dynamic tags");
-	    pass (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is present in the dynamic tags");
+	    fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "PAC_PLT flag is missing from the dynamic tags");
 	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is present in the dynamic tags");
 	    break;
 	  case 2:
@@ -3127,7 +3166,7 @@ check_dynamic_section (annocheck_data *    data,
 	    break;
 	  case 3:
 	    pass (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, NULL);
-	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "The BTI and PAC flags are present in the dynamic tags");
+	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI and PAC flags are present in the dynamic tags");
 	    break;
 	  }
 	}
@@ -3454,14 +3493,14 @@ check_seg (annocheck_data *    data,
 	}
       else if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
 	{
-	  fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "GNU Property note segment not 8 byte aligned");
+	  fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "the GNU Property note segment not 8 byte aligned");
 	}
     }
 
   if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
     {
       if (offset != 0)
-	fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "More than one GNU Property note in note segment");
+	fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "there is more than one GNU Property note in the note segment");
       else
 	/* FIXME: We should check the contents of the note.  */
 	pass (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, NULL);
@@ -3935,7 +3974,7 @@ finish (annocheck_data * data)
     }
 
   if (! per_file.build_notes_seen && is_C_compiler (per_file.seen_tools))
-    fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "Annobin notes were not found");
+    fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "annobin notes were not found");
 
   if (! ignore_gaps)
     {
@@ -3984,13 +4023,13 @@ finish (annocheck_data * data)
 	    case TEST_PRODUCTION:
 	    case TEST_NOTES:
 	    case TEST_ENTRY:
-	    case TEST_SHORT_ENUM:
+	    case TEST_SHORT_ENUMS:
 	    case TEST_DYNAMIC_SEGMENT:
 	    case TEST_RUN_PATH:
 	    case TEST_RWX_SEG:
 	    case TEST_TEXTREL:
 	    case TEST_THREADS:
-	    case TEST_WRITEABLE_GOT:
+	    case TEST_WRITABLE_GOT:
 	      /* The absence of a result for these tests actually means that they have passed.  */
 	      pass (data, i, SOURCE_FINAL_SCAN, NULL);
 	      break;
@@ -4172,8 +4211,10 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
 	      else
 		{
-		  fail (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
-		  pass (data, i, SOURCE_FINAL_SCAN, "The -mbranch-protection option was not used");
+		  if (i == TEST_BRANCH_PROTECTION)
+		    fail (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
+		  else
+		    pass (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
 		}
 	      break;
 
@@ -4248,6 +4289,7 @@ usage (void)
   einfo (INFO, "    --test-future             Enable the future fail tests");
 
   einfo (INFO, "  To enable/disable tests for a specific environment use:");
+  einfo (INFO, "    --profile-el7             Ensure that only tests suitable for RHEL-7 are run");
   einfo (INFO, "    --profile-el9             Ensure that only tests suitable for RHEL-9 are run");
   einfo (INFO, "    --profile-rawhide         Ensure that only tests suitable for Fedora Rawhide are run");
 #if 0 /* Not implemented yet.  */
@@ -4256,25 +4298,34 @@ usage (void)
 #endif
   einfo (INFO, "  The tool will also report missing annobin data unless:");
   einfo (INFO, "    --ignore-gaps             Ignore missing annobin data");
+  einfo (INFO, "    --report-gaps             Report missing annobin data");
 
   einfo (INFO, "  The tool is enabled by default.  This can be changed by:");
   einfo (INFO, "    --disable-hardened        Disables the hardening checker");
   einfo (INFO, "    --enable-hardened         Reenables the hardening checker");
 
-  einfo (INFO, "   The tool will generate messages based upon the verbosity level but the format is not fixed");
-  einfo (INFO, "   In order to have a consistent output enable this option:");
-  einfo (INFO, "     --fixed-format-messages  Display messages in a fixed format");
-  einfo (INFO, "    By default when not opeating in verbose more only the filename of input files will be displayed in messages");
-  einfo (INFO, "    This can be changed with:");
-  einfo (INFO, "      --full-filenames        Display the full path of input files");
-  einfo (INFO, "      --base-filenames        Display only the filename of input files");
+  einfo (INFO, "  The tool will generate messages based upon the verbosity level but the format is not fixed");
+  einfo (INFO, "  In order to have a consistent output enable this option:");
+  einfo (INFO, "    --fixed-format-messages   Display messages in a fixed format");
+  einfo (INFO, "  By default when not opeating in verbose more only the filename of input files will be displayed in messages");
+  einfo (INFO, "  This can be changed with:");
+  einfo (INFO, "    --full-filenames          Display the full path of input files");
+  einfo (INFO, "    --base-filenames          Display only the filename of input files");
   
-  einfo (INFO, "   When the output is directed to a terminal colouring will be used to highlight significant messages");
-  einfo (INFO, "   This can be controlled by:");
-  einfo (INFO, "     --disable-colour         Disables coloured messages");
-  einfo (INFO, "     --disable-color          Disables colored messages");
-  einfo (INFO, "     --enable-colour          Enables coloured messages");
-  einfo (INFO, "     --enable-color           Enables colored messages");
+  einfo (INFO, "  When the output is directed to a terminal colouring will be used to highlight significant messages");
+  einfo (INFO, "  This can be controlled by:");
+  einfo (INFO, "    --disable-colour          Disables coloured messages");
+  einfo (INFO, "    --disable-color           Disables colored messages");
+  einfo (INFO, "    --enable-colour           Enables coloured messages");
+  einfo (INFO, "    --enable-color            Enables colored messages");
+
+  einfo (INFO, "  Annobin's online documentation includes an extended description of the tests");
+  einfo (INFO, "  run here.  By default when a FAIL or MAYB result is displayed a URL to the");
+  einfo (INFO, "  relevant online description is also included (unless fixed-format mode is enabled)");
+  einfo (INFO, "  This behaiour can be disabled by:");
+  einfo (INFO, "    --no-urls                 Do not include URLs in error messages");
+  einfo (INFO, "  And re-enabled with:");
+  einfo (INFO, "    --provide-urls            Include URLs in error messages");
 }
 
 #define MAX_DISABLED 10
@@ -4290,6 +4341,8 @@ static const struct profiles
   { "fc35",       {}, {} },
   { "automotive", {}, {} },
 #endif
+  { "el7",        { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_PIE, TEST_BIND_NOW, TEST_FORTIFY, TEST_STACK_CLASH },
+                  { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
   { "el9",        { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS },
                   { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
   { "rawhide",    { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS },
@@ -4300,9 +4353,14 @@ static const struct profiles
 static bool
 process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
-  if (const_strneq (arg, "--skip-"))
+  if (arg[0] == '-')
+    ++ arg;
+  if (arg[0] == '-')
+    ++ arg;
+  
+  if (const_strneq (arg, "skip-"))
     {
-      arg += strlen ("--skip-");
+      arg += strlen ("skip-");
 
       int i;
 
@@ -4331,9 +4389,9 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return false;
     }
 
-  if (const_strneq (arg, "--test-"))
+  if (const_strneq (arg, "test-"))
     {
-      arg += strlen ("--test-");
+      arg += strlen ("test-");
 
       int i;
 
@@ -4362,59 +4420,77 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return false;
     }
   
-  if (streq (arg, "--enable-hardened"))
+  if (streq (arg, "enable-hardened") || streq (arg, "enable"))
     {
       disabled = false;
       return true;
     }
 
-  if (streq (arg, "--disable-hardened"))
+  if (streq (arg, "disable-hardened") || streq (arg, "disable"))
     {
       disabled = true;
       return true;
     }
 
-  if (streq (arg, "--ignore-gaps"))
+  if (streq (arg, "ignore-gaps"))
     {
       ignore_gaps = true;
       return true;
     }
 
-  if (streq (arg, "--fixed-format-messages"))
+  if (streq (arg, "report-gaps"))
+    {
+      ignore_gaps = false;
+      return true;
+    }
+
+  if (streq (arg, "fixed-format-messages"))
     {
       fixed_format_messages = true;
       return true;
     }
 
-  if (streq (arg, "--disable-colour") || streq (arg, "--disable-color"))
+  if (streq (arg, "disable-colour") || streq (arg, "disable-color"))
     {
       enable_colour = false;
       return true;
     }
 
-  if (streq (arg, "--enable-colour") || streq (arg, "--enable-color"))
+  if (streq (arg, "enable-colour") || streq (arg, "enable-color"))
     {
       enable_colour = true;
       return true;
     }
 
-  if (streq (arg, "--full-filenames"))
+  if (streq (arg, "provide-urls"))
+    {
+      provide_url = true;
+      return true;	
+    }
+
+  if (streq (arg, "no-urls"))
+    {
+      provide_url = false;
+      return true;	
+    }
+
+  if (streq (arg, "full-filenames"))
     {
       full_filenames = true;
       full_filenames_set = true;
       return true;
     }
 
-  if (streq (arg, "--base-filenames"))
+  if (streq (arg, "base-filenames"))
     {
       full_filenames = false;
       full_filenames_set = true;
       return true;
     }
 
-  if (const_strneq (arg, "--profile-"))
+  if (const_strneq (arg, "profile-"))
     {
-      arg += strlen ("--profile-");
+      arg += strlen ("profile-");
 
       uint i;
 

@@ -1,5 +1,5 @@
 /* Monitors the time annocheck takes running its tools.
-   Copyright (c) 2018 - 2019 Red Hat.
+   Copyright (c) 2018 - 2021 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -206,19 +206,24 @@ timing_end_scan (uint level, const char * datafile)
 static bool
 timing_process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 {
-  if (streq (arg, "--enable-timing"))
+  if (arg[0] == '-')
+    ++ arg;
+  if (arg[0] == '-')
+    ++ arg;
+  
+  if (streq (arg, "enable-timing") || streq (arg, "enable"))
     disabled = false;
 
-  else if (streq (arg, "--disable-timing"))
+  else if (streq (arg, "disable-timing") || streq (arg, "disable"))
     disabled = true;
 
-  else if (streq (arg, "--nsec"))
+  else if (streq (arg, "nsec"))
     resolution = NSEC;
 
-  else if (streq (arg, "--usec"))
+  else if (streq (arg, "usec"))
     resolution = USEC;
   
-  else if (streq (arg, "--sec"))
+  else if (streq (arg, "sec"))
     resolution = SEC;
 
   else

@@ -319,25 +319,30 @@ builtby_process_arg (const char * arg, const char ** argv, const uint argc, uint
 {
   const char * parameter;
 
-  if (streq (arg, "--enable-builtby") || streq (arg, "--enable-built-by"))
+  if (arg[0] == '-')
+    ++ arg;
+  if (arg[0] == '-')
+    ++ arg;
+  
+  if (streq (arg, "enable-builtby") || streq (arg, "enable-built-by") || streq (arg, "enable"))
     {
       disabled = false;
       return true;
     }
 
-  if (streq (arg, "--disable-builtby") || streq (arg, "--disable-built-by"))
+  if (streq (arg, "disable-builtby") || streq (arg, "disable-built-by") || streq (arg, "disable"))
     {
       disabled = true;
       return true;
     }
 
-  if (streq (arg, "--all"))
+  if (streq (arg, "all"))
     {
       all = true;
       return true;
     }
 
-  if (const_strneq (arg, "--tool="))
+  if (const_strneq (arg, "tool="))
     {
       if ((parameter = strchr (arg, '=')) == NULL)
 	{
@@ -350,7 +355,7 @@ builtby_process_arg (const char * arg, const char ** argv, const uint argc, uint
       return true;
     }
 
-  if (const_strneq (arg, "--nottool="))
+  if (const_strneq (arg, "nottool="))
     {
       if ((parameter = strchr (arg, '=')) == NULL)
 	{

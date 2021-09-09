@@ -46,11 +46,9 @@ else
     dir=`$CXX -print-file-name=plugin 2>/dev/null`
 
     if test x"$dir" = xplugin; then
-      AC_MSG_RESULT([no])
-      AC_MSG_ERROR([$CXX does not support plugins; reconfigure GCC with --enable-plugin])
-    else
-      AC_MSG_RESULT([yes])
+      dir=`$CXX -print-file-name=.`/plugin
     fi
+    AC_MSG_RESULT([yes])
 
     CPPFLAGS="$CPPFLAGS -I$dir/include"
 

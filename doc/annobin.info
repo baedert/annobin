@@ -27,7 +27,7 @@ This manual describes the ANNOBIN plugin and the 'annocheck' program,
 and how you can use them to determine what security features were used
 when a program was built.
 
-   This manual is for 'annobin' (Annobin) version 9.0.
+   This manual is for 'annobin' (Annobin) version 10.0.
 
    This document is distributed under the terms of the GNU Free
 Documentation License version 1.3.  A copy of the license is included in
@@ -78,7 +78,7 @@ compiler and records them in the object file(s) being produced.
 
    Note - the plugin method is just one way of generating the
 information.  Any interested party can create and add information to the
-objhect file, providing that they follow the Watermark specification.
+object file, providing that they follow the Watermark specification.
 
    The information can be extracted from files via the use of tools like
 'readelf' and 'objdump'.  The 'annobin' package itself includes a
@@ -105,7 +105,7 @@ if none are present in the input files.
    If the build system being used does not automatically enable the
 'annobin' plugin then it can be specifically added to the compiler
 command line by adding the '-fplugin=annobin' (for gcc) or
-'-fplugin=annobin-for-clang' (for clang) or '-fpluin=annobin-for-llvm'
+'-fplugin=annobin-for-clang' (for clang) or '-fplugin=annobin-for-llvm'
 (for LLVM) option.  It may also be necessary to tell the compiler where
 to find the plugin by adding the '-iplugindir=' option, although this
 should only be necessary if the plugin is installed in an unusual place.
@@ -590,6 +590,7 @@ File: annobin.info,  Node: Annocheck,  Next: Configure Options,  Prev: Examining
 
      annocheck
        [-help]
+       [-help-TOOL]
        [-version]
        [-verbose]
        [-quiet]
@@ -598,6 +599,9 @@ File: annobin.info,  Node: Annocheck,  Next: Configure Options,  Prev: Examining
        [-debug-rpm=FILE]
        [-dwarf-dir=DIR]
        [-prefix=TEXT]
+       [-enable-TOOL]
+       [-disable-TOOL]
+       [-TOOL-OPTION]
        FILE...
 
    The 'annocheck' program can analyse binary files and report
@@ -607,10 +611,10 @@ the following tools are implemented:
 
 * Menu:
 
-* Built-By::  Which tool(s) were used to build the file(s) ?
+* Built By::  Which tool(s) were used to build the file(s) ?
 * Hardened::  Were the file(s) built with the correct security options ?
 * Notes::     What annobin notes are inside the file(s) ?
-* Section-Size::  What is the cumulative size of specific sections in the file(s) ?
+* Size::      What is the cumulative size of specific sections in the file(s) ?
 * Timing::    How long did the checks take ?
 
    The 'annocheck' program is able to scan inside rpm files and
@@ -638,7 +642,10 @@ that are used regardless of which tools are enabled.
      Look in DIR for separate dwarf debug information files.
 
 '--help'
-     Display this message & exit.
+     Displays the generic annobin usage information and then exits.
+
+'--help-TOOL'
+     Display the usage information for TOOL and then exits.
 
 '--report-unknown'
 '--ignore-unknown'
@@ -646,7 +653,7 @@ that are used regardless of which tools are enabled.
      separated into different options).  If enabled, unknown file types
      are reported when they are encountered.  This includes non-ELF
      format files, block devices and so on.  Directories are not
-     considered to be unknown and are automatically decended.
+     considered to be unknown and are automatically descended.
 
      The second effect is how symbolic links are handled.  If reporting
      is enabled then they are treated as unknown and reported.  If
@@ -672,15 +679,28 @@ that are used regardless of which tools are enabled.
 '--version'
      Report the version of the tool and then exit.
 
+'--enable-TOOL'
+     Enable TOOL.  Most tools are disabled by default and so need to be
+     enabled via this option before they will act.
+
+'--disable-TOOL'
+     Disable TOOL.  Normally used to disable the hardening checker,
+     which is enabled by default.
+
+'--TOOL-OPTION'
+     Pass OPTION on to TOOL.
+
+   Any other command line options will be passed to the tools in turn in
+order to give them a chance to claim and process them.
+
 
-File: annobin.info,  Node: Built-By,  Next: Hardened,  Up: Annocheck
+File: annobin.info,  Node: Built By,  Next: Hardened,  Up: Annocheck
 
 4.1 The builder checker.
 ========================
 
 
      annocheck
-       [-disable-hardened]
        -enable-builtby
        [-all]
        [-tool=NAME]
@@ -718,7 +738,7 @@ behaviour:
      not built by a particular compiler.
 
 
-File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annocheck
+File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built By,  Up: Annocheck
 
 4.2 The Hardened security checker.
 ==================================
@@ -726,39 +746,15 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
 
      annocheck
        [-skip-all]
-       [-skip-bind-now]
-       [-skip-branch-protection]
-       [-skip-cf-protection]
-       [-skip-dynamic-segment]
-       [-skip-dynamic-tags]
-       [-skip-entry]
-       [-skip-fortify]
-       [-skip-future]
-       [-skip-glibcxx-assertions]
-       [-skip-gnu-relro]
-       [-skip-gnu-stack]
-       [-skip-lto]
-       [-skip-optimization]
-       [-skip-pic]
-       [-skip-pie]
-       [-skip-production]
-       [-skip-property-note]
-       [-skip-run-path]
-       [-skip-rwx-seg]
-       [-skip-short-enum]
-       [-skip-stack-clash]
-       [-skip-stack-prot]
-       [-skip-stack-realign]
-       [-skip-textrel]
-       [-skip-threads]
-       [-skip-warnings]
-       [-skip-writeable-got]
-       [-test-NAME]
+       [-skip-NAME]
        [-test-all]
+       [-test-NAME]
        [-test-future]
+       [-profile-el7]
        [-profile-el9]
        [-profile-rawhide]
        [-ignore-gaps]
+       [-report-gaps]
        [-fixed-format-messages]
        [-disable-colour]
        [-enable-colour]
@@ -766,37 +762,81 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built-By,  Up: Annoche
        [-enable-hardened]
        [-full-filenames]
        [-base-filenames]
+       [-no-urls]
+       [-provide-urls]
        FILE...
 
-   The HARDENED tool checks that the specified files were compiled with
+   The HARDENED tool checks that the specified files were built with
 specific security hardening features enabled.  The features that are
-tested can be specified via command line options, but the default is to
+tested can be controlled via command line options, but the default is to
 test for all of them.
 
    New tests can be added to the HARDENED checker by adding an entry in
 the TESTS array defined in 'hardened.c' and then creating the necessary
-code to support the test.
+code to support the test.  There is more information on this process in
+this blog:
+<https://developers.redhat.com/articles/2021/07/15/build-your-own-tool-search-code-sequences-binary-files>
 
-   Currently HARDENED can run the following tests:
+   Currently the HARDENED tool can run the following tests.  Each test
+listed here starts with a short section describing the reason for the
+test, a probable solution to fix the test, criteria for when the test
+can be ignored and some examples of the error messages that are produced
+by annocheck when the test goes wrong.
 
 * Menu:
 
-* Test bind-now::                 The bind-now test
-* Test gnu-stack::                The gnu-stack test
-* Test writeable-got::            The writeable-got test
-* Undocumented Tests::            FIXME: Docs needed
-* Waiving Annocheck Results::     How to ignore specific annocheck tests.
+* Test bind now::                 The bind-now test
+* Test gnu stack::                The gnu-stack test
+* Test writable got::            The writable-got test
+* Test rwx seg::                  The rwx-seg test
+* Test textrel::                  The textrel test
+* Test run path::                 The run-path test
+* Test cf protection::            The cf-protection test
+* Test optimization::             The optimization test
+* Test stack prot::               The stack-prot test
+* Test stack clash::              The stack-clash test
+* Test fortify::                  The fortify test
+* Test notes::                    The notes test
+* Test gnu relro::                The gnu relro test
+* Test pie::                      The pie test
+* Test pic::                      The pic test
+* Test dynamic segment::          The dynamic-segment test
+* Test dynamic tags::             The dynamic-tags test
+* Test not dynamic tags::         The not-dynamic-tags test
+* Test branch protection::        The branch-protection test
+* Test not branch protection::    The not-branch-protection test
+* Test short enums::              The short-enums test
+* Test stack realign::            The stack-realign test
+* Test production::               The production test
+* Test lto::                      The lto test
+* Test property note::            The property note test
+* Test threads::                  The threads test
+* Test glibcxx assertions::       The glibcxx-assertions test
+* Test entry::                    The entry test
+* Test go revision::              The go revision test
+* Test only go::                  The only go test
+* Test warnings::                 The warnings test
+* Test instrumentation::          The instrumentation test
+
+   The HARDENED tool does support some command line options of its own
+as well.
+
+* Menu:
+
+* Hardened Command Line Options:: Command line options specific to the hardened tool
+* Waiving Hardened Results::      How to ignore specific hardening tests.
 
 
-File: annobin.info,  Node: Test bind-now,  Next: Test gnu-stack,  Up: Hardened
+File: annobin.info,  Node: Test bind now,  Next: Test gnu stack,  Up: Hardened
 
 4.2.1 The bind-now test
 -----------------------
 
-       Summary:  An attacker could intercept calls to shared library functions
-       FAIL:     "not linked with -Wl,-z,now"
-       Fix By:   Add -Wl,-z,now to final link
+       Problem:  An attacker could intercept calls to shared library functions
+       Fix By:   Add -Wl,-z,now to final link command line
        Waive If: No shared libraries used
+
+       Example:  FAIL: bind-now test because not linked with -Wl,-z,now
 
    This test checks that lazy binding is not enabled in the binary.
 Lazy binding can be used to delay resolving the links between an
@@ -813,7 +853,7 @@ binding should be used.
 
    The type of binding is selected via a linker command line option, and
 on a compiler command line the secure version usually looks like
-'-Wl,-z,now'.  The lazy binding option is '-Wl,-z,lazy' although somne
+'-Wl,-z,now'.  The lazy binding option is '-Wl,-z,lazy' although some
 linkers are configured to use lazy binding by default, in which case
 just the absence of the '-Wl,-z,now' option is enough to trigger this
 test.
@@ -823,20 +863,21 @@ any shared libraries.  The test can be disabled via the
 '--skip-bind-now' option and re-enabled by the '--test-bind-now' option.
 
 
-File: annobin.info,  Node: Test gnu-stack,  Next: Test writeable-got,  Prev: Test bind-now,  Up: Hardened
+File: annobin.info,  Node: Test gnu stack,  Next: Test writable got,  Prev: Test bind now,  Up: Hardened
 
 4.2.2 The gnu-stack test
 ------------------------
 
-       Summary:  An attacker could place code on the stack and then run it
-       FAIL:     "the .stack section has incorrect permissions"
-       FAIL:     ".note.GNU-stack section has execute permission"
-       FAIL:     "the GNU stack segment has execute permission"
-       FAIL:     "the GNU stack segment does not have both read & write permissions"
-       FAIL:     "no .note.GNU-stack section found"
-       MAYBE:    "multiple stack sections detected"
-       Fix By:   Updating assembler sources and/or linker script
-       Waive If: The application really really needs to be able to dynamically create and execute code
+       Problem:  An attacker could place code on the stack and then run it
+       Fix By:   Updating compiler, assembler sources and/or linker scripts
+       Waive If: The application *really* needs to be able to dynamically create and execute code
+
+       Example:  FAIL: gnu-stack test because the .stack section has incorrect permissions
+       Example:  FAIL: gnu-stack test because the .note.GNU-stack section has execute permission
+       Example:  FAIL: gnu-stack test because the GNU stack segment has execute permission
+       Example:  FAIL: gnu-stack test because the GNU stack segment does not have both read & write permissions
+       Example:  FAIL: gnu-stack test because no .note.GNU-stack section found
+       Example:  MAYB: gnu-stack test because multiple stack sections detected
 
    This test checks that it is not possible to place code onto the stack
 and then execute it.  Normally the stack just holds data and addresses,
@@ -850,15 +891,17 @@ several different potential failure messages.
 
    Most applications will have a section inserted into them by the
 compiler called .NOTE.GNU-STACK.  The section has no contents, but the
-read, write, and execute attribues of the section reflect the needs of
+read, write, and execute attributes of the section reflect the needs of
 the application's stack.
 
-   Ordinary compiled code sholuld never see this problem, but the test
-failure can be triggered by programs built from assembler sources or
-linked with a custom made linker map.  To fix the problem either the
-linker map needs to be updated to ensure that the stack section is not
-executable or the assembler sources need to be extended to a note that
-the stack is not executable:
+   Ordinary compiled code should never see this problem, but the test
+failure can be triggered by programs built with an old compiler which
+does not support the .NOTE-GNU-STACK section, or if the program contains
+some assembler source files or linked with a custom made linker map.
+
+   To fix the problem either the compiler needs to be upgraded or the
+linker map needs to be updated or the assembler sources need to be
+extended to add the .NOTE-GNU-STACK section by adding code like this:
 
        .section .note.GNU-stack,"",%progbits
 
@@ -866,15 +909,16 @@ the stack is not executable:
 option and re-enabled via the '--test-gnu-stack' option.
 
 
-File: annobin.info,  Node: Test writeable-got,  Next: Undocumented Tests,  Prev: Test gnu-stack,  Up: Hardened
+File: annobin.info,  Node: Test writable got,  Next: Test rwx seg,  Prev: Test gnu stack,  Up: Hardened
 
-4.2.3 The writeable-got test
-----------------------------
+4.2.3 The writable-got test
+---------------------------
 
-       Summary:  An attacker could intercept and redirect shared library function calls
-       FAIL:     "the GOT/PLT relocs are writeable"
+       Problem:  An attacker could intercept and redirect shared library function calls
        Fix By:   Link with -Wl,--secure-plt
        Waive If: No shared libraries are used
+
+       Example:  FAIL: writable-got test because the GOT/PLT relocs are writable
 
    This test checks that the instructions to set up the GOT and PLT
 tables in a dynamic executable cannot be altered by an outside source.
@@ -882,120 +926,954 @@ tables in a dynamic executable cannot be altered by an outside source.
    Dynamic executables use two tables to help them connect to shared
 libraries.  These tables - the GOT and the PLT - are set up when the
 program runs, based upon instructions held in special sections in the
-file.  If these sections are writeable then an attacker could change
+file.  If these sections are writable then an attacker could change
 their contents and thus cause the program to call the wrong functions in
 the shared libraries.
 
    Under normal circumstances this test should never fail.  If it does
-then something unusal is going on.  One possible cure is to add the
+then something unusual is going on.  One possible cure is to add the
 '-Wl,--secure-plt' option to the final link command line.
 
-   If necessary the test can be disabled via the '--skip-writeable-got'
-option and re-enabled via the '--test-writeable-got' option.
+   If necessary the test can be disabled via the '--skip-writable-got'
+option and re-enabled via the '--test-writable-got' option.
 
 
-File: annobin.info,  Node: Undocumented Tests,  Next: Waiving Annocheck Results,  Prev: Test writeable-got,  Up: Hardened
+File: annobin.info,  Node: Test rwx seg,  Next: Test textrel,  Prev: Test writable got,  Up: Hardened
 
-4.2.4 These tests need extended documentation
----------------------------------------------
+4.2.4 The rwx-seg test
+----------------------
 
-'No RWX segments.'
-     No program segment should have all three of the read, write and
-     execute permission bits set.  Disabled by '--skip-rwx-seg'.
+       Problem:  An attacker could add their own code to an executable
+       Fix By:   Changing the linker script used to create the binary
+       Waive If: Don't.
 
-'No text relocations'
-     There should be no relocations against executable code.  Disabled
-     by '--skip-textrel'.
+       Example:  FAIL: rwx-seg test because segment has Read, Write and eXecute flags set
 
-'Correct runpaths'
-     The runpath information used to locate shared libraries at runtime
-     must only include directories rooted at /USR.  Disabled by
-     '--skip-run-path'.
+   This test checks that the file does not have any segments that have
+all three of the READ, WRITE and EXECUTE permissions.  Code segments
+should have read and execute permissions, but they should not be
+writable as otherwise an attacker can overwrite the code.  Data segments
+should have read permission, and possibly write permission as well, but
+never execute permission as otherwise an attacker might be able to
+create their own code in a data area.
 
-'Missing annobin data'
-     The program must have been compiled with annobin notes enabled.
-     Disabled by '--ignore-gaps'.
+   The linker will normally never create a binary file with a segment
+with all three permissions, but it is possible to force it to do so by
+using a custom linker script.  If this flaw is detected then whatever
+linker script is being used should be corrected to remove the problem.
 
-'Strong stack protection'
-     The program must have been compiled with the
-     '-fstack-protector-strong' option enabled, and with
-     '-D_FORTIFY_SOURCE=[2|3]' specified.  It must also have been
-     compiled at at least optimization level 2.  Disabled by
-     '--skip-stack-prot'.
+   If necessary the test can be disabled via the '--skip-rwx-seg' option
+and re-enabled via the '--test-rwx-seg' option.
 
-'Dynamic data present'
-     Dynamic executables must have a dynamic segment.  Disabled by
-     '--skip-dynamic-segment'.
+
+File: annobin.info,  Node: Test textrel,  Next: Test run path,  Prev: Test rwx seg,  Up: Hardened
 
-'Position Independent compilation'
-     Shared libraries must have been compiled with '-fPIC' or '-fPIE'
-     but not '-static'.  This check can be disabled by '--skip-pic'.
+4.2.5 The textrel test
+----------------------
 
-     Dynamic executables must have been compiled with '-fPIE' and linked
-     with '-pie'.  This check can be disabled by '--skip-pie'.
+       Problem:  An attacker could change the code in an executable
+       Fix By:   Compiling with -fPIC enabled
+       Waive If: The code _must_ be static
 
-'Safe exceptions'
-     Program which use exception handling must have been compiled with
-     '-fexceptions' enabled and with '-D_GLIBCXX_ASSERTIONS' specified.
-     Disabled by '--skip-threads' and/or '--skip-glibcxx-assertions'.
+       Example:  FAIL: textrel test because the DT_TEXTREL tag was detected
 
-'Stack Clash protection'
-     If available the '-fstack-clash-protection' must have been used.
-     Disabled by '--skip-stack-clash'.
+   This test checks to make sure that a binary file does not contain any
+relocations that alter the contents of a code section.  Relocations are
+special instructions that the program loader uses to alter pieces of a
+application when it starts up.  Normally these relocations are
+restricted to altering the application's data, but if any of them alter
+its code then an attacker might be able to exploit this to change the
+program.
 
-'Control Flow protection'
-     If available the '-fcf-protection=full' option must have been used.
-     Disabled by '--skip-cf-protection'.  If this option is disabled
-     then the check for GNU Property notes will also be disabled.
+   This problem usually only arises when a binary is built to execute at
+a fixed address.  Such binaries need text relocations to help them run
+at the address chosen.  The safest solution therefore is to compile the
+binary to be position independent by using the '-fPIC' or '-fPIE'
+compiler command line options.
 
-'Branch protection'
-     For AARCH64 binaries the '-mbranch-protection' option, if
-     available, must have either not.  Disabled by
-     '--skip-branch-protection'.
+   If necessary the test can be disabled via the '--skip-textrel' option
+and re-enabled via the '--test-textrel' option.
 
-'Stack realignment'
-     For I686 binaries, the '-mstackrealign' option must have been
-     specified.  Disabled by '--skip-stack-realign'.
+
+File: annobin.info,  Node: Test run path,  Next: Test cf protection,  Prev: Test textrel,  Up: Hardened
 
-'Source fortification'
-     The program must have been compiled with the
-     '-D_FORTIFY_SOURCE=[2|3]' command line option specified.  Disabled
-     by '--skip-fortify'.
+4.2.6 The run-path test
+-----------------------
 
-'Optimization'
-     The program must have been compiled with at least '-O2'
-     optimization enabled.  Disabled by '--skip-optimization'.
+       Problem:  An attacker could cause an application to use a corrupted shared library
+       Fix By:   Compiling with -Wl,--enable-new-dtags or moving the shared libraries needed to a proper location
+       Waive If: The application uses shared libraries held in non-standard locations
+       Waive If: The linker does not support --enable-new-dtags
 
-'Link Time Optimization'
-     The program must have been compiled with link time optimization
-     ('-flto') enabled.  Currently this is a soft check, so failing this
-     test is not considered a reason to fail the overall run.  Disabled
-     by '--skip-lto'.
+       Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag is corrupt
+       Example:  MAYB: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag exists but is empty
+       Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag contains a path that does not start with /usr
+       Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag has a path that contains '..'
+       Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag has $ORIGIN after a non-$ORIGIN path
+       Example:  MAYB: run-path test because the RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead
 
-'Read only relocations'
-     The program must not have any relocations that are held in a
-     writeable section.  Disabled by '--skip-gnu-relro'.
+   An application that uses shared libraries contains information on how
+to locate those libraries.  This information is a list of directories
+which should be searched for the libraries.  The test checks that the
+list is secure.
 
-'GNU Property Note'
-     For X86_64, AARCH64 and POWERPC binaries, check that a correctly
-     formatted GNU Property note is present.  The contents of the notes
-     are architecture specific.  Disabled by '--skip-property-note'.
+   The test actually covers several different aspects, such as all
+directory paths must be absolute, start with /USR and must not contain
+...  If any of these rules are broken then an attacker might be able to
+exploit the search paths to force the application to load their own,
+corrupted version of a shared library.
 
-'Enum Size'
-     Check that the program makes consistent use of the '-fshort-enum'
-     option.
+   Normally this test will only be triggered if an application is linked
+by an old linker which does not support the generation of the new format
+DT_RUNPATH search paths.  Or if it is linked against shared libraries
+which do not reside in standard locations.  Fixing the test depends upon
+whether these issues can be solved.
 
-'Production Ready Compiler'
-     Check that the program was built by a production-ready compiler.
-     Disabled by '--skip-production'.
+   If necessary the test can be disabled via the '--skip-run-path'
+option and re-enabled via the '--test-run-path' option.
 
-   The tool does support a couple of other command line options as well:
+
+File: annobin.info,  Node: Test cf protection,  Next: Test optimization,  Prev: Test run path,  Up: Hardened
+
+4.2.7 The cf-protection test
+----------------------------
+
+       Problem:  An attacker could compromise an unprotected binary
+       Fix By:   Compiling with -fcf-protection=full
+       Waive If: The application will not run on the latest Intel hardware
+       Waive If: The application is built by a compiler that does not support CET
+
+       Example:  FAIL: cf-protection test because only branch protection enabled
+       Example:  FAIL: cf-protection test because only return protection enabled
+       Example:  FAIL: cf-protection test because no protection enabled
+       Example:  FAIL: cf-protection test because insufficient Control Flow sanitization
+       Example:  FAIL: cf-protection test because no .note.gnu.property section = no control flow information
+       Example:  FAIL: cf-protection test because CET enabling note missing
+       Example:  FAIL: cf-protection test because control flow protection is not enabled
+
+   Intel have introduced a new security feature called CET to their
+Tiger Lake and newer cores:
+
+   <https://newsroom.intel.com/editorials/intel-cet-answers-call-protect-common-malware-threats/#gs.avhl8k>
+
+   This test checks to see that this feature is enabled.  Normally this
+is done by compiling the code with the '-fcf-protection=full' command
+line option enabled.  But if an application contains assembler code, or
+it is linked against a library that has not been built with the
+protection enabled, or it is built by a compiler that does not support
+CET then this test can fail.
+
+   The feature has to be enabled in the compiler as it involves
+inserting new instructions into the compiled code.  The feature is also
+an all-or-nothing type proposition for any process.  Either all of the
+code in the process must have been built to support CET - in which case
+the feature can be enabled - or if even a single component does not
+support CET then it must be disabled for the entire process.
+
+   In order to enforce this the compiler inserts a special note into
+compiled object files (the .note.gnu.property section referred to
+above).  This note actually contains more information about the binary
+than just the presence (or absence) of CET support.  It also includes
+details of the minimum x86 architecture revision needed and so on.
+
+   Then when the object files are linked together to create the
+executable the linker checks all of these notes, and if any object file
+or library is missing a note then it does not create a note in the
+output executable.  Or if all of the object files (and libraries of
+course) do have notes, but one or more of them do not have the
+CET-is-enabled flag, then it copies the notes into the executable, but
+always clears the CET-is-enabled flag.
+
+   Finally when a program is executed the run-time loader checks this
+note and if the CET-is-enabled flag is present then it enables the CET
+feature in the hardware.
+
+   Fixing this check either means enabling the '-fcf-protection=full'
+(for gcc) or the '-fcf-protection-branch' and '-fcf-protection-return'
+options (for Clang).
+
+   If an assembler source file is used as part of an application then it
+too needs to be updated.  Any location in the assembler where a branch
+or function call can land must now have an ENDBR64 instruction as the
+first instruction executed.  In addition the assembler needs a note to
+indicate that it supports CET. This note can be added via including this
+code snippet in the sources:
+
+     	.section	.note.gnu.property,"a"
+     	.align 8
+     	.long	 1f - 0f
+     	.long	 4f - 1f
+     	.long	 5
+     0:
+     	.string	 "GNU"
+     1:
+     	.align 8
+     	.long	 0xc0000002
+     	.long	 3f - 2f
+     2:
+     	.long	 0x3
+     3:
+     	.align 8
+     4:
+
+   If necessary the test can be disabled via the '--skip-cf-protection'
+option and re-enabled via the '--test-cf-protection' option.
+
+
+File: annobin.info,  Node: Test optimization,  Next: Test stack prot,  Prev: Test cf protection,  Up: Hardened
+
+4.2.8 The optimization test
+---------------------------
+
+       Problem:  Insufficient optimization prevents security features from working
+       Fix By:   Compiling with -O2
+       Waive If: The application does not use string/memory functions
+
+       Example:  FAIL: optimization test because optimization level too low
+       Example:  FAIL: optimization test because level too low
+       Example:  MAYB: optimization test because no valid notes found regarding this test
+
+   This test checks that the application was compiled with sufficient
+optimization enabled.
+
+   The C library security hardening features enabled via the
+'-D_FORTIFY_SOURCE=2' or '-D_FORTIFY_SOURCE=3' preprocessor command line
+options will only work properly if the compiler is run at an
+optimization level of at least '-O2'.  Hence this test checks to make
+sure that this level (or higher) has been used.
+
+   Normally the only reason for not using '-O2' or higher is because the
+application is space sensitive and needs to be compiled with '-Os' or
+the compilation process is so time intensive that using '-O0' is the
+only way to obtain reasonable build times.
+
+   If necessary the test can be disabled via the '--skip-optimization'
+option and re-enabled via the '--test-optimization' option.
+
+
+File: annobin.info,  Node: Test stack prot,  Next: Test stack clash,  Prev: Test optimization,  Up: Hardened
+
+4.2.9 The stack-prot test
+-------------------------
+
+       Problem:  Attackers exploiting stack overrun bugs can gain control of an application
+       Fix By:   Compiling with -fstack-protector-strong
+       Waive If: Don't
+
+       Example:  FAIL: stack-prot test because insufficient protection enabled
+       Example:  FAIL: stack-prot test because stack protection deliberately disabled
+       Example:  FAIL: stack-prot test because only some functions protected
+       Example:  FAIL: stack-prot test because insufficient Stack Safe sanitization
+
+   This test checks that the application has been compiled with stack
+protection enabled.  For gcc this means using the
+'-fstack-protector-strong' option and for Clang the
+'-fsanitize=safe-stack' option.  The gcc option does have some levels of
+protection other than STRONG, but STRONG is the only one that provides
+full protection.
+
+   The stack protection feature adds checks to compiled code that
+attempt to detect buffer overflows for local buffers.  These are often a
+source of vulnerability that can be exploited by an attacker.
+
+   If necessary the test can be disabled via the '--skip-stack-prot'
+option and re-enabled via the '--test-stack-prot' option.
+
+
+File: annobin.info,  Node: Test stack clash,  Next: Test fortify,  Prev: Test stack prot,  Up: Hardened
+
+4.2.10 The stack-clash test
+---------------------------
+
+       Problem:  Attackers exploiting stack overrun bugs can gain control of an application
+       Fix By:   Compiling with -fstack-clash-protection
+       Waive If: Don't
+
+       Example:  FAIL: stack-clash test because -fstack-clash-protection not enabled
+
+   This test checks that the application has been compiled with stack
+clash protection enabled.  If this feature is not enabled then an
+attacker could trick the application into overlapping its heap and
+stack, allowing them to alter both.
+
+   For a full explanation of this topic see these blogs:
+
+   <https://developers.redhat.com/blog/2017/09/25/stack-clash-mitigation-gcc-background>
+
+   <https://developers.redhat.com/blog/2019/04/30/stack-clash-mitigation-in-gcc-why-fstack-check-is-not-the-answer>
+
+   <https://developers.redhat.com/blog/2020/05/22/stack-clash-mitigation-in-gcc-part-3>
+
+   If necessary the test can be disabled via the '--skip-stack-clash'
+option and re-enabled via the '--test-stack-clash' option.
+
+
+File: annobin.info,  Node: Test fortify,  Next: Test notes,  Prev: Test stack clash,  Up: Hardened
+
+4.2.11 The fortify test
+-----------------------
+
+       Problem:  Buffer overruns in string/memory library functions can be exploited by an attacker
+       Fix By:   Compiling with -D_FORTIFY_SOURCE=2
+       Waive If: The application does not use C library string/memory functions
+
+       Example:  FAIL: fortify test because -D_FORTIFY_SOURCE=2 was not present on the command line
+       Example:  FAIL: fortify test because -O level is too low
+
+   This test checks that the application was compiled with either
+'-D_FORTIFY_SOURCE=2' or '-D_FORTIFY_SOURCE=3' specified on the compiler
+command line.  Since these options need good optimization in order to
+work properly the test also checks that '-O2' or higher was used.
+
+   The '_FORTIFY_SOURCE' define enables the use of secure version of
+certain string and memory C library functions.  For full details of what
+it does, see this blog:
+<https://access.redhat.com/blogs/766093/posts/1976213>
+
+   Any program that uses the string or memory functions in the GLIBC
+library should have this define present on the compiler command line.
+Programs that do not use these functions do not need the define, but it
+will not hurt to have it present anyway.
+
+   If necessary the test can be disabled via the '--skip-fortify' option
+and re-enabled via the '--test-fortify' option.
+
+
+File: annobin.info,  Node: Test notes,  Next: Test gnu relro,  Prev: Test fortify,  Up: Hardened
+
+4.2.12 The notes test
+---------------------
+
+       Problem:  Lack of annobin notes in a binary means that other tests will not work properly
+       Fix By:   Compiling with -fplugin=annobin
+       Waive If: The annobin plugin is not available
+
+       Example:  FAIL: notes test because gaps were detected in the annobin coverage
+       Example:  MAYB: notes test because not all of the .text section is covered by notes
+       Example:  FAIL: notes test because annobin notes were not found
+
+       Example:  MAYB: lto test because no indication that LTO was used
+       Example:  MAYB: stack-clash test because no notes found regarding this test
+       Example:  FAIL: fortify test because no indication that the necessary option was used (and a C compiler was detected)
+       Example:  FAIL: warnings test because no indication that the necessary option was used (and a C compiler was detected)
+       Example:  FAIL: stack-realign test because stack realign support is mandatory
+       Example:  FAIL: branch-protection test because the -mbranch-protection option was not used
+
+   This test checks that there are annobin notes covering all of the
+file.  Annobin notes are generated by the compiler and describe the
+security features that have been enabled.  The notes contain range
+information, so that it is possible to determine if all of an
+application has been covered by the notes, or if there are parts that
+are missing notes.
+
+   If annobin notes are missing from a file then some of the other
+checks run by the HARDENED checker will not work, which can trigger FAIL
+or MAYB results for those tests.
+
+   Annobin notes are normally produced by a compiler plugin which can be
+enabled via the '-fplugin=annobin' option for gcc or Clang, and the
+'-fpass-plugin=annobin' option for LLVM. (Note for pre version-13 of
+LLVM the '-Xclang -load -Xclang annobin' option should be used instead).
+
+   Annobin notes can be generated for assembler sources by using the
+'-Wa,--generate-missing-build-notes=yes' option.
+
+   If necessary the test can be disabled via the '--skip-notes' and
+'--ignore-gaps' options and re-enabled via the '--test-notes' and
+'--report-gaps' options.
+
+
+File: annobin.info,  Node: Test gnu relro,  Next: Test pie,  Prev: Test notes,  Up: Hardened
+
+4.2.13 The gnu-relro test
+-------------------------
+
+       Problem:  An attacker could alter how an applications interacts with shared libraries
+       Fix By:   Link with -Wl,-z,relro,-z,now
+       Waive If: The application runs in an space/time constrained environment
+
+       Example:  FAIL: gnu relro test because not linked with -Wl,-z,relro
+
+   Some parts of an executable need to be modified when it starts, so
+that it can access any shared libraries that it uses.  This process is
+called relocation, and once it is finished the altered code/data should
+not be modified again.  The GNU RELRO test checks that write permission
+can be removed once the relocations have finished.
+
+   Enabling GNU RELRO increases the executable size on disk and in
+memory, and depending upon the application it can also cause a slow
+start time.  It does not cause any significant execution time penalty,
+and using pre-linking can eliminate the startup penalty.
+
+   For programs that do not need to be reloaded often, such as daemons
+and servers, and on systems where disk and memory are relatively
+abundant such as desktops and servers, the overhead of GNU RELRO is very
+insignificant and highly recommended.  For programs that need to be
+reloaded often, the execution penalty of GNU RELRO can be eliminated by
+using prelinking.  For embedded systems where space is scarce, GNU RELRO
+is not recommended due to its space overhead.
+
+   To turn on GNU RELRO compile with the gcc '-Wl,-z,relro,-z,now'
+option.
+
+   If necessary the test can be disabled via the '--skip-gnu-relro'
+option and re-enabled via the '--test-gnu-relro' option.
+
+
+File: annobin.info,  Node: Test pie,  Next: Test pic,  Prev: Test gnu relro,  Up: Hardened
+
+4.2.14 The pie test
+-------------------
+
+       Problem:  Static binaries are more vulnerable to attacks
+       Fix By:   Link with -Wl,-pie
+       Waive If: Don't
+
+       Example:  FAIL: pie test because not built with '-Wl,-pie' (gcc/clang) or '-buildmode pie' (go)
+
+   Programs can be compiled to either load at a fixed address in memory
+(STATIC programs) or at a random address assigned at startup time
+(DYNAMIC programs).  Static programs are more vulnerable to exploits
+because an attacker will know exactly where every part of the program is
+located.  Thus building dynamic executables is recommended.
+
+   This test checks that the appropriate linker option ('-pie') has been
+used to generate dynamic executables.  The option is only needed for
+linking executables, not shared libraries.
+
+   Note - this check is related to the *note Test pic:: test.  This test
+checks that the correct linker option has been used.  That test checks
+that the correct compile time option has been used.
+
+   If necessary the test can be disabled via the '--skip-pie' option and
+re-enabled via the '--test-pie' option.
+
+
+File: annobin.info,  Node: Test pic,  Next: Test dynamic segment,  Prev: Test pie,  Up: Hardened
+
+4.2.15 The pic test
+-------------------
+
+       Problem:  Static binaries are more vulnerable to attacks
+       Fix By:   Compile with -fPIC or -fPIE
+       Waive If: Don't.
+
+       Example:  FAIL: pic test because -fpic/-fpie not enabled
+
+   Programs can be compiled to either load at a fixed address in memory
+(STATIC programs) or at a random address assigned at startup time
+(DYNAMIC programs).  Static programs are more vulnerable to exploits
+because an attacker will know exactly where every part of the program is
+located.  Thus building dynamic executables is recommended.
+
+   This test checks that the appropriate compiler option has been used
+to generate dynamic code.  For shared libraries this is the '-fPIE'
+option should be used.  For dynamic executables the '-fPIC' option
+should be used.  Note - there are lower case alternatives of these
+options (ie '-fpie' and '-fpic') which can also be used.  The difference
+between the lower case and upper case versions is architecture
+dependent, but usually the lower case version will only work with
+smaller programs, wheres the upper case version works for all program
+sizes.
+
+   Note - this check is related to the *note Test pie:: test.  This test
+checks that the correct compile time option has been used.  That test
+checks that the correct link time option has been used.
+
+   If necessary the test can be disabled via the '--skip-pic' option and
+re-enabled via the '--test-pic' option.
+
+
+File: annobin.info,  Node: Test dynamic segment,  Next: Test dynamic tags,  Prev: Test pic,  Up: Hardened
+
+4.2.16 The dynamic-segment test
+-------------------------------
+
+       Problem:  Programs with more than one dynamic section will not be loaded properly
+       Fix By:   Fix assembler source code and/or linker script
+       Waive If: Don't.
+
+       Example:  FAIL: dynamic segment test because multiple dynamic sections detected
+
+   Dynamic executables must have a dynamic section which contains
+information that is used by the loader at program startup.  The loader
+however only expects there to be one dynamic section in a program, and
+it does not cope it there are more than one.  Normally this is not an
+issue however as the linker will ensure that there is only one dynamic
+section.  It is possible however to use a custom linker script to create
+more than one dynamic section, or to write some assembler code
+specifically designed to create multiple dynamic sections.
+
+   If necessary the test can be disabled via the
+'--skip-dynamic-segment' option and re-enabled via the
+'--test-dynamic-segment' option.
+
+
+File: annobin.info,  Node: Test dynamic tags,  Next: Test not dynamic tags,  Prev: Test dynamic segment,  Up: Hardened
+
+4.2.17 The dynamic-tags test
+----------------------------
+
+       Problem:  Unprotected AArch64 binaries are vulnerable to ROP/JOP style attacks
+       Fix By:   Compile with -mbranch-protection=standard
+       Waive If: Not running on AArch64
+       Waive If: The application will not run on Fedora 35 or later.
+       Waive If: The application will not run on newer AArch64 cores.
+
+       Example:  FAIL: dynamic tags test because BTI_PLT and PAC_PLT flags missing from the dynamic tags
+       Example:  FAIL: dynamic tags test because BTI_PLT flag is missing from the dynamic tags
+       Example:  FAIL: dynamic tags test because PAC_PLT flag is missing from the dynamic tags
+       Example:  FAIL: dynamic tags test because no dynamic tags found
+
+   AArch64 processors are vulnerable to a class of attack known as ROP
+and JOP style attacks.  Preventing this kind of exploit requires
+assistance from the hardware itself, in the form of new instructions
+that need to be inserted by the compiler, and new bits in the core's
+status that need to be set.
+
+   This test checks to see if executable binaries have been marked as
+supporting the necessary security features to prevent this kind of
+attack.  If they are marked then the runtime loader can enable the
+features in the processor core.  This marking is done by setting flags
+in the tags found in the dynamic section of the executable.  If the
+flags are missing then the executable is considered to be unprotected.
+
+   The security features are enabled by compiling with the
+'-mbranch-protection=standard' gcc command line option.
+
+   Note - these security features are only found on newer versions of
+the AArch64 architecture, and they need a compiler and a loader that
+will support them.  Currently this means Fedora 35 or later, but not
+RHEL.
+
+   Note - this test is the inverse of the *note Test not dynamic tags::
+test and directly related to the *note Test branch protection:: test.
+
+   Note - this test is automatically enabled if the '--profile-rawhide'
+options are used.
+
+   If necessary the test can be disabled via the '--skip-dynamic-tags'
+option and re-enabled via the '--test-dynamic-tags' option.
+
+
+File: annobin.info,  Node: Test not dynamic tags,  Next: Test branch protection,  Prev: Test dynamic tags,  Up: Hardened
+
+4.2.18 The not-dynamic-tags test
+--------------------------------
+
+       Problem:  Protecting AArch64 binaries needs newer versions of AArch64 cores
+       Fix By:   Compile with -mbranch-protection=off
+       Waive If: Not running on AArch64
+       Waive If: The application will run on Fedora 35 or later.
+       Waive If: The application will not run on newer AArch64 cores.
+
+       Example:  FAIL: not dynamic tags test because BTI_PLT and PAC_PLT flags are present in the dynamic tags
+       Example:  FAIL: not dynamic tags test because BTI_PLT flag is present in the dynamic tags
+       Example:  FAIL: not dynamic tags test because PAC_PLT flag is present in the dynamic tags
+
+   Note - this test is the inverse of the *note Test dynamic tags:: test
+and directly related to the *note Test not branch protection:: test.
+
+   This test checks to see if executable AArch64 binaries have been
+marked as supporting the BTI and PAC security features.  Such features
+require the support of the run-time loader in order to work, and this
+test is intended for environments where this support is missing.  (Such
+as RHEL or pre version-35 Fedora).
+
+   The security features can be disabled by compiling with the
+'-mbranch-protection=none' gcc command line option.
+
+   Note - this test is automatically enabled if the '--profile-el7' or
+'--profile-el9' options are used.
+
+   If necessary the test can be disabled via the
+'--skip-not-dynamic-tags' option and re-enabled via the
+'--test-not-dynamic-tags' option.
+
+
+File: annobin.info,  Node: Test branch protection,  Next: Test not branch protection,  Prev: Test not dynamic tags,  Up: Hardened
+
+4.2.19 The branch-protection test
+---------------------------------
+
+       Problem:  Unprotected AArch64 binaries are vulnerable to ROP/JOP style attacks
+       Fix By:   Compile with -mbranch-protection=standard
+       Waive If: Not running on AArch64
+       Waive If: The application will not run on Fedora 35 or later.
+       Waive If: The application will not run on newer AArch64 cores.
+
+       Example:  FAIL: branch protection test because not enabled
+       Example:  FAIL: branch protection test because only partially enabled
+       Example:  FAIL: branch protection test because .note.gnu.property section not found (it is needed for branch protection support)
+       Example:  FAIL: branch protection test because the -mbranch-protection option was not used
+
+   AArch64 processors are vulnerable to a class of attack known as ROP
+and JOP style attacks.  Preventing this kind of exploit requires
+assistance from the hardware itself, in the form of new instructions
+that need to be inserted by the compiler, and new bits in the core's
+status that need to be set.
+
+   This test checks to see if the compile time option to enable the
+security feature was used.  There are four levels of security available,
+ranging from none through partial (some functions are protected others
+are not) to full.  The test checks that full security has been enabled.
+
+   The security feature is enabled by compiling with the
+'-mbranch-protection=standard' gcc command line option.
+
+   Note - these security features are only found on newer versions of
+the AArch64 architecture, and they need a compiler and a loader that
+will support them.  Currently this means Fedora 35 or later, but not
+RHEL.
+
+   Note - this test is the inverse of the *note Test not branch
+protection:: test and directly related to the *note Test dynamic tags::
+test.
+
+   Note - this test is automatically enabled if the '--profile-rawhide'
+options are used.
+
+   If necessary the test can be disabled via the
+'--skip-branch-protection' option and re-enabled via the
+'--test-branch-protection' option.
+
+
+File: annobin.info,  Node: Test not branch protection,  Next: Test short enums,  Prev: Test branch protection,  Up: Hardened
+
+4.2.20 The not-branch-protection test
+-------------------------------------
+
+       Problem:  Protecting AArch64 binaries needs newer versions of AArch64 cores
+       Fix By:   Compile with -mbranch-protection=none
+       Waive If: Not running on AArch64
+       Waive If: The application will run on Fedora 35 or later.
+       Waive If: The application will not run on newer AArch64 cores.
+
+       Example:  FAIL: not branch protection test because protection enabled
+       Example:  FAIL: not branch protection test because only partially disabled
+
+   Note - this test is the inverse of the *note Test branch protection::
+test and directly related to the *note Test not dynamic tags:: test.
+
+   This test checks to see if the compile time option to enable the
+AArch64 branch protection security feature was used.  This feature is
+only supported on newer versions of AArch64 core, and will not work on
+older cores.  Hence this test checks to make sure that the option was
+not used, or was used but was set to disable the feature.
+
+   The security features can be disabled by compiling with the
+'-mbranch-protection=none' gcc command line option.
+
+   Note - this test is automatically enabled if the '--profile-el7' or
+'--profile-el9' options are used.
+
+   If necessary the test can be disabled via the
+'--skip-not-branch-protection' option and re-enabled via the
+'--test-not-branch-protection' option.
+
+
+File: annobin.info,  Node: Test short enums,  Next: Test stack realign,  Prev: Test not branch protection,  Up: Hardened
+
+4.2.21 The short-enums test
+---------------------------
+
+       Problem:  Compiler options can change the size of enums
+       Fix By:   Compile with consistent use of the -fshort-enum option
+       Waive If: Enums are not passed between different compilation units
+
+       Example:  FAIL: short-enum test because both short and long enums supported
+
+   The '-fshort-enums' gcc compiler option can be used to reduce code
+size by storing enums in a SHORT instead of an INT.  But if the code
+passes enums between functions compiled in different files then the
+'-fshort-enums' option must be used consistently or there could be
+problems.
+
+   This test checks that either all files in an application were
+compiled with the '-fshort-enums' option, or that the option was never
+used.
+
+   If necessary the test can be disabled via the '--skip-short-enums'
+option and re-enabled via the '--test-short-enums' option.
+
+
+File: annobin.info,  Node: Test stack realign,  Next: Test production,  Prev: Test short enums,  Up: Hardened
+
+4.2.22 The stack-realign test
+-----------------------------
+
+       Problem:  Legacy x86 code is incompatible with SSE instructions
+       Fix By:   Compile with -mstackrealign
+       Waive If: The application is not going run in a 32-bit x86 environment
+       Waive If: The application will not use SSE (or later) instructions
+
+       Example:  FAIL: stack-realign test because -mstack-realign not enabled
+       Example:  FAIL: stack-realign test because stack realign support is mandatory
+
+   On the Intel 32-bit x86 architecture most instructions work with
+4-byte aligned addresses.  The SSE extension (and later) however need
+16-byte aligned addresses.  This causes problems for data that is held
+on the stack, if the stack pointer is not aligned to a 16-byte address.
+The '-mstackrealign' gcc command line option tells the compiler to
+generate extra code at function entry which ensures that 16-byte
+alignment is maintained.
+
+   This test checks to make sure that this option has been used when
+compiling x86 binaries.
+
+   If necessary the test can be disabled via the '--skip-stack-realign'
+option and re-enabled via the '--test-stack-realign' option.
+
+
+File: annobin.info,  Node: Test production,  Next: Test lto,  Prev: Test stack realign,  Up: Hardened
+
+4.2.23 The production test
+--------------------------
+
+       Problem:  Shipping code generated by an experimental compiler is bad
+       Fix By:   Compile with a production ready compiler
+       Waive If: The code is never going to be shipped
+
+       Example:  FAIL: production test because a production-ready compiler was not used to build the binary
+
+   This test checks to make sure that the binary was not produced by an
+experimental compiler.  Experimental compilers can be detected by
+examining their version information, which will include the string
+NOT_FOR_PRODUCTION.
+
+   If necessary the test can be disabled via the '--skip-production'
+option and re-enabled via the '--test-production' option.
+
+
+File: annobin.info,  Node: Test lto,  Next: Test property note,  Prev: Test production,  Up: Hardened
+
+4.2.24 The lto test
+-------------------
+
+       Problem:  Mixed use of LTO and non-LTO binaries indicates a problem with the build system
+       Fix By:   Using -flto consistently
+       Waive If: LTO building is not wanted
+
+       Example:  FAIL: lto test because compiled with both -flto and -fno-lto
+
+   This test checks to see if the '-flto' compiler command line option
+was used.  Whilst this option can produce better code, its use is not
+essential, hence this test currently only checks to see if both the
+'-flto' and the '-fno-lto' options were used together.
+
+   If necessary the test can be disabled via the '--skip-lto' option and
+re-enabled via the '--test-lto' option.
+
+
+File: annobin.info,  Node: Test property note,  Next: Test threads,  Prev: Test lto,  Up: Hardened
+
+4.2.25 The property-note test
+-----------------------------
+
+       Problem:  Badly formed or missing GNU property notes can compromise an application at runtime
+       Fix By:   Investigate and fix the creation of the notes
+       Waive If: Using old tools that do not generate the notes
+
+       Example:  FAIL: property-note test because there is more than one GNU Property note
+       Example:  FAIL: property-note test because the property note does not have expected name
+       Example:  FAIL: property-note test because the property note data has the wrong size
+       Example:  FAIL: property-note test because the note section is present but empty
+       Example:  FAIL: property-note test because the property note data has an invalid size
+       Example:  FAIL: property-note test because the IBT property is not enabled
+       Example:  FAIL: property-note test because the SHSTK property is not enabled
+       Example:  FAIL: property-note test because unexpected property note type
+       Example:  FAIL: property-note test because the BTI property is not enabled
+       Example:  FAIL: property-note test because the GNU Property note segment not 8 byte aligned
+       Example:  FAIL: property-note test because there is more than one GNU Property note in the note segment
+       Example:  FAIL: property-note test because .note.gnu.property section not found (it is needed for branch protection support
+       Example:  FAIL: property-note test because no .note.gnu.property section = no control flow information
+       Example:  FAIL: property-note test because control flow protection is not enabled
+
+   GNU property notes are special markers in binary files that provide
+information about the program to the runtime loader.  This information
+is architecture specific and it often includes details about any
+security features that were enabled when the program was compiled.
+
+   This test checks that the property note is present - if needed for
+the particular architcture - and that it is properly formatted.
+
+   Problems with property notes are usually related to other security
+options being missing, or the use of assembler source files which do not
+contain their own instructions for creating property notes.
+
+   If necessary the test can be disabled via the '--skip-property-note'
+option and re-enabled via the '--test-property-note' option.
+
+
+File: annobin.info,  Node: Test threads,  Next: Test glibcxx assertions,  Prev: Test property note,  Up: Hardened
+
+4.2.26 The threads test
+-----------------------
+
+       Problem:  Programs that do not support exceptions are more vulnerable to attacks
+       Fix By:   Compile with -fexceptions
+       Waive If: Program size is an important issue
+
+       Example:  FAIL: threads test because not compiled with -fexceptions
+
+   This test checks to make sure that the '-fexceptions' g++ command
+line option was used when building the binary.  The test is only
+triggered if the binary uses the PTHREADS library as single threaded
+applications can cleanly tidy up after themselves if an exception is
+generated.
+
+   If necessary the test can be disabled via the '--skip-threads' option
+and re-enabled via the '--test-threads' option.
+
+
+File: annobin.info,  Node: Test glibcxx assertions,  Next: Test entry,  Prev: Test threads,  Up: Hardened
+
+4.2.27 The glibcxx-assertions test
+----------------------------------
+
+       Problem:  Compiled C++ code might contain bugs that could have been detected and fixed
+       Fix By:   Compile with -D_GLIBCXX_ASSERTIONS
+       Waive If: Not compiling C++
+       Waive If: Not using functions from libstdc++
+
+       Example:  FAIL: glibcxx-assertions test because compiled without -D_GLIBCXX_ASSERTIONS
+
+   This test checks to make sure that the '-D_GLIBCXX_ASSERTIONS' g+=
+compiler command line option was used when building binaries.  This
+option is one of several supported by the LIBSTDC++ library and it is
+used to enable various NULL pointer and bounds checking security
+features.  For more information see:
+
+   <https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_macros.html>
+
+   If necessary the test can be disabled via the
+'--skip-glibcxx-assertions' option and re-enabled via the
+'--test-glibcxx-assertions' option.
+
+
+File: annobin.info,  Node: Test entry,  Next: Test go revision,  Prev: Test glibcxx assertions,  Up: Hardened
+
+4.2.28 The entry test
+---------------------
+
+       Problem:  Intel's CET security feature requires that the first instruction in a program be ENDBR
+       Fix By:   Compile statup code with -fcf-protection
+       Waive If: The application will not run on the latest Intel hardware
+
+       Example:  FAIL: entry test because instruction at entry is not ENDBR32
+       Example:  FAIL: entry test because instruction at entry is not ENDBR64
+
+   This test checks to make sure that the first instruction in a program
+for the x86 or x86_64 architectures is ENDBR.  This is needed as part of
+Intel's CET security feature.  (See *note Test cf protection:: for more
+details on CET).
+
+   If necessary the test can be disabled via the '--skip-entry' option
+and re-enabled via the '--test-entry' option.
+
+
+File: annobin.info,  Node: Test go revision,  Next: Test only go,  Prev: Test entry,  Up: Hardened
+
+4.2.29 The go-revision test
+---------------------------
+
+       Problem:  Using old versions of the GO compiler looses out on security enhacements
+       Fix By:   Using a newer GO compiler
+       Waive If: No new GO compiler is available
+
+       Example:  FAIL: go-revision test because GO revision must be >= 14
+       Example:  FAIL: go-revision test because multiple, different GO version strings found
+       Example:  FAIL: go-revision test because no Go compiler revision information found
+
+   This test checks to see that GO code has been compiled by at least a
+revision 14 compiler.  Earlier versions of the compiler do not have all
+the bug fixes and security enhancements of later versions.
+
+   Note - it is likely that the minimum revision of the GO compiler will
+be increased in the future.
+
+   If necessary the test can be disabled via the '--skip-go-revision'
+option and re-enabled via the '--test-go-revision' option.
+
+
+File: annobin.info,  Node: Test only go,  Next: Test warnings,  Prev: Test go revision,  Up: Hardened
+
+4.2.30 The only-go test
+-----------------------
+
+       Problem:  Mixing GO and C is unsafe on x86 platforms
+       Fix By:   Using a new GO compiler
+       Waive If: Always
+
+       Example:  FAIL: only-go test because combining GO and non-GO object files on x86 systems is not safe - it disables CET
+
+   Note - this test is currently disabled.  The GO compiler's lack of
+support for CET is a known issue that cannot be addressed by package
+maintainers.  Hence there is no point in issuing an error message.
+
+   This test checks to see if GO and C are being used together in the
+same program.  This is a problem for code that is going to run on x86
+architectures as the GO compiler does not support Intel's CET
+technology.  (See *note Test cf protection:: for more details on CET).
+The GO language is inheritantly safer than C, but if the two are mixed,
+then the C parts will be missing out on the protection offered by CET.
+
+   If necessary the test can be disabled via the '--skip-only-go' option
+and re-enabled via the '--test-only-go' option.
+
+
+File: annobin.info,  Node: Test warnings,  Next: Test instrumentation,  Prev: Test only go,  Up: Hardened
+
+4.2.31 The warnings test
+------------------------
+
+       Problem:  Compiling without warnings enabled can result in poor code
+       Fix By:   Add -Wall to the compiler command line
+       Waive If: There are known problems with using -Wall
+
+       Example:  FAIL: warnings test because compiled without either -Wall or -Wformat-security
+
+   This test checks to see that a file has been compiled with either or
+both of the '-Wall' and '-Wformat-security' options specified.  Enabling
+warnings - and then fixing the problems reported - results in better
+quality code that is less likely to contain bugs.
+
+   If necessary the test can be disabled via the '--skip-warnings'
+option and re-enabled via the '--test-warnings' option.
+
+
+File: annobin.info,  Node: Test instrumentation,  Next: Hardened Command Line Options,  Prev: Test warnings,  Up: Hardened
+
+4.2.32 The instrumentation test
+-------------------------------
+
+       Problem:  Instrumented binaries are bigger and slower than regular binaries
+       Fix By:   Removing instrumentation options from compiler command line
+       Waive If: Instrumentation is needed.
+
+       Example:  WARN: Instrumentation enabled - this is probably a mistake for production binaries
+
+   This test checks to see if any of gcc's instrumentation command line
+options have been used when the binary built.  These options are:
+'_fsanitize', '-finstrument-functions', '-p', '-pg', and
+'-fprofile-arcs'.
+
+   There is no way to disable this test.
+
+
+File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardened Results,  Prev: Test instrumentation,  Up: Hardened
+
+4.2.33 Command line options specific to the hardened tool
+---------------------------------------------------------
 
 '--skip-all'
      Disable all tests.  Not really useful unless followed by...
 
 '--test-NAME'
      Enable test NAME.
+
+'--test-all'
+     Enable all the tests.
 
 '--test-future'
      Report _future fail_ tests.  These are tests for security features
@@ -1005,11 +1883,15 @@ File: annobin.info,  Node: Undocumented Tests,  Next: Waiving Annocheck Results,
 
 '--profile-el9'
 '--profile-rawhide'
+'--profile-el7'
      Rather than enabling and disabling specific tests a selection can
      be chosen via a profile option.  The '--profile-el9' option will
      select the tests suitable for _RHEL-9_ binaries.  The
      '--profile-rawhide' option will select tests suitable for _Fedora
-     rawhide_ binaries.  Other profiles may be added in the future.
+     rawhide_ binaries and the '--profile-el7' option will select tests
+     suitable for _RHEL-7_ binaries.
+
+     Other profiles may be added in the future.
 
 '--disable-hardened'
      Disable the tool.
@@ -1020,6 +1902,9 @@ File: annobin.info,  Node: Undocumented Tests,  Next: Waiving Annocheck Results,
 
 '--ignore-gaps'
      Do not complain about gaps in the note data.
+
+'--report-gaps'
+     Do complain about gaps in the note data.
 
 '--fixed-format-messages'
      Display messages in a fixed, machine parseable format.  The format
@@ -1055,29 +1940,52 @@ File: annobin.info,  Node: Undocumented Tests,  Next: Waiving Annocheck Results,
      and enabled in 'verbose' mode.  This option and its inverse
      '--base-filenames' can be used to set a fixed choice.
 
+'--no-urls'
+'--provide-urls'
+     By default when a FAIL or MAYB result is displayed by the HARDENED
+     checker a URL to the online version of the relevant section in this
+     document is also provided.  (Unless the '--fixed-format-messages'
+     option has been enabled).  The '--no-urls' option disables the
+     display of the URLs and the '--provide-urls' re-enables the
+     display.
+
 
-File: annobin.info,  Node: Waiving Annocheck Results,  Prev: Undocumented Tests,  Up: Hardened
+File: annobin.info,  Node: Waiving Hardened Results,  Prev: Hardened Command Line Options,  Up: Hardened
 
-4.2.5 How to waive the results of annocheck tests
--------------------------------------------------
+4.2.34 How to waive the results of the hardening tests
+------------------------------------------------------
 
-Now that 'annocheck' is being used by the builders for Fedora and RHEL
-packages it is possible that certain tests may need to be waived for
-certain packages.  This can be done on a per-package basis by editting
-the contents of the 'rpminspect.yaml' file and adding an entry like
-this:
+[This section is Red Hat specific.]
+
+   Now that 'annocheck' is being used by the builders for Fedora and
+RHEL packages it is possible that certain tests may need to be waived
+for certain packages.  This can be done on a per-package basis by
+editing the contents of the 'rpminspect.yaml' file and adding an entry
+like this:
 
       annocheck:
          - hardened: --skip-property-note --ignore-unknown --verbose
 
-   This example shows how the _property note_ test can be ignored.  Note
-that doing this overrides the default options that are passed to
-annocheck by the rpminspect framework, which is why the
+   This example shows how the _property note_ test can be ignored.
+Beware however that doing this overrides the default options that are
+passed to annocheck by the rpminspect framework, which is why the
 '--ignore-unknown' and '--verbose' options are also included in the
 example.
 
+   For more information on rpmdiff see:
+
+   <https://docs.engineering.redhat.com/display/HTD/rpmdiff-elf-binarylibrary>
+
+   For more information on the use of annobin in RHEL see:
+
+   <https://one.redhat.com/rhel-developer-guide/#_annocheck_ensuring_comprehensive_elf_distro_flags>
+
+   To get more help on deciding whether or not a test should be waived
+please ask on either of the OS-DEVEL-LIST@REDHAT.COM OS Devel or the
+RHEL-DEVEL@REDHAT.COM RHEL Devel mailing lists.
+
 
-File: annobin.info,  Node: Notes,  Next: Section-Size,  Prev: Hardened,  Up: Annocheck
+File: annobin.info,  Node: Notes,  Next: Size,  Prev: Hardened,  Up: Annocheck
 
 4.3 The annobin note displayer
 ==============================
@@ -1098,7 +2006,7 @@ enabled by default it may also be useful to add the '--disable-hardened'
 option to the command line.
 
 
-File: annobin.info,  Node: Section-Size,  Next: Timing,  Prev: Notes,  Up: Annocheck
+File: annobin.info,  Node: Size,  Next: Timing,  Prev: Notes,  Up: Annocheck
 
 4.4 The section size recorder
 =============================
@@ -1130,13 +2038,13 @@ set.  Currently only W, A and X are recognised as flags, indicating that
 the section must have the WRITE, ALLOC or EXECUTE flags set
 respectively.  If the ! exclamation mark character is present then it
 negates the meaning of the following flags.  Thus
-'--section-sec-flags=W' option will search for any writeable section
+'--section-sec-flags=W' option will search for any writable section
 whereas the '--size-sec-flags=W!A' option will search only for sections
-that are writeable but not allocated.
+that are writable but not allocated.
 
    Instead of searching for sections by flags it is also possible to
 search for segments by flags using the '--size-seg-flags=<flags>'
-option.  The flags recognised for segments are W for writeable, R for
+option.  The flags recognised for segments are W for writable, R for
 readable and X for executable.  Again the ! character can be used to
 invert the meaning of the flags that follow it.
 
@@ -1146,7 +2054,7 @@ the size of the named section(s) in each file it encounters.  If the
 nearest byte, kibibyte, mebibyte or gibibyte, as appropriate.
 
 
-File: annobin.info,  Node: Timing,  Prev: Section-Size,  Up: Annocheck
+File: annobin.info,  Node: Timing,  Prev: Size,  Up: Annocheck
 
 4.5 How long did the check take ?
 =================================
@@ -1202,7 +2110,7 @@ configure options available to customise the build:
      default the configure system will detect if the library is
      installed and if not, then it will disable the building of
      'annocheck' and the running of the tests.  (Since they use
-     'annocheck').  This behaviour can be overrridden by the
+     'annocheck').  This behaviour can be overridden by the
      '--without-libelf' option which forces the build to assume that
      libelf is absent even if it would normally be detected.
 
@@ -1335,7 +2243,7 @@ version of a tool that was built between a range of dates.
      example 6.2.1.
 
 '--maxver=VERSION'
-     Only report binaries built by a tool whoes version is VERSION or
+     Only report binaries built by a tool whose version is VERSION or
      lower.  Can be combined with the '--minver' option to restrict
      output to those binaries created by tools within a specific version
      range.
@@ -1402,7 +2310,7 @@ used uniformly throughout the binary.
 '-s'
      Produce no output.  Just return an exit status.
 
-'--inconsitencies'
+'--inconsistencies'
 '-i'
      Only report files with potential ABI problems.
 
@@ -1410,8 +2318,8 @@ used uniformly throughout the binary.
      Do not report file types that are not supported or recognised.
 
 '--ignore-ABI|ENUM|FORTIFY|STACK-PROT'
-     Disables individual ABI checks.  Multiple occurences of this option
-     accumulate.  Possible option values are:
+     Disables individual ABI checks.  Multiple occurrences of this
+     option accumulate.  Possible option values are:
 
      'ABI'
           Disable checks of the general ABI information.
@@ -1629,7 +2537,7 @@ by the 'find' command, like this:
      Enables verbose mode, causing the script to detail each action it
      takes.
 
-     If this option is repeated it has the special effect of cancelling
+     If this option is repeated it has the special effect of canceling
      out the automatic addition of the '-i' to recursive invocations of
      the script.
 
@@ -1670,7 +2578,7 @@ by the 'find' command, like this:
 
 '--'
      Stops processing of command line options.  This allows the script
-     to be run with a program whoes name starts with a dash.
+     to be run with a program whose name starts with a dash.
 
 
 File: annobin.info,  Node: GNU FDL,  Prev: Legacy Scripts,  Up: Top
@@ -2158,34 +3066,63 @@ their use in free software.
 
 Tag Table:
 Node: Top705
-Node: Introduction1767
+Node: Introduction1768
 Node: Plugins3816
-Node: Examining11941
-Node: The Version Encoding14670
-Node: The STACK Encoding15910
-Node: The PIC Encoding16508
-Node: The GOW Encoding17136
-Node: The CF Encoding18939
-Node: The ENUM Encoding20011
-Node: The INSTRUMENT Encoding20400
-Node: Annocheck21774
-Node: Built-By25036
-Node: Hardened26566
-Node: Test bind-now28536
-Node: Test gnu-stack30040
-Node: Test writeable-got32152
-Node: Undocumented Tests33401
-Node: Waiving Annocheck Results39376
-Node: Notes40220
-Node: Section-Size40864
-Node: Timing43018
-Node: Configure Options43665
-Node: Legacy Scripts46005
-Node: Who Built Me46780
-Node: ABI Checking49540
-Node: Hardening Checks51654
-Node: Checking Archives55740
-Node: GNU FDL58162
+Node: Examining11942
+Node: The Version Encoding14671
+Node: The STACK Encoding15911
+Node: The PIC Encoding16509
+Node: The GOW Encoding17137
+Node: The CF Encoding18940
+Node: The ENUM Encoding20012
+Node: The INSTRUMENT Encoding20401
+Node: Annocheck21775
+Node: Built By25665
+Node: Hardened27168
+Node: Test bind now30682
+Node: Test gnu stack32225
+Node: Test writable got34620
+Node: Test rwx seg35888
+Node: Test textrel37158
+Node: Test run path38408
+Node: Test cf protection40603
+Node: Test optimization44551
+Node: Test stack prot45937
+Node: Test stack clash47266
+Node: Test fortify48413
+Node: Test notes49835
+Node: Test gnu relro52111
+Node: Test pie53828
+Node: Test pic55029
+Node: Test dynamic segment56577
+Node: Test dynamic tags57700
+Node: Test not dynamic tags59988
+Node: Test branch protection61620
+Node: Test not branch protection63818
+Node: Test short enums65350
+Node: Test stack realign66383
+Node: Test production67657
+Node: Test lto68470
+Node: Test property note69258
+Node: Test threads71727
+Node: Test glibcxx assertions72559
+Node: Test entry73595
+Node: Test go revision74502
+Node: Test only go75538
+Node: Test warnings76691
+Node: Test instrumentation77529
+Node: Hardened Command Line Options78282
+Node: Waiving Hardened Results81421
+Node: Notes82805
+Node: Size83441
+Node: Timing85584
+Node: Configure Options86223
+Node: Legacy Scripts88562
+Node: Who Built Me89337
+Node: ABI Checking92097
+Node: Hardening Checks94213
+Node: Checking Archives98299
+Node: GNU FDL100720
 
 End Tag Table
 

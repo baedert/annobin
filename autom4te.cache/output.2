@@ -18151,13 +18151,10 @@ $as_echo_n "checking whether $CXX supports plugins... " >&6; }
     dir=`$CXX -print-file-name=plugin 2>/dev/null`
 
     if test x"$dir" = xplugin; then
-      { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-      as_fn_error $? "$CXX does not support plugins; reconfigure GCC with --enable-plugin" "$LINENO" 5
-    else
-      { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
+      dir=`$CXX -print-file-name=.`/plugin
     fi
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
 
     CPPFLAGS="$CPPFLAGS -I$dir/include"
 
