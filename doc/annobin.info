@@ -1943,11 +1943,11 @@ File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardene
 '--no-urls'
 '--provide-urls'
      By default when a FAIL or MAYB result is displayed by the HARDENED
-     checker a URL to the online version of the relevant section in this
-     document is also provided.  (Unless the '--fixed-format-messages'
-     option has been enabled).  The '--no-urls' option disables the
-     display of the URLs and the '--provide-urls' re-enables the
-     display.
+     checker and '--verbose' is enabled, a URL to the online version of
+     the relevant section in this document is also displayed.  (Unless
+     the '--fixed-format-messages' option has been enabled).  The
+     '--no-urls' option disables the display of the URLs and the
+     '--provide-urls' re-enables the display (even in non-verbose mode).
 
 
 File: annobin.info,  Node: Waiving Hardened Results,  Prev: Hardened Command Line Options,  Up: Hardened
@@ -3112,17 +3112,17 @@ Node: Test only go75538
 Node: Test warnings76691
 Node: Test instrumentation77529
 Node: Hardened Command Line Options78282
-Node: Waiving Hardened Results81421
-Node: Notes82805
-Node: Size83441
-Node: Timing85584
-Node: Configure Options86223
-Node: Legacy Scripts88562
-Node: Who Built Me89337
-Node: ABI Checking92097
-Node: Hardening Checks94213
-Node: Checking Archives98299
-Node: GNU FDL100720
+Node: Waiving Hardened Results81477
+Node: Notes82861
+Node: Size83497
+Node: Timing85640
+Node: Configure Options86279
+Node: Legacy Scripts88618
+Node: Who Built Me89393
+Node: ABI Checking92153
+Node: Hardening Checks94269
+Node: Checking Archives98355
+Node: GNU FDL100776
 
 End Tag Table
 

@@ -2084,11 +2084,12 @@ enabled in @option{verbose} mode.  This option and its inverse
 @item --no-urls
 @itemx --provide-urls
 By default when a FAIL or MAYB result is displayed by the
-@var{hardened} checker a URL to the online version of the relevant
-section in this document is also provided.  (Unless the
-@option{--fixed-format-messages} option has been enabled).  The
-@option{--no-urls} option disables the display of the URLs and the
-@option{--provide-urls} re-enables the display.
+@var{hardened} checker and @option{--verbose} is enabled, a URL to the
+online version of the relevant section in this document is also
+displayed.  (Unless the @option{--fixed-format-messages} option has
+been enabled).  The @option{--no-urls} option disables the display of
+the URLs and the @option{--provide-urls} re-enables the display (even
+in non-verbose mode).
 
 @end table
 

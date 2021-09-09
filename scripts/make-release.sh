@@ -1,7 +1,7 @@
 #!/bin/bash
 
 version=`grep ANNOBIN_VERSION current/annobin-global.h | cut -f 3 -d ' '`
-release=`echo $version | cut -b1`.`echo $version | cut -b2-3`
+release=`echo $version | cut -b1-2`.`echo $version | cut -b3-4`
 
 rm -fr annobin-$release annobin-gcc-plugin-$release annobin-$release.tar.xz annobin-gcc-plugin-$release.tar.xz
 

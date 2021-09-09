@@ -60,6 +60,7 @@ static bool fixed_format_messages = false;
 static bool enable_colour = true;
 static bool full_filenames_set = false;
 static bool full_filenames = false;
+static bool provide_url_set = false;
 static bool provide_url = true;
 
 #define FIXED_FORMAT_STRING "%s: test: %s file: %s"
@@ -458,6 +459,14 @@ skip (annocheck_data * data, uint testnum, const char * source, const char * rea
     einfo (PARTIAL, "\n");
 }
 
+static inline void
+show_url (uint testnum, const char * filename)
+{
+  if (provide_url)
+    einfo (PARTIAL,  "%s: %s: info: For more information visit: %s\n",
+	   HARDENED_CHECKER_NAME, filename, tests[testnum].doc_url);
+}
+
 static void
 fail (annocheck_data * data,
       uint             testnum,
@@ -501,9 +510,7 @@ fail (annocheck_data * data,
 
       einfo (PARTIAL, "\n");
 
-      if (provide_url)
-	einfo (INFO,  "%s:       For more information visit: %s",
-	       filename, tests[testnum].doc_url);
+      show_url (testnum, filename);
     }
 
   tests[testnum].state = STATE_FAILED;
@@ -547,9 +554,7 @@ maybe (annocheck_data * data,
 
       einfo (PARTIAL, "\n");
 
-      if (provide_url)
-	einfo (INFO,  "%s:       For more information visit: %s",
-	       filename, tests[testnum].doc_url);
+      show_url (testnum, filename);
     }
 
   if (tests[testnum].state != STATE_FAILED)
@@ -1062,7 +1067,13 @@ start (annocheck_data * data)
       full_filenames = BE_VERBOSE ? true : false;
       full_filenames_set = true;
     }
-  
+
+  if (! provide_url_set)
+    {
+      provide_url = BE_VERBOSE ? true : false;
+      provide_url_set = true;
+    }
+
   /* Handle mutually exclusive tests.  */
   if (tests [TEST_BRANCH_PROTECTION].enabled && tests [TEST_NOT_BRANCH_PROTECTION].enabled)
     {
@@ -4465,12 +4476,14 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
   if (streq (arg, "provide-urls"))
     {
       provide_url = true;
+      provide_url_set = true;
       return true;	
     }
 
   if (streq (arg, "no-urls"))
     {
       provide_url = false;
+      provide_url_set = true;
       return true;	
     }
 
