@@ -2104,7 +2104,7 @@ main (int argc, const char ** argv)
 	free ((char *) internal->datafile);
       }
   
-  if (debug_rpm_dir)
+ if (debug_rpm_dir)
     rmdir (debug_rpm_dir);
 
   if (self_made_tmpdir)

@@ -3428,7 +3428,7 @@ check_seg (annocheck_data *    data,
       if (seg->data == NULL
 	  || entry_point + 3 >= seg->data->d_size)
 	/* Fuzzing can create binaries like this.  */
-	return false;
+	return true;
 
       /* We are only interested in PT_LOAD segmments if we are checking
 	 the entry point instruction.  However we should not check shared
@@ -3493,7 +3493,7 @@ check_seg (annocheck_data *    data,
 
   offset = gelf_getnote (seg->data, offset, & note, & name_off, & data_off);
   if (offset == 0)
-    return false;
+    return true;
 
   if (seg->phdr->p_align != 8)
     {
