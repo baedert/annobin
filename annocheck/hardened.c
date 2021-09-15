@@ -4473,7 +4473,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return true;
     }
 
-  if (streq (arg, "provide-urls"))
+  if (streq (arg, "provide-urls") || streq (arg, "provide-url"))
     {
       provide_url = true;
       provide_url_set = true;

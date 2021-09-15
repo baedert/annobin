@@ -14,7 +14,7 @@
 
 @SET_MAKE@
 
-# copyright : Copyright (c) 2017-2020 Red Hat
+# copyright : Copyright (c) 2017-2021 Red Hat
 # license   : GNU GPL v3; see accompanying LICENSE file
 
 VPATH = @srcdir@
@@ -120,10 +120,9 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_annocheck_OBJECTS = annocheck-annocheck.$(OBJEXT) \
-	annocheck-timing.$(OBJEXT) annocheck-size.$(OBJEXT) \
-	annocheck-notes.$(OBJEXT) annocheck-hardened.$(OBJEXT) \
-	annocheck-built-by.$(OBJEXT)
+am_annocheck_OBJECTS = annocheck.$(OBJEXT) timing.$(OBJEXT) \
+	size.$(OBJEXT) notes.$(OBJEXT) hardened.$(OBJEXT) \
+	built-by.$(OBJEXT)
 annocheck_OBJECTS = $(am_annocheck_OBJECTS)
 am__DEPENDENCIES_1 =
 annocheck_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
@@ -131,9 +130,6 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-annocheck_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(annocheck_CFLAGS) \
-	$(CFLAGS) $(annocheck_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -334,8 +330,6 @@ AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
 annocheck_SOURCES = annocheck.c timing.c size.c notes.c hardened.c built-by.c annocheck.h ../annobin-global.h
 annocheck_LDADD = -lelf -ldw $(RPMLIBS) -liberty $(LIBDEBUGINFOD)
-annocheck_LDFLAGS = -Wl,-z,now
-annocheck_CFLAGS = -O2 -ansi -g -Wall -Werror -fpie -D_FORTIFY_SOURCE=2 -fplugin=annobin -fstack-protector-strong
 all: all-am
 
 .SUFFIXES:
@@ -421,7 +415,7 @@ clean-binPROGRAMS:
 
 annocheck$(EXEEXT): $(annocheck_OBJECTS) $(annocheck_DEPENDENCIES) $(EXTRA_annocheck_DEPENDENCIES) 
 	@rm -f annocheck$(EXEEXT)
-	$(AM_V_CCLD)$(annocheck_LINK) $(annocheck_OBJECTS) $(annocheck_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(LINK) $(annocheck_OBJECTS) $(annocheck_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -437,42 +431,6 @@ distclean-compile:
 
 .c.lo:
 	$(AM_V_CC)$(LTCOMPILE) -c -o $@ $<
-
-annocheck-annocheck.o: annocheck.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-annocheck.o `test -f 'annocheck.c' || echo '$(srcdir)/'`annocheck.c
-
-annocheck-annocheck.obj: annocheck.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-annocheck.obj `if test -f 'annocheck.c'; then $(CYGPATH_W) 'annocheck.c'; else $(CYGPATH_W) '$(srcdir)/annocheck.c'; fi`
-
-annocheck-timing.o: timing.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-timing.o `test -f 'timing.c' || echo '$(srcdir)/'`timing.c
-
-annocheck-timing.obj: timing.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-timing.obj `if test -f 'timing.c'; then $(CYGPATH_W) 'timing.c'; else $(CYGPATH_W) '$(srcdir)/timing.c'; fi`
-
-annocheck-size.o: size.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-size.o `test -f 'size.c' || echo '$(srcdir)/'`size.c
-
-annocheck-size.obj: size.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-size.obj `if test -f 'size.c'; then $(CYGPATH_W) 'size.c'; else $(CYGPATH_W) '$(srcdir)/size.c'; fi`
-
-annocheck-notes.o: notes.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-notes.o `test -f 'notes.c' || echo '$(srcdir)/'`notes.c
-
-annocheck-notes.obj: notes.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-notes.obj `if test -f 'notes.c'; then $(CYGPATH_W) 'notes.c'; else $(CYGPATH_W) '$(srcdir)/notes.c'; fi`
-
-annocheck-hardened.o: hardened.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-hardened.o `test -f 'hardened.c' || echo '$(srcdir)/'`hardened.c
-
-annocheck-hardened.obj: hardened.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-hardened.obj `if test -f 'hardened.c'; then $(CYGPATH_W) 'hardened.c'; else $(CYGPATH_W) '$(srcdir)/hardened.c'; fi`
-
-annocheck-built-by.o: built-by.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-built-by.o `test -f 'built-by.c' || echo '$(srcdir)/'`built-by.c
-
-annocheck-built-by.obj: built-by.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(annocheck_CFLAGS) $(CFLAGS) -c -o annocheck-built-by.obj `if test -f 'built-by.c'; then $(CYGPATH_W) 'built-by.c'; else $(CYGPATH_W) '$(srcdir)/built-by.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
