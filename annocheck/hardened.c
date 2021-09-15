@@ -3887,7 +3887,7 @@ check_for_gaps (annocheck_data * data)
   /* FIXME: We should actually do this for every executable section.  */
   /* FIXME: we know that the PPC64 and S390 will put linker generated code at the start and/or
      end of the .text section, so we skip this next test.  Ideally we would have a way to detect
-     linker generated code...  */
+     linker generated code, such as detecting known stub function names...  */
   if (per_file.e_machine == EM_PPC64 || per_file.e_machine == EM_S390)
     {
       pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
@@ -3934,18 +3934,37 @@ check_for_gaps (annocheck_data * data)
 	}
     }
 
-  /* FIXME _ SCAN FOR NOPS!  */
-  /* The AArch64 target can insert up to 0x3c bytes of padding...
-     cf BZ 1995224.  */
-  if ((per_file.text_section_range.end - per_file.text_section_range.start) > 0x3c
-      || (per_file.e_machine != EM_AARCH64 && (per_file.text_section_range.end > per_file.text_section_range.start)))
+  if (per_file.text_section_range.end > per_file.text_section_range.start)
     {
-      maybe (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "not all of the .text section is covered by notes");
-      einfo (VERBOSE, "%s: debug: address range not covered: %lx..%lx",
-	     get_filename (data), per_file.text_section_range.start, per_file.text_section_range.end);
+      const char * sym = annocheck_find_symbol_for_address_range (data, NULL, per_file.text_section_range.start,
+								  per_file.text_section_range.end, false);
+
+      if (sym != NULL && skip_gap_sym (data, sym))
+	einfo (VERBOSE2, "gap ignored - special symbol: %s", sym);
+      else
+	{
+	  ulong gap = per_file.text_section_range.end - per_file.text_section_range.start;
+
+	  /* FIXME _ SCAN FOR NOPS!  */
+	  /* The AArch64 target can insert up to 0x3c bytes of padding...
+	     cf BZ 1995224.  */
+	  if (gap > 0x3c || per_file.e_machine != EM_AARCH64)
+	    {
+	      maybe (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "not all of the .text section is covered by notes");
+	      if (sym != NULL)
+		einfo (VERBOSE, "%s: info: address range not covered: %lx..%lx (probable component: %s)",
+		       get_filename (data), per_file.text_section_range.start, per_file.text_section_range.end, sym);
+	      else
+		einfo (VERBOSE, "%s: info: address range not covered: %lx..%lx",
+		       get_filename (data), per_file.text_section_range.start, per_file.text_section_range.end);		
+	      return;
+	    }
+	  else
+	    einfo (VERBOSE2, "small gap of %lx bytes ignored", gap);
+	}
     }
-  else
-    pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
+
+  pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
 }
 
 
