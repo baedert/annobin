@@ -182,11 +182,14 @@ ice (const char * text)
 bool
 in_lto (void)
 {
-  /* Testing in_lto_p does not appear to be reliable.  Unsure why.  */
+  /* Testing in_lto_p is unreliable because flag_lto does not appear in the cl_vars array.  */
   if (streq (progname, "lto1"))
     return true;
 
-  return GET_INT_OPTION_BY_NAME (in_lto_p) != 0;
+  if (streq (progname, "cc1") || streq (progname, "cc1plus"))
+    return false;
+
+  return GET_INT_OPTION_BY_NAME (in_lto_p) == 1;
 }
     
 /* Determine the (main) input file name.  */

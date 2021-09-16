@@ -3163,12 +3163,15 @@ check_dynamic_section (annocheck_data *    data,
 	  switch (res)
 	  {
 	  case 0:
-	    fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT and PAC_PLT flags missing from the dynamic tags");
+	    fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is missing from the dynamic tags");
 	    pass (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT and PAC_PLT flags not in the dynamic tags");
 	    break;
 	  case 1:
-	    future_fail (data, "PAC_PLT flag is missing from dynamic tags");
-	    fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "PAC_PLT flag is missing from the dynamic tags");
+	    if (tests[TEST_DYNAMIC_TAGS].enabled) /* The PAC_PLT flag is Not currently used.  */
+	      {
+		future_fail (data, "PAC_PLT flag is missing from dynamic tags");
+		pass (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is present in the dynamic tags");
+	      }
 	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is present in the dynamic tags");
 	    break;
 	  case 2:
@@ -3177,7 +3180,7 @@ check_dynamic_section (annocheck_data *    data,
 	    break;
 	  case 3:
 	    pass (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, NULL);
-	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI and PAC flags are present in the dynamic tags");
+	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI (and PAC) flags are present in the dynamic tags");
 	    break;
 	  }
 	}
