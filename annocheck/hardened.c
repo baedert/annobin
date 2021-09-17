@@ -2073,6 +2073,11 @@ build_note_checker (annocheck_data *     data,
 	  einfo (VERBOSE2, "%s: (%s) built-by gcc version %u",
 		 get_filename (data), per_file.component_name, version);
 	}
+      else if (strstr (attr + 1, "plugin name"))
+	{
+	  einfo (VERBOSE2, "%s: (%s) %s",
+		 get_filename (data), per_file.component_name, attr + 1);
+	}
       else
 	einfo (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
 	       get_filename (data), per_file.component_name, attr);

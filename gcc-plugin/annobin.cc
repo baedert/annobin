@@ -1925,6 +1925,10 @@ emit_global_notes (const char * suffix)
   annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL, build_version,
 			      "string: build-tool", true /* An OPEN note.  */,
 			      & info);
+  annobin_output_string_note (GNU_BUILD_ATTRIBUTE_TOOL,
+			      concat ("plugin name: ", plugin_name, NULL),
+			      "string: build-tool", true /* An OPEN note.  */,
+			      & info);
 
   /* Record optimization level, -W setting and -g setting  */
   record_GOW_settings (global_GOWall_options, true /* This is an OPEN note.  */,
