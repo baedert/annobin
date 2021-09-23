@@ -878,6 +878,11 @@ with specific security hardening features enabled.  The features that
 are tested can be controlled via command line options, but the default
 is to test for all of them.
 
+The tool was originally built to assist in the implementation of
+security features for Fedora, although it does now check for more
+things than are described in that document:
+@url {https://fedoraproject.org/wiki/Security_Features}
+
 New tests can be added to the @var{hardened} checker by adding an
 entry in the @var{tests} array defined in @file{hardened.c} and then
 creating the necessary code to support the test.  There is more
