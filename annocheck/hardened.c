@@ -804,7 +804,7 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
     case DW_LANG_C_plus_plus_11:
     case DW_LANG_C_plus_plus_14:
       if (! fixed_format_messages)
-	einfo (VERBOSE, "%s: info: Written in C++", get_filename (data));
+	einfo (VERBOSE2, "%s: info: Written in C++", get_filename (data));
       set_lang (data, LANG_CXX, SOURCE_DW_AT_LANGUAGE);
       break;
 
@@ -3528,6 +3528,40 @@ check_seg (annocheck_data *    data,
   return true;
 }
 
+static bool
+is_nop_byte (annocheck_data * data ATTRIBUTE_UNUSED,
+	     unsigned char    byte,
+	     uint             index,
+	     ulong            addr_bias)
+{
+  switch (per_file.e_machine)
+    {
+    case EM_PPC64:
+      /* NOP = 60000000 */
+      return (((addr_bias + index) & 3) == 3) && byte == 0x60;
+
+    case EM_AARCH64:
+      /* NOP = d503201f */
+      switch ((addr_bias + index) & 3)
+	{
+	case 0: return byte == 0x1f;
+	case 1: return byte == 0x20;
+	case 2: return byte == 0x03;
+	case 3: return byte == 0xd5;
+	default: return false;
+	}
+
+    case EM_S390:
+      /* NOP = 47000000 */
+      return (((addr_bias + index) & 3) == 3) && byte == 0x47;
+      
+    default:
+      /* FIXME: Add support for other architectures.  */
+      /* FIXME: Add support for alternative endianness.  */
+      return false;
+    }
+}
+
 /* Returns true if GAP is one that can be ignored.  */
 
 static bool
@@ -3535,9 +3569,11 @@ ignore_gap (annocheck_data * data, note_range * gap)
 {
   Elf_Scn * addr1_scn = NULL;
   Elf_Scn * addr2_scn = NULL;
+  Elf_Scn * prev_scn = NULL;
   Elf_Scn * scn = NULL;
   ulong     scn_end = 0;
   ulong     scn_name = 0;
+  ulong     addr1_bias = 0;
 
   /* These tests should be redundant, but just in case...  */
   if (ignore_gaps)
@@ -3549,6 +3585,8 @@ ignore_gap (annocheck_data * data, note_range * gap)
       einfo (VERBOSE2, "gap ignored - start after end!");
       return true;
     }
+
+  einfo (VERBOSE2, "Consider gap %#lx..%#lx", gap->start, gap->end);
 
   /* Gaps narrower than the alignment of the .text section are assumed
      to be padding between functions, and so can be ignored.  In theory
@@ -3562,6 +3600,8 @@ ignore_gap (annocheck_data * data, note_range * gap)
       return true;
     }
 
+  gap->start = align (gap->start, per_file.text_section_alignment);
+  
   /* FIXME: The linker can create fill regions in the map that are larger
      than the text section alignment.  Not sure why, but it does happen.
      (cf lconvert in the qt5-qttools package which has a gap of 0x28 bytes
@@ -3583,19 +3623,61 @@ ignore_gap (annocheck_data * data, note_range * gap)
       while ((scn = elf_nextscn (data->elf, scn)) != NULL)
 	{
 	  Elf32_Shdr * shdr = elf32_getshdr (scn);
+	  ulong sec_end = shdr->sh_addr + shdr->sh_size;
 
-	  if (addr1_scn == NULL
-	      && shdr->sh_addr <= gap->start && ((shdr->sh_addr + shdr->sh_size) >= gap->start))
-	    addr1_scn = scn;
+	  /* We are only interested in code sections.  */
+	  if (shdr->sh_type != SHT_PROGBITS
+	      || (shdr->sh_flags & (SHF_ALLOC | SHF_EXECINSTR)) != (SHF_ALLOC | SHF_EXECINSTR))
+	    continue;
 
-	  if (addr2_scn == NULL)
+	  if ((shdr->sh_addr <= gap->start) && (gap->start < sec_end))
 	    {
-	      scn_end = shdr->sh_addr + shdr->sh_size;
-	      scn_name = shdr->sh_name;
-
-	      if (shdr->sh_addr <= gap->end && scn_end >= gap->end)
-		addr2_scn = scn;
+	      /* Record any section as a first match.  */
+	      if (addr1_scn == NULL)
+		{
+		  addr1_scn = scn;
+		  addr1_bias = gap->start - shdr->sh_addr;
+		  scn_name = shdr->sh_name;
+		  scn_end = sec_end;
+		}
+	      else
+		{
+		  /* FIXME: Which section should we select ?  */
+		  einfo (VERBOSE2, "multiple code sections (%x+%x vs %x+%x) contain gap start",
+			 shdr->sh_addr, shdr->sh_size,
+			 elf32_getshdr (addr1_scn)->sh_addr,
+			 elf32_getshdr (addr1_scn)->sh_size
+			 );
+		}
 	    }
+
+	  if ((shdr->sh_addr < gap->end) && (gap->end < sec_end))
+	    {
+	      /* Record any section as a first match.  */
+	      if (addr2_scn == NULL)
+		addr2_scn = scn;
+	      else
+		{
+		  /* FIXME: Which section should we select ?  */
+		  einfo (VERBOSE2, "multiple code sections (%x+%x vs %x+%x) contain gap end",
+			 shdr->sh_addr, shdr->sh_size,
+			 elf32_getshdr (addr1_scn)->sh_addr,
+			 elf32_getshdr (addr1_scn)->sh_size);
+		}
+	    }
+	  else if (shdr->sh_addr == gap->end)
+	    {
+	      /* This gap ends at the start of the current section.
+		 So it probably matches the previous section.  */
+	      if (addr2_scn == NULL
+		  && prev_scn != NULL
+		  && prev_scn == addr1_scn)
+		{
+		  addr2_scn = prev_scn;
+		}
+	    }
+
+	  prev_scn = scn;
 	}
     }
   else
@@ -3603,30 +3685,75 @@ ignore_gap (annocheck_data * data, note_range * gap)
       while ((scn = elf_nextscn (data->elf, scn)) != NULL)
 	{
 	  Elf64_Shdr * shdr = elf64_getshdr (scn);
+	  ulong sec_end = shdr->sh_addr + shdr->sh_size;
 
-	  if (addr1_scn == NULL
-	      && shdr->sh_addr <= gap->start && ((shdr->sh_addr + shdr->sh_size) >= gap->start))
-	    addr1_scn = scn;
+	  /* We are only interested in code sections.  */
+	  if (shdr->sh_type != SHT_PROGBITS
+	      || (shdr->sh_flags & (SHF_ALLOC | SHF_EXECINSTR)) != (SHF_ALLOC | SHF_EXECINSTR))
+	    continue;
 
-	  if (addr2_scn == NULL)
+	  if ((shdr->sh_addr <= gap->start) && (gap->start < sec_end))
 	    {
-	      scn_end = shdr->sh_addr + shdr->sh_size;
-	      scn_name = shdr->sh_name;
-
-	      if (shdr->sh_addr <= gap->end && scn_end >= gap->end)
-		addr2_scn = scn;
+	      /* Record any section as a first match.  */
+	      if (addr1_scn == NULL)
+		{
+		  addr1_scn = scn;
+		  addr1_bias = gap->start - shdr->sh_addr;
+		  scn_name = shdr->sh_name;
+		  scn_end = sec_end;
+		}
+	      else
+		{
+		  /* FIXME: Which section should we select ?  */
+		  einfo (VERBOSE2, "multiple code sections (%lx+%lx vs %lx+%lx) contain gap start",
+			 shdr->sh_addr, shdr->sh_size,
+			 elf64_getshdr (addr1_scn)->sh_addr,
+			 elf64_getshdr (addr1_scn)->sh_size
+			 );
+		}
 	    }
+
+	  if ((shdr->sh_addr < gap->end) && (gap->end < sec_end))
+	    {
+	      /* Record any section as a first match.  */
+	      if (addr2_scn == NULL)
+		addr2_scn = scn;
+	      else
+		{
+		  /* FIXME: Which section should we select ?  */
+		  einfo (VERBOSE2, "multiple code sections (%lx+%lx vs %lx+%lx) contain gap end",
+			 shdr->sh_addr, shdr->sh_size,
+			 elf64_getshdr (addr1_scn)->sh_addr,
+			 elf64_getshdr (addr1_scn)->sh_size);
+		}
+	    }
+	  else if (shdr->sh_addr == gap->end)
+	    {
+	      /* This gap ends at the start of the current section.
+		 So it probably matches the previous section.  */
+	      if (addr2_scn == NULL
+		  && prev_scn != NULL
+		  && prev_scn == addr1_scn)
+		{
+		  addr2_scn = prev_scn;
+		}
+	    }
+
+	  prev_scn = scn;
 	}
     }
 
   /* If the gap is not inside one or more sections, then something funny has gone on...  */
-  if (addr2_scn == NULL)
-    return false;
+  if (addr1_scn == NULL || addr2_scn == NULL)
+    {
+      einfo (VERBOSE2, "gap is strange: it does not start and/or end in a section - ignoring");
+      return true;
+    }
 
   /* If the gap starts in one section, but ends in a different section then we ignore it.  */
   if (addr1_scn != addr2_scn)
     {
-      einfo (VERBOSE2, "gap ignored - crosses section boundary");
+      einfo (VERBOSE2, "gap ignored: crosses section boundary");
       return true;
     }
 
@@ -3645,20 +3772,47 @@ ignore_gap (annocheck_data * data, note_range * gap)
 	{
 	  if (strstr (sym, "glink_PLTresolve") || strstr (sym, "@plt"))
 	    {
-	      einfo (VERBOSE2, "Ignoring gap %lx..%lx at end of ppc64 .text section - it contains PLT stubs",
-		     gap->start, gap->end);
+	      einfo (VERBOSE2, "Ignoring gap at end of ppc64 .text section - it contains PLT stubs");
 	      return true;
 	    }
 	  else
-	    einfo (VERBOSE2, "Potential PLT stub gap contains the symbol '%s', so the gap is not ignored", sym);
+	    {
+	      einfo (VERBOSE2, "Potential PLT stub gap contains the symbol '%s', so the gap is not ignored", sym);
+	      return false;
+	    }
 	}
       else
 	{
 	  /* Without symbol information we cannot be sure, but it is a reasonable supposition.  */
-	  einfo (VERBOSE2, "Ignoring gap %lx..%lx at end of ppc64 .text section - it will contain PLT stubs",
-		 gap->start, gap->end);
+	  einfo (VERBOSE2, "Ignoring gap at end of ppc64 .text section - it will contain PLT stubs");
 	  return true;
 	}
+    }
+
+  /* Scan the contents of the gap.  If it is all zeroes or NOP instructions, then it can be ignored.  */
+  Elf_Data * sec_data;
+  sec_data = elf_getdata (addr1_scn, NULL);
+  /* Paranoia checks.  */
+  if (sec_data == NULL
+      || sec_data->d_off != 0
+      || sec_data->d_type != ELF_T_BYTE
+      || gap->start < addr1_bias /* This should never happen.  */
+      || (gap->end - addr1_bias) >= sec_data->d_size) /* Nor should this.  */
+    {
+      einfo (VERBOSE2, "could not check gap for NOPs!");
+      return false;
+    }
+
+  unsigned char * sec_bytes = ((unsigned char *) sec_data->d_buf) + addr1_bias;
+  uint i;
+  for (i = gap->end - gap->start; i--;)
+    if (sec_bytes[i] != 0 && ! is_nop_byte (data, sec_bytes[i], i, addr1_bias))
+      break;
+
+  if (i == (uint) -1)
+    {
+      einfo (VERBOSE2, "gap ignored - it contains padding and/or NOP instructions");
+      return true;
     }
 
   return false;
