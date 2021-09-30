@@ -42,6 +42,7 @@ annobin_get_target_pointer_size (void)
   return 64;
 }
 
+#ifdef aarch64_branch_protection_string
 static void
 record_branch_protection_note (bool is_global, annobin_function_info * info)
 {
@@ -70,6 +71,7 @@ record_branch_protection_note (bool is_global, annobin_function_info * info)
   annobin_output_note (buffer, len + 1, true, "string: -mbranch-protection status",
 		       is_global, info);
 }
+#endif
 
 void
 annobin_record_global_target_notes (annobin_function_info * info)
