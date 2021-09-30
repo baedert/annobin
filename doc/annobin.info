@@ -750,9 +750,7 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built By,  Up: Annoche
        [-test-all]
        [-test-NAME]
        [-test-future]
-       [-profile-el7]
-       [-profile-el9]
-       [-profile-rawhide]
+       [-profile=RELEASE]
        [-ignore-gaps]
        [-report-gaps]
        [-fixed-format-messages]
@@ -864,8 +862,13 @@ just the absence of the '-Wl,-z,now' option is enough to trigger this
 test.
 
    Whilst important, this test can be ignored if the binary does not use
-any shared libraries.  The test can be disabled via the
-'--skip-bind-now' option and re-enabled by the '--test-bind-now' option.
+any shared libraries.
+
+   Note - this test is automatically disabled if the '--profile=el7'
+option is used.
+
+   The test can be disabled via the '--skip-bind-now' option and
+re-enabled by the '--test-bind-now' option.
 
 
 File: annobin.info,  Node: Test branch protection,  Next: Test cf protection,  Prev: Test bind now,  Up: Hardened
@@ -907,8 +910,9 @@ RHEL.
 protection:: test and directly related to the *note Test dynamic tags::
 test.
 
-   Note - this test is automatically enabled if the '--profile-rawhide'
-options are used.
+   Note - this test is automatically enabled if the '--profile=rawhide'
+option is used and disabled if '--profile=el7', '--profile=el8' or
+'--profile=el9' is used.
 
    If necessary the test can be disabled via the
 '--skip-branch-protection' option and re-enabled via the
@@ -1067,8 +1071,9 @@ RHEL.
    Note - this test is the inverse of the *note Test not dynamic tags::
 test and directly related to the *note Test branch protection:: test.
 
-   Note - this test is automatically enabled if the '--profile-rawhide'
-options are used.
+   Note - this test is automatically enabled if the '--profile=rawhide'
+option is used and disabled if '--profile=el7', '--profile=el8' or
+'--profile=el9' is used.
 
    If necessary the test can be disabled via the '--skip-dynamic-tags'
 option and re-enabled via the '--test-dynamic-tags' option.
@@ -1121,6 +1126,9 @@ it does, see this blog:
 library should have this define present on the compiler command line.
 Programs that do not use these functions do not need the define, but it
 will not hurt to have it present anyway.
+
+   Note - this test is automatically disabled if the '--profile=el7'
+option is used.
 
    If necessary the test can be disabled via the '--skip-fortify' option
 and re-enabled via the '--test-fortify' option.
@@ -1293,6 +1301,9 @@ was used.  Whilst this option can produce better code, its use is not
 essential, hence this test currently only checks to see if both the
 '-flto' and the '-fno-lto' options were used together.
 
+   Note - this test is automatically disabled if the '--profile=el7' or
+'--profile=el8' option is used.
+
    If necessary the test can be disabled via the '--skip-lto' option and
 re-enabled via the '--test-lto' option.
 
@@ -1323,8 +1334,9 @@ not used, or was used but was set to disable the feature.
    The security features can be disabled by compiling with the
 '-mbranch-protection=none' gcc command line option.
 
-   Note - this test is automatically enabled if the '--profile-el7' or
-'--profile-el9' options are used.
+   Note - this test is automatically disabled if the '--profile=rawhide'
+option is used and enabled if '--profile=el7', '--profile=el8' or
+'--profile=el9' is used.
 
    If necessary the test can be disabled via the
 '--skip-not-branch-protection' option and re-enabled via the
@@ -1358,8 +1370,9 @@ as RHEL or pre version-35 Fedora).
    The security features can be disabled by compiling with the
 '-mbranch-protection=none' gcc command line option.
 
-   Note - this test is automatically enabled if the '--profile-el7' or
-'--profile-el9' options are used.
+   Note - this test is automatically disabled if the '--profile=rawhide'
+option is used and enabled if '--profile=el7', '--profile=el8' or
+'--profile=el9' is used.
 
    If necessary the test can be disabled via the
 '--skip-not-dynamic-tags' option and re-enabled via the
@@ -1526,6 +1539,9 @@ linking executables, not shared libraries.
    Note - this check is related to the *note Test pic:: test.  This test
 checks that the correct linker option has been used.  That test checks
 that the correct compile time option has been used.
+
+   Note - this test is automatically disabled if the '--profile=el7'
+option is used.
 
    If necessary the test can be disabled via the '--skip-pie' option and
 re-enabled via the '--test-pie' option.
@@ -1705,6 +1721,9 @@ stack, allowing them to alter both.
    <https://developers.redhat.com/blog/2019/04/30/stack-clash-mitigation-in-gcc-why-fstack-check-is-not-the-answer>
 
    <https://developers.redhat.com/blog/2020/05/22/stack-clash-mitigation-in-gcc-part-3>
+
+   Note - this test is automatically disabled if the '--profile=el7'
+option is used.
 
    If necessary the test can be disabled via the '--skip-stack-clash'
 option and re-enabled via the '--test-stack-clash' option.
@@ -1886,17 +1905,28 @@ File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardene
      '--skip-future' option can be used to restore the default behaviour
      of skipping these tests.
 
-'--profile-el9'
-'--profile-rawhide'
-'--profile-el7'
+'--profile=el7'
+'--profile=el8'
+'--profile=el9'
+'--profile=rawhide'
+'--profile=default'
+'--profile=none'
      Rather than enabling and disabling specific tests a selection can
-     be chosen via a profile option.  The '--profile-el9' option will
-     select the tests suitable for _RHEL-9_ binaries.  The
-     '--profile-rawhide' option will select tests suitable for _Fedora
-     rawhide_ binaries and the '--profile-el7' option will select tests
-     suitable for _RHEL-7_ binaries.
+     be chosen via a profile option.  The '--profile=el7' option will
+     select the tests suitable for _RHEL-7_ binaries.  Similarly
+     '--profile=el8' configures the tests for _RHEL-8_ and
+     '--profile=el9' configures them for _RHEL-9_.  The
+     '--profile=rawhide' option will select tests suitable for _Fedora
+     rawhide_ binaries.
 
      Other profiles may be added in the future.
+
+     Using '--profile=default' or '--profile=none' will disable the
+     profiling and restore the default behaviour of all tests being
+     enabled.
+
+     For backwards compatibility the form '--profile-<name>' can be used
+     instead of '--profile=<name>'.
 
 '--disable-hardened'
      Disable the tool.
@@ -3084,50 +3114,50 @@ Node: The INSTRUMENT Encoding20401
 Node: Annocheck21775
 Node: Built By25665
 Node: Hardened27168
-Node: Test bind now30912
-Node: Test branch protection32463
-Node: Test cf protection34643
-Node: Test dynamic segment38603
-Node: Test dynamic tags39734
-Node: Test entry42009
-Node: Test fortify42904
-Node: Test glibcxx assertions44331
-Node: Test gnu relro45369
-Node: Test gnu stack47103
-Node: Test go revision49500
-Node: Test instrumentation50548
-Node: Test lto51283
-Node: Test not branch protection52084
-Node: Test not dynamic tags53607
-Node: Test notes55236
-Node: Test only go57519
-Node: Test optimization58670
-Node: Test pic60045
-Node: Test pie61590
-Node: Test production62792
-Node: Test property note63605
-Node: Test run path66082
-Node: Test rwx seg68279
-Node: Test short enums69551
-Node: Test stack clash70568
-Node: Test stack prot71719
-Node: Test stack realign73051
-Node: Test textrel74321
-Node: Test threads75578
-Node: Test warnings76394
-Node: Test writable got77229
-Node: Hardened Command Line Options78515
-Node: Waiving Hardened Results81707
-Node: Notes83091
-Node: Size83727
-Node: Timing85870
-Node: Configure Options86509
-Node: Legacy Scripts88848
-Node: Who Built Me89623
-Node: ABI Checking92383
-Node: Hardening Checks94499
-Node: Checking Archives98585
-Node: GNU FDL101006
+Node: Test bind now30868
+Node: Test branch protection32508
+Node: Test cf protection34762
+Node: Test dynamic segment38722
+Node: Test dynamic tags39853
+Node: Test entry42202
+Node: Test fortify43097
+Node: Test glibcxx assertions44610
+Node: Test gnu relro45648
+Node: Test gnu stack47382
+Node: Test go revision49779
+Node: Test instrumentation50827
+Node: Test lto51562
+Node: Test not branch protection52468
+Node: Test not dynamic tags54050
+Node: Test notes55738
+Node: Test only go58021
+Node: Test optimization59172
+Node: Test pic60547
+Node: Test pie62092
+Node: Test production63380
+Node: Test property note64193
+Node: Test run path66670
+Node: Test rwx seg68867
+Node: Test short enums70139
+Node: Test stack clash71156
+Node: Test stack prot72393
+Node: Test stack realign73725
+Node: Test textrel74995
+Node: Test threads76252
+Node: Test warnings77068
+Node: Test writable got77903
+Node: Hardened Command Line Options79189
+Node: Waiving Hardened Results82731
+Node: Notes84115
+Node: Size84751
+Node: Timing86894
+Node: Configure Options87533
+Node: Legacy Scripts89872
+Node: Who Built Me90647
+Node: ABI Checking93407
+Node: Hardening Checks95523
+Node: Checking Archives99609
+Node: GNU FDL102030
 
 End Tag Table
 

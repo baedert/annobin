@@ -220,6 +220,18 @@ enum test_index
   TEST_MAX
 };
 
+enum profile
+{
+  profile_none = 0,
+  profile_el7,
+  profile_el8,
+  profile_el9,
+  profile_rawhide,
+  max_profile
+};
+
+static enum profile current_profile = profile_none;
+
 #define MIN_GO_REVISION 14
 #define STR(a) #a
 #define MIN_GO_REV_STR(a,b,c) a STR(b) c
@@ -347,7 +359,7 @@ inform (annocheck_data * data, const char * message)
 {
   if (fixed_format_messages)
     return;
-  einfo (VERBOSE, "%s: %s: %s", HARDENED_CHECKER_NAME, get_filename (data), message);
+  einfo (VERBOSE, "%s: %s", get_filename (data), message);
 }
 
 static inline bool
@@ -955,9 +967,9 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       /* FIXME: This can happen for object files because the DWARF data
 	 has not been relocated.  Find out how to handle this using libdwarf.  */
       if (is_object_file ())
-	inform (data, "DW_AT_producer string invalid - probably due to relocations not being applied");
+	inform (data, "warn: DW_AT_producer string invalid - probably due to relocations not being applied");
       else
-	inform (data, "Unable to determine the binary's producer from it's DW_AT_producer string");
+	inform (data, "warn: Unable to determine the binary's producer from it's DW_AT_producer string");
       return;
     }
 
@@ -1966,11 +1978,11 @@ build_note_checker (annocheck_data *     data,
 		  if (per_file.anno_minor > minor)
 		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
 		  else if (per_file.anno_minor < minor)
-		    inform (data, "The annobin plugin was built by an older version of the compiler");
+		    inform (data, "warn: The annobin plugin was built by an older version of the compiler");
 		  else if (per_file.anno_rel > rel)
 		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
 		  else
-		    inform (data, "The annobin  plugin was built by an older version of the compiler");
+		    inform (data, "warn: The annobin  plugin was built by an older version of the compiler");
 
 		  einfo (VERBOSE, "debug: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
 			 t->tool_name, per_file.anno_major, per_file.anno_minor, per_file.anno_rel,
@@ -2042,11 +2054,11 @@ build_note_checker (annocheck_data *     data,
 		  if (per_file.run_minor < minor)
 		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
 		  else if (per_file.run_minor > minor)
-		    inform (data, "The annobin plugin was built by an older version of the compiler");
+		    inform (data, "warn: The annobin plugin was built by an older version of the compiler");
 		  else if (per_file.run_rel < rel)
 		    warn (data, "The annobin plugin was built to run on a newer version of the compiler");
 		  else
-		    inform (data, "The annobin  plugin was built by an older version of the compiler");
+		    inform (data, "warn: The annobin  plugin was built by an older version of the compiler");
 
 		  einfo (VERBOSE, "debug: Annobin plugin was built by %s %u.%u.%u but run on %s version %u.%u.%u",
 			 t->tool_name, major, minor, rel,
@@ -4481,13 +4493,9 @@ usage (void)
   einfo (INFO, "    --test-future             Enable the future fail tests");
 
   einfo (INFO, "  To enable/disable tests for a specific environment use:");
-  einfo (INFO, "    --profile-el7             Ensure that only tests suitable for RHEL-7 are run");
-  einfo (INFO, "    --profile-el9             Ensure that only tests suitable for RHEL-9 are run");
-  einfo (INFO, "    --profile-rawhide         Ensure that only tests suitable for Fedora Rawhide are run");
-#if 0 /* Not implemented yet.  */
-  einfo (INFO, "    --profile-fc35            Ensure that only tests suitable for Fedora 35 are run");
-  einfo (INFO, "    --profile-automotive      Ensure that only tests suitable for Automotive are run");
-#endif
+  einfo (INFO, "    --profile=[default|el7|el8|el9|rawhide]");
+  einfo (INFO, "                              Ensure that only tests suitable for a specific OS are run");
+
   einfo (INFO, "  The tool will also report missing annobin data unless:");
   einfo (INFO, "    --ignore-gaps             Ignore missing annobin data");
   einfo (INFO, "    --report-gaps             Report missing annobin data");
@@ -4527,20 +4535,47 @@ static const struct profiles
   const char *      name;
   enum  test_index  disabled_tests[MAX_DISABLED];
   enum  test_index  enabled_tests[MAX_DISABLED];
-} profiles[] =
+} profiles[max_profile] =
 {
-#if 0
-  { "fc35",       {}, {} },
-  { "automotive", {}, {} },
-#endif
-  { "el7",        { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_PIE, TEST_BIND_NOW, TEST_FORTIFY, TEST_STACK_CLASH },
-                  { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
-  { "el9",        { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS },
-                  { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
-  { "rawhide",    { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS },
-                  { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS } }
+  [ profile_el7 ] = { "el7",
+		      { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_PIE, TEST_BIND_NOW, TEST_FORTIFY, TEST_STACK_CLASH, TEST_LTO },
+		      { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
+  [ profile_el8 ] = { "el8",
+		      { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_LTO },
+		      { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
+  [ profile_el9 ] = { "el9",
+		     { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS },
+		     { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
+  [profile_rawhide ] = { "rawhide",
+			 { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS },
+			 { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS } }
 };
 
+static void
+set_profile (enum profile num)
+{
+  uint j;
+
+  current_profile = num;
+
+  for (j = 0; j < MAX_DISABLED; j++)
+    {
+      enum test_index index = profiles[num].disabled_tests[j];
+
+      if (index == TEST_NOTES)
+	break;
+      tests[index].enabled = false;
+    }
+	      
+  for (j = 0; j < MAX_DISABLED; j++)
+    {
+      enum test_index index = profiles[num].enabled_tests[j];
+
+      if (index == TEST_NOTES)
+	break;
+      tests[index].enabled = true;
+    }
+}
 
 static bool
 process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
@@ -4682,41 +4717,25 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return true;
     }
 
-  if (const_strneq (arg, "profile-"))
+  /* Accept both --profile-<name> and --profile=<name>.  */
+  if (const_strneq (arg, "profile"))
     {
       arg += strlen ("profile-");
 
       uint i;
 
       for (i = ARRAY_SIZE (profiles); i--;)
-	{
-	  if (streq (arg, profiles[i].name))
-	    {
-	      uint j;
+	if (streq (arg, profiles[i].name))
+	  {
+	    set_profile (i);
+	    return true;
+	  }
 
-	      for (j = 0; j < MAX_DISABLED; j++)
-		{
-		  enum test_index index = profiles[i].disabled_tests[j];
+      if (streq (arg, "none") || streq (arg, "default"))
+	set_profile (profile_none);
+      else
+	einfo (ERROR, "Argument to --profile- option not recognised");
 
-		  if (index == TEST_NOTES)
-		    break;
-		  tests[index].enabled = false;
-		}
-	      
-	      for (j = 0; j < MAX_DISABLED; j++)
-		{
-		  enum test_index index = profiles[i].enabled_tests[j];
-
-		  if (index == TEST_NOTES)
-		    break;
-		  tests[index].enabled = true;
-		}
-	      
-	      return true;
-	    }
-	}
-
-      einfo (ERROR, "Argument to --profile- option not recognised");
       /* Consume the argument so that the annocheck framework does not mistake it for the -p option.  */
       return true;
     }

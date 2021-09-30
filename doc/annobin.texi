@@ -854,9 +854,7 @@ annocheck
   [@b{--test-all}]
   [@b{--test-@var{name}}]
   [@b{--test-future}]
-  [@b{--profile-el7}]
-  [@b{--profile-el9}]
-  [@b{--profile-rawhide}]
+  [@b{--profile=@var{release}}]
   [@b{--ignore-gaps}]
   [@b{--report-gaps}]
   [@b{--fixed-format-messages}]
@@ -975,9 +973,13 @@ in which case just the absence of the @option{-Wl,-z,now} option is
 enough to trigger this test.
 
 Whilst important, this test can be ignored if the binary does not use
-any shared libraries.  The test can be disabled via the
-@option{--skip-bind-now} option and re-enabled by the
-@option{--test-bind-now} option.
+any shared libraries.
+
+Note - this test is automatically disabled if the
+@option{--profile=el7} option is used.
+
+The test can be disabled via the @option{--skip-bind-now} option and
+re-enabled by the @option{--test-bind-now} option.
 
 @c -----------------------------------------------------------------
 @node Test branch protection
@@ -1019,7 +1021,9 @@ Note - this test is the inverse of the @ref{Test not branch protection}
 test and directly related to the @ref{Test dynamic tags} test.
 
 Note - this test is automatically enabled if the
-@option{--profile-rawhide} options are used.
+@option{--profile=rawhide} option is used and disabled if
+@option{--profile=el7}, @option{--profile=el8} or
+@option{--profile=el9} is used.
 
 If necessary the test can be disabled via the
 @option{--skip-branch-protection} option and re-enabled via the
@@ -1180,7 +1184,9 @@ Note - this test is the inverse of the @ref{Test not dynamic tags}
 test and directly related to the @ref{Test branch protection} test.
 
 Note - this test is automatically enabled if the
-@option{--profile-rawhide} options are used.
+@option{--profile=rawhide} option is used and disabled if
+@option{--profile=el7}, @option{--profile=el8} or
+@option{--profile=el9} is used.
 
 If necessary the test can be disabled via the @option{--skip-dynamic-tags}
 option and re-enabled via the @option{--test-dynamic-tags} option.
@@ -1235,6 +1241,9 @@ Any program that uses the string or memory functions in the
 @var{glibc} library should have this define present on the compiler
 command line.  Programs that do not use these functions do not need
 the define, but it will not hurt to have it present anyway.
+
+Note - this test is automatically disabled if the
+@option{--profile=el7} option is used.
 
 If necessary the test can be disabled via the @option{--skip-fortify}
 option and re-enabled via the @option{--test-fortify} option.
@@ -1415,6 +1424,9 @@ option was used.  Whilst this option can produce better code, its use
 is not essential, hence this test currently only checks to see if both
 the @option{-flto} and the @option{-fno-lto} options were used together.
 
+Note - this test is automatically disabled if the
+@option{--profile=el7} or @option{--profile=el8} option is used.
+
 If necessary the test can be disabled via the
 @option{--skip-lto} option and re-enabled via the
 @option{--test-lto} option. 
@@ -1446,8 +1458,10 @@ was not used, or was used but was set to disable the feature.
 The security features can be disabled by compiling with the
 @option{-mbranch-protection=none} gcc command line option.
 
-Note - this test is automatically enabled if the
-@option{--profile-el7} or @option{--profile-el9} options are used.
+Note - this test is automatically disabled if the
+@option{--profile=rawhide} option is used and enabled if
+@option{--profile=el7}, @option{--profile=el8} or
+@option{--profile=el9} is used.
 
 If necessary the test can be disabled via the
 @option{--skip-not-branch-protection} option and re-enabled via the
@@ -1481,8 +1495,10 @@ missing.  (Such as RHEL or pre version-35 Fedora).
 The security features can be disabled by compiling with the
 @option{-mbranch-protection=none} gcc command line option.
 
-Note - this test is automatically enabled if the
-@option{--profile-el7} or @option{--profile-el9} options are used.
+Note - this test is automatically disabled if the
+@option{--profile=rawhide} option is used and enabled if
+@option{--profile=el7}, @option{--profile=el8} or
+@option{--profile=el9} is used.
 
 If necessary the test can be disabled via the @option{--skip-not-dynamic-tags}
 option and re-enabled via the @option{--test-not-dynamic-tags} option.
@@ -1655,6 +1671,9 @@ needed for linking executables, not shared libraries.
 Note - this check is related to the @ref{Test pic} test.  This test
 checks that the correct linker option has been used.  That test
 checks that the correct compile time option has been used.
+
+Note - this test is automatically disabled if the
+@option{--profile=el7} option is used.
 
 If necessary the test can be disabled via the @option{--skip-pie}
 option and re-enabled via the @option{--test-pie} option.
@@ -1838,6 +1857,9 @@ For a full explanation of this topic see these blogs:
 @url{https://developers.redhat.com/blog/2019/04/30/stack-clash-mitigation-in-gcc-why-fstack-check-is-not-the-answer}
 
 @url{https://developers.redhat.com/blog/2020/05/22/stack-clash-mitigation-in-gcc-part-3}
+
+Note - this test is automatically disabled if the
+@option{--profile=el7} option is used.
 
 If necessary the test can be disabled via the @option{--skip-stack-clash}
 option and re-enabled via the @option{--test-stack-clash} option.
@@ -2024,17 +2046,28 @@ features which are not yet implemented, but are planned for the
 future.  The @option{--skip-future} option can be used to restore
 the default behaviour of skipping these tests.
 
-@item --profile-el9
-@itemx --profile-rawhide
-@itemx --profile-el7
+@item --profile=el7
+@itemx --profile=el8
+@itemx --profile=el9
+@itemx --profile=rawhide
+@itemx --profile=default
+@itemx --profile=none
 Rather than enabling and disabling specific tests a selection can be
-chosen via a profile option.  The @option{--profile-el9} option will
-select the tests suitable for @emph{RHEL-9} binaries.  The
-@option{--profile-rawhide} option will select tests suitable for
-@emph{Fedora rawhide} binaries and the @option{--profile-el7} option
-will select tests suitable for @emph{RHEL-7} binaries.
+chosen via a profile option.  The @option{--profile=el7} option will
+select the tests suitable for @emph{RHEL-7} binaries.  Similarly
+@option{--profile=el8} configures the tests for @emph{RHEL-8} and
+@option{--profile=el9} configures them for @emph{RHEL-9}.  The
+@option{--profile=rawhide} option will select tests suitable for
+@emph{Fedora rawhide} binaries.
 
 Other profiles may be added in the future.
+
+Using @option{--profile=default} or @option{--profile=none} will
+disable the profiling and restore the default behaviour of all tests
+being enabled.
+
+For backwards compatibility the form @option{--profile-<name>} can be
+used instead of @option{--profile=<name>}.
 
 @item --disable-hardened
 Disable the tool.
