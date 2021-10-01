@@ -3511,31 +3511,25 @@ check_seg (annocheck_data *    data,
   size_t     data_off;
   size_t     offset = 0;
 
-  offset = gelf_getnote (seg->data, offset, & note, & name_off, & data_off);
-  if (offset == 0)
-    return true;
-
-  if (seg->phdr->p_align != 8)
+  if (seg->phdr->p_align != 8 && seg->phdr->p_align != 4)
     {
-      if (seg->phdr->p_align != 4)
-	{
-	  fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "Note segment not 4 or 8 byte aligned");
-	  einfo (VERBOSE2, "debug: note segment alignment: %ld", (long) seg->phdr->p_align);
-	}
-      else if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
-	{
-	  fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "the GNU Property note segment not 8 byte aligned");
-	}
+      fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "Note segment not 4 or 8 byte aligned");
+      einfo (VERBOSE2, "debug: note segment alignment: %ld", (long) seg->phdr->p_align);
     }
+
+  offset = gelf_getnote (seg->data, offset, & note, & name_off, & data_off);
 
   if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
     {
-      if (offset != 0)
+      if (seg->phdr->p_align != 8)
+	fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "the GNU Property note segment not 8 byte aligned");
+      else if (offset != 0)
 	fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "there is more than one GNU Property note in the note segment");
       else
 	/* FIXME: We should check the contents of the note.  */
 	pass (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, NULL);
     }
+  /* FIXME: Should we complain about other note types ?  */
 
   return true;
 }
@@ -4427,6 +4421,7 @@ finish (annocheck_data * data)
 		fail (data, i, SOURCE_FINAL_SCAN, "no Go compiler revision information found");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "no GO compiled code found");
+	      break;
 
 	    case TEST_ONLY_GO:
 	      if (! is_x86 ())
