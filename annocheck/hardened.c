@@ -557,8 +557,14 @@ maybe (annocheck_data * data,
       if (reason)
 	einfo (PARTIAL, "because %s ", reason);
       if (per_file.component_name)
-	einfo (PARTIAL, "(function: %s) ", per_file.component_name);
+	{
+	  const char * name = per_file.component_name;
 
+	  if (const_strneq (name, "component: "))
+	    einfo (PARTIAL, "(function: %s) ", name + strlen ("component: "));
+	  else
+	    einfo (PARTIAL, "(%s) ", name);
+	}
       go_default_colour ();
 
       if (BE_VERY_VERBOSE)
@@ -1043,7 +1049,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
     }
   else if (BE_VERBOSE && ! per_file.warned_command_line)
     {
-      warn (data, "Command line options not recorded by -grecord-gcc-switches");
+      inform (data, "Command line options not recorded in DWARF DW_AT_producer variable");
       per_file.warned_command_line = true;
     }
 }
@@ -1287,7 +1293,7 @@ get_component_name (annocheck_data *     data,
 
   sym = annocheck_get_symbol_name_and_type (data, sec, note_data->start, note_data->end, prefer_func_symbol, & type);
 
-  if (sym == NULL)
+  if (sym == NULL || * sym == 0)
     {
       if (note_data->start == note_data->end)
 	res = asprintf (& buffer, "address: %#lx", note_data->start);
@@ -1431,11 +1437,13 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
     {
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
+      "_Unwind_Resume", /* In /sbin/ldconfig.  */
       "__libc_init_first",
       "__libc_start_main",
       "_start",
       "free_derivation",
-      "free_mem"
+      "free_mem",
+      "print_entry"  /* In /sbin/ldconfig.  */
     };
 
   if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
@@ -1457,9 +1465,11 @@ skip_pic_checks_for_function (annocheck_data * data, enum test_index check, cons
     {
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
+      "_Unwind_Resume",         /* In /sbin/ldconfig.  */
+      "_nl_archive_subfreeres", /* In /sbin/ldconfig.  */
       "_start",
-      /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
-      "atexit"
+      "atexit",        /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+      "print_entry"    /* In /sbin/ldconfig.  */
     };
 
   if (skip_this_func (non_pie_funcs, ARRAY_SIZE (non_pie_funcs), component_name))
@@ -1486,13 +1496,23 @@ skip_stack_checks_for_function (annocheck_data * data, enum test_index check, co
       "__libc_csu_init",
       "__libc_init_first",
       "__libc_setup_tls",
+      "__libc_start_call_main",    /* Found in ppc64le, RHEL-9, /lib64/libc.so.6.  */
       "__libc_start_main",
+      "__libgcc_s_init",   /* Found in i686 RHEL-8 /lib/libc-2.28.so.  */
+      "__syscall_error",  /* Found in i686 RHEL-8 /lib/libc-2.28.so.  */
+      "_dl_cache_libcmp", /* Found in s390x, RHEL-8, /lib64/ld-2.28.so.  */
       "_dl_relocate_static_pie",
       "_dl_start",
+      "_dl_start_user", /* Found in ppc64le, RHEL-9 /lib64/ld64.so.2.  */
+      "_dl_sysinfo_int80", /* In /lib/ld-linux.so.2.  */
+      "_dl_tls_static_surplus_init", /* In /sbin/ldconfig.  */
       "_fini",
       "_init",
       "_start",
+      "allocate_dtv",   /* Found in AArch64, RHEL-8, /sbin/ldconfig.  */
+      "check_match", 	/* Found in AArch64, RHEL-8, /lib64/ld-2.28.so.  */
       "check_one_fd",
+      "generic_start_main", /* Found in PPC64LE, RHEL-8, /sbin/ldconfig.  */
       "get_common_indices.constprop.0",
       "is_dst",
       "notify_audit_modules_of_loaded_object",
@@ -2888,14 +2908,9 @@ property_note_checker (annocheck_data *     data,
       remaining -= ((size + (expected_quanta - 1)) & ~ (expected_quanta - 1));
     }
 
-  if (is_x86 () && ! per_file.has_cf_protection)
-    {
-      if (per_file.seen_tools & TOOL_GO)
-	skip (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, "CET not enabled because the GO compiler does not support it");
-      else
-	fail (data, TEST_CF_PROTECTION, SOURCE_PROPERTY_NOTES, "CET enabling note missing");
-    }
-
+  /* Do not complain about a missing CET note yet - there may be a .note.go.buildid
+     to follow, which would explain why the CET note is missing.  */
+    
   pass (data, TEST_PROPERTY_NOTE, SOURCE_PROPERTY_NOTES, NULL);
   return true;
 
@@ -2931,7 +2946,7 @@ check_note_section (annocheck_data *    data,
 
       per_file.build_notes_seen = true;
       per_file.note_data.start = per_file.note_data.end = 0;
-      per_file.seen_tools = TOOL_UNKNOWN;
+      //      per_file.seen_tools = TOOL_UNKNOWN;
 
       res = annocheck_walk_notes (data, sec, build_note_checker, NULL);
 
@@ -4287,7 +4302,7 @@ finish (annocheck_data * data)
 		  skip (data, i, SOURCE_FINAL_SCAN, "kernel modules are not compiled with this feature");
 		  break;
 		}
-	      else if (per_file.current_tool == TOOL_GO)
+	      else if (per_file.seen_tools & TOOL_GO)
 		{
 		  skip (data, i, SOURCE_FINAL_SCAN, "GO compilation does not use the C preprocessor");
 		  break;
@@ -4352,6 +4367,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
 	      else if (is_kernel_module (data))
 		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules do not support stack clash protection");
+	      else if (per_file.seen_tools & TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support stack clash protection");
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this test");
 	    break;
@@ -4377,7 +4394,7 @@ finish (annocheck_data * data)
 	    case TEST_CF_PROTECTION:
 	      if (is_x86 () && is_executable ())
 		{
-		  if (per_file.current_tool == TOOL_GO)
+		  if (per_file.seen_tools & TOOL_GO)
 		    skip (data, i, SOURCE_FINAL_SCAN, "control flow protection is not needed for GO binaries");
 		  else if (tests[TEST_PROPERTY_NOTE].enabled
 		      && tests[TEST_PROPERTY_NOTE].state == STATE_UNTESTED)

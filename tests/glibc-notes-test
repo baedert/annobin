@@ -44,7 +44,8 @@ $GCC -pie -Wl,-z,now hello.o hello2.o hello3.o -L. -lhello -o glibc-notes.exe
 
 # Run annocheck
 
-$ANNOCHECK glibc-notes.exe --skip-cf-protection --skip-property-note --skip-stack-realign --ignore-gaps --skip-entry --skip-dynamic-tags --skip-lto > glibc-notes.out
+SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-lto --skip-fortify --skip-warnings"
+$ANNOCHECK glibc-notes.exe $SKIPS --ignore-gaps > glibc-notes.out
 grep -e "PASS" glibc-notes.out
 if [ $? != 0 ];
 then
