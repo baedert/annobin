@@ -1290,7 +1290,7 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
 	  && GELF_ST_VISIBILITY (sym.st_other) == STV_HIDDEN)
 	continue;
 
-      if (name == NULL)
+      if (name == NULL || *name == 0)
 	continue;
 
       if (ends_with (name, "_end", strlen ("_end")))
