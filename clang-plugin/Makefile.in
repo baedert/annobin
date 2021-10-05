@@ -10,6 +10,7 @@ LLVM_OPTIONS = \
 PLUGIN_OPTIONS = \
   -shared \
   -fPIC \
+  -g \
   -Wl,-z,now
 
 INCDIR = @srcdir@/..
