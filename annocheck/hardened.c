@@ -3573,7 +3573,6 @@ is_nop_byte (annocheck_data * data ATTRIBUTE_UNUSED,
 	case 1: return byte == 0x20;
 	case 2: return byte == 0x03;
 	case 3: return byte == 0xd5;
-	default: return false;
 	}
 
     case EM_S390:
