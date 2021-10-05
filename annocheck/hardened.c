@@ -3778,6 +3778,24 @@ ignore_gap (annocheck_data * data, note_range * gap)
       return true;
     }
 
+  size_t shstrndx;
+
+  if (elf_getshdrstrndx (data->elf, & shstrndx) >= 0)
+    {
+      const char * secname;
+      secname = elf_strptr (data->elf, shstrndx, scn_name);	  
+      if (streq (secname, ".plt"))
+	{
+	  einfo (VERBOSE2, "Ignoring gaps in the .plt section");
+	  return true;
+	}
+      if (streq (secname, ".got"))
+	{
+	  einfo (VERBOSE2, "Ignoring gaps in the .got section");
+	  return true;
+	}
+    }
+  
   /* On the PowerPC64, the linker can insert PLT resolver stubs at the end of the .text section.
      These will be unannotated, but they can safely be ignored.
 
@@ -4468,16 +4486,17 @@ finish (annocheck_data * data)
 	  einfo (INFO, "Rerun annocheck with --verbose to see more information on the tests");
 	  tell_rerun = false;
 	}
+      einfo (INFO, "%s: FAIL", data->filename);
       return false;
     }
 
   if (per_file.num_maybes > 0)
-    return false; /* FIXME: Add an option to ignore MAYBE results ? */
+    {
+      einfo (INFO, "%s: FAIL (due to MAYB results)", data->filename);
+      return false; /* FIXME: Add an option to ignore MAYBE results ? */
+    }
 
-  if (BE_VERBOSE)
-    return true;
-
-  return einfo (INFO, "%s: PASS", get_filename (data));
+  return einfo (INFO, "%s: PASS", data->filename);
 }
 
 static void
