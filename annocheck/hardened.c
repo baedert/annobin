@@ -1041,10 +1041,8 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 	{
 	  if (skip_test (TEST_CF_PROTECTION))
 	    ;
-	  else if (strstr (string, "-fcf-protection"))
-	    pass (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, NULL);
-	  else
-	    info (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, "not found in string");
+	  else if (! strstr (string, "-fcf-protection"))
+	    info (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, "-fcf-protection option not found in string");
 	}
     }
   else if (BE_VERBOSE && ! per_file.warned_command_line)
@@ -2282,7 +2280,13 @@ build_note_checker (annocheck_data *     data,
 
 	    case 4: /* CF_FULL.  */
 	    case 8: /* CF_FULL | CF_SET */
-	      pass (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, NULL);
+	      if (tests[TEST_PROPERTY_NOTE].enabled)
+		/* Do not PASS here.  The binary might be linked with other objects which do
+		   not have this option enabled, and so the property note will not be correct.
+		   See BZ 1991943 and 2010692.  */
+		;
+	      else
+		pass (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "branch protection enabled.");
 	      break;
 
 	    case 2: /* CF_BRANCH: Branch but not return.  */
@@ -2822,27 +2826,6 @@ property_note_checker (annocheck_data *     data,
   if (skip_test (TEST_PROPERTY_NOTE))
     return true;
 
-  const char * (* handler) (annocheck_data *, annocheck_section *, ulong, ulong, const unsigned char *);
-  switch (per_file.e_machine)
-    {
-    case EM_X86_64:
-    case EM_386:
-      handler = handle_x86_property_note;
-      break;
-
-    case EM_AARCH64:
-      handler = handle_aarch64_property_note;
-      break;
-
-    case EM_PPC64:
-      handler = handle_ppc64_property_note;
-      break;
-
-    default:
-      einfo (VERBOSE2, "%s: WARN: Property notes for architecture %d not handled", get_filename (data), per_file.e_machine);
-      return true;
-    }
-  
   if (note->n_type != NT_GNU_PROPERTY_TYPE_0)
     {
       einfo (VERBOSE2, "%s: info: unexpected GNU Property note type %x", get_filename (data), note->n_type);
@@ -2884,6 +2867,27 @@ property_note_checker (annocheck_data *     data,
     {
       reason = "the note section is present but empty";
       goto fail;
+    }
+
+  const char * (* handler) (annocheck_data *, annocheck_section *, ulong, ulong, const unsigned char *);
+  switch (per_file.e_machine)
+    {
+    case EM_X86_64:
+    case EM_386:
+      handler = handle_x86_property_note;
+      break;
+
+    case EM_AARCH64:
+      handler = handle_aarch64_property_note;
+      break;
+
+    case EM_PPC64:
+      handler = handle_ppc64_property_note;
+      break;
+
+    default:
+      einfo (VERBOSE2, "%s: WARN: Property notes for architecture %d not handled", get_filename (data), per_file.e_machine);
+      return true;
     }
 
   while (remaining)
@@ -4005,6 +4009,10 @@ check_for_gaps (annocheck_data * data)
 	      continue;
 	    }
 
+	  const char * first_sym = NULL;
+	  if (sym != NULL)
+	    first_sym = strdup (sym);
+
 	  /* If the start of the range was not aligned to a function boundary
 	     then try again, this time with an aligned start symbol.
 	     FIXME: 16 is suitable for x86_64, but not necessarily other architectures.  */
@@ -4013,7 +4021,8 @@ check_for_gaps (annocheck_data * data)
 	      const char * sym2;
 
 	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
-	      if (sym2 != NULL && strstr (sym2, ".end") == NULL)
+	      if (sym2 != NULL && strstr (sym2, ".end") == NULL
+		  && (first_sym == NULL || strcmp (sym2, first_sym) != 0))
 		{
 		  if (skip_gap_sym (data, sym2))
 		    {
@@ -4022,10 +4031,10 @@ check_for_gaps (annocheck_data * data)
 		      continue;
 		    }
 
-		  if (sym == NULL)
+		  if (first_sym == NULL)
 		    {
 		      gap.start = align (gap.start, 16);
-		      sym = sym2;
+		      first_sym = strdup (sym2);
 		    }
 		}
 	    }
@@ -4034,7 +4043,7 @@ check_for_gaps (annocheck_data * data)
 	  if (gap.end - gap.start > 32)
 	    {
 	      const char * sym2;
-	      ulong start = align (gap.start + (gap.end - gap.start) / 2, 32);
+	      ulong start = align (gap.start + ((gap.end - gap.start) / 2), 32);
 
 	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, start, start + 32, false);
 
@@ -4047,8 +4056,8 @@ check_for_gaps (annocheck_data * data)
 		      continue;
 		    }
 
-		  if (sym == NULL)
-		    sym = sym2;
+		  if (first_sym == NULL)
+		    first_sym = strdup (sym2);
 		}
 	    }
 
@@ -4056,21 +4065,24 @@ check_for_gaps (annocheck_data * data)
 	  if (! BE_VERBOSE)
 	    break;
 
-	  if (sym)
+	  if (first_sym)
 	    {
-	      const char * cpsym = NULL;
-
-	      if (sym[0] == '_' && sym[1] == 'Z')
+	      if (first_sym[0] == '_' && first_sym[1] == 'Z')
 		{
+		  const char * cpsym = NULL;
+
 		  cpsym = cplus_demangle (sym, DMGL_PARAMS | DMGL_ANSI | DMGL_VERBOSE);
 		  if (cpsym != NULL)
-		    sym = cpsym;
+		    {
+		      free ((char *) first_sym);
+		      first_sym = cpsym;
+		    }
 		}
 
 	      einfo (VERBOSE, "%s: gap:  (%#lx..%#lx probable component: %s) in annobin notes",
-		     get_filename (data), gap.start, gap.end, sym);
+		     get_filename (data), gap.start, gap.end, first_sym);
 
-	      free ((char *) cpsym);
+	      free ((char *) first_sym);
 	    }
 	  else
 	    einfo (VERBOSE, "%s: gap:  (%#lx..%#lx) in annobin notes",
@@ -4414,9 +4426,17 @@ finish (annocheck_data * data)
 		{
 		  if (per_file.seen_tools & TOOL_GO)
 		    skip (data, i, SOURCE_FINAL_SCAN, "control flow protection is not needed for GO binaries");
-		  else if (tests[TEST_PROPERTY_NOTE].enabled
-		      && tests[TEST_PROPERTY_NOTE].state == STATE_UNTESTED)
-		    fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section = no control flow information");
+		  else if (tests[TEST_PROPERTY_NOTE].enabled)
+		    {
+		      if (tests[TEST_PROPERTY_NOTE].state == STATE_UNTESTED)
+			fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section = no control flow information");
+		      else if (tests[TEST_PROPERTY_NOTE].state != STATE_PASSED)
+			fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the expected notes");
+		      else if (! per_file.has_cf_protection)
+			fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the necessary flags");
+		      else
+			pass (data, i, SOURCE_FINAL_SCAN, "control flow information is correct");
+		    }
 		  else
 		    fail (data, i, SOURCE_FINAL_SCAN, "control flow protection is not enabled");
 		}
@@ -4486,17 +4506,22 @@ finish (annocheck_data * data)
 	  einfo (INFO, "Rerun annocheck with --verbose to see more information on the tests");
 	  tell_rerun = false;
 	}
-      einfo (INFO, "%s: FAIL", data->filename);
+      einfo (INFO, "%s: Overall: FAIL", data->filename);
       return false;
     }
 
   if (per_file.num_maybes > 0)
     {
-      einfo (INFO, "%s: FAIL (due to MAYB results)", data->filename);
+      einfo (INFO, "%s: Overall: FAIL (due to MAYB results)", data->filename);
       return false; /* FIXME: Add an option to ignore MAYBE results ? */
     }
 
-  return einfo (INFO, "%s: PASS", data->filename);
+  if (BE_VERBOSE)
+    einfo (INFO, "%s: Overall: PASS", data->filename);
+  else
+    einfo (INFO, "%s: PASS", data->filename);
+
+  return true;
 }
 
 static void

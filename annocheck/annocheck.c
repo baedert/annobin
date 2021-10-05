@@ -1279,8 +1279,6 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
 
   for (symndx = 1; gelf_getsym (sym_data, symndx, & sym) != NULL; symndx++)
     {
-      const char * name = elf_strptr (elf, sym_hdr->sh_link, sym.st_name);
-
       if (sym.st_value < start || sym.st_value >= end)
 	continue;
 
@@ -1289,6 +1287,8 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
 	  && GELF_ST_BIND (sym.st_info) == STB_LOCAL
 	  && GELF_ST_VISIBILITY (sym.st_other) == STV_HIDDEN)
 	continue;
+
+      const char * name = elf_strptr (elf, sym_hdr->sh_link, sym.st_name);
 
       if (name == NULL || *name == 0)
 	continue;
@@ -1299,9 +1299,8 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
       if (ends_with (name, ".end", strlen (".end")))
 	continue;
 
-      ulong distance_from_start = sym.st_value - start;
-
-      uint type = GELF_ST_TYPE (sym.st_info);
+      ulong  distance_from_start = sym.st_value - start;
+      uint   type = GELF_ST_TYPE (sym.st_info);
 
       if (prefer_func && type != STT_FUNC && type != STT_GNU_IFUNC)
 	{
