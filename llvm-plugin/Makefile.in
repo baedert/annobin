@@ -8,9 +8,14 @@ LLVM_OPTIONS = \
   -D__STDC_LIMIT_MACROS
 
 PLUGIN_OPTIONS = \
+   -D_FORTIFY_SOURCE=2 \
+   -D_GLIBCXX_ASSERTIONS \
   -shared \
   -fPIC \
-  -g \
+  -Wall \
+  -O2 \
+  -flto \
+  -g -grecord-gcc-switches \
   -Wl,-z,now
 
 INCDIR = @srcdir@/..
@@ -42,9 +47,11 @@ PLUGIN = @abs_builddir@/$(PLUGIN_NAME)
 
 PLUGIN_TEST_OPTIONS = \
    -D_FORTIFY_SOURCE=2 \
+   -D_GLIBCXX_ASSERTIONS \
    -O2 \
    -g -grecord-gcc-switches \
    -fPIE \
+   -Wall \
    -fstack-protector-strong \
    -fsanitize=safe-stack
 

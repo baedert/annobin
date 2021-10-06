@@ -1037,6 +1037,24 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       else
 	info (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, "not found in string");
 
+      if (skip_test (TEST_GLIBCXX_ASSERTIONS))
+	;
+      else if (strstr (string, "-D_GLIBCXX_ASSERTIONS")
+	       || strstr (string, "-D _GLIBCXX_ASSERTIONS"))
+	pass (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_DW_AT_PRODUCER, NULL);
+      else
+	info (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_DW_AT_PRODUCER, "not found in string");
+
+      if (skip_test (TEST_FORTIFY))
+	;
+      else if (strstr (string, "-D_FORTIFY_SOURCE=2")
+	       || strstr (string, "-D _FORTIFY_SOURCE=2")
+	       || strstr (string, "-D_FORTIFY_SOURCE=3")
+	       || strstr (string, "-D _FORTIFY_SOURCE=3"))
+	pass (data, TEST_FORTIFY, SOURCE_DW_AT_PRODUCER, NULL);
+      else
+	info (data, TEST_FORTIFY, SOURCE_DW_AT_PRODUCER, "not found in string");
+
       if (is_x86 ())
 	{
 	  if (skip_test (TEST_CF_PROTECTION))
@@ -4027,6 +4045,7 @@ check_for_gaps (annocheck_data * data)
 		    {
 		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
 		      /* See comment above.  */
+		      free ((char *) first_sym);
 		      continue;
 		    }
 
@@ -4052,6 +4071,7 @@ check_for_gaps (annocheck_data * data)
 		    {
 		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
 		      /* See comment above.  */
+		      free ((char *) first_sym);
 		      continue;
 		    }
 
@@ -4062,7 +4082,10 @@ check_for_gaps (annocheck_data * data)
 
 	  gap_found = true;
 	  if (! BE_VERBOSE)
-	    break;
+	    {
+	      free ((char *) first_sym);
+	      break;
+	    }
 
 	  if (first_sym)
 	    {
