@@ -4279,7 +4279,9 @@ finish (annocheck_data * data)
 	      break;
 
 	    case TEST_LTO:
-	      if (is_C_compiler (per_file.seen_tools))
+	      if (per_file.seen_tools & TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "at least part of the binary is compield GO");
+	      else if (is_C_compiler (per_file.seen_tools))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "not compiled C/C++ code");
@@ -4377,7 +4379,7 @@ finish (annocheck_data * data)
 	      break;
 
 	    case TEST_PIC:
-	      if (per_file.current_tool == TOOL_GO)
+	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support a -fPIC option");
 	      else if (is_C_compiler (per_file.seen_tools))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
@@ -4399,8 +4401,8 @@ finish (annocheck_data * data)
 	      break;
 
 	    case TEST_OPTIMIZATION:
-	      if (per_file.current_tool == TOOL_GO)
-		skip (data, i, SOURCE_FINAL_SCAN, "GO optimizes by default");
+	      if (per_file.seen_tools & TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "GO optimized by default");
 	      else if (is_C_compiler (per_file.seen_tools))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      else
