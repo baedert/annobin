@@ -727,9 +727,9 @@ add_producer (annocheck_data *  data,
       if (! fixed_format_messages)
 	{
 	  if (version)
-	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
+	    einfo (VERBOSE2, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
 	  else
-	    einfo (VERBOSE, "%s: info: set binary producer to %s", get_filename (data), get_tool_name (tool));
+	    einfo (VERBOSE2, "%s: info: set binary producer to %s", get_filename (data), get_tool_name (tool));
 	}
 
       if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
@@ -741,7 +741,7 @@ add_producer (annocheck_data *  data,
 	{
 	  if (per_file.tool_version == 0)
 	    {
-	      einfo (VERBOSE, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
+	      einfo (VERBOSE2, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
 	      per_file.tool_version = version;
 	    }
 	  else if (per_file.tool_version < version)
@@ -786,9 +786,9 @@ add_producer (annocheck_data *  data,
       if (! fixed_format_messages)
 	{
 	  if (version)
-	    einfo (VERBOSE, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
+	    einfo (VERBOSE2, "%s: info: set binary producer to %s version %u", get_filename (data), get_tool_name (tool), version);
 	  else
-	    einfo (VERBOSE, "%s: info: set binary producer to %s", get_filename (data), get_tool_name (tool));
+	    einfo (VERBOSE2, "%s: info: set binary producer to %s", get_filename (data), get_tool_name (tool));
 	}
     }
 }
@@ -927,7 +927,8 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 
 	  if (! warned)
 	    {
-	      warn (data, "DW_FORM_GNU_strp_alt not yet handled");
+	      einfo (VERBOSE2, "%s: warn DW_FORM_GNU_strp_alt found in DW_AT_producer, but this form is not yet handled by libelf",
+		     get_filename (data));
 	      warned = true;
 	    }
 	}
@@ -1051,7 +1052,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 	       || strstr (string, "-D _FORTIFY_SOURCE=2")
 	       || strstr (string, "-D_FORTIFY_SOURCE=3")
 	       || strstr (string, "-D _FORTIFY_SOURCE=3"))
-	pass (data, TEST_FORTIFY, SOURCE_DW_AT_PRODUCER, NULL);
+	pass (data, TEST_FORTIFY, SOURCE_DW_AT_PRODUCER, "found in DW_AT_producer string");
       else
 	info (data, TEST_FORTIFY, SOURCE_DW_AT_PRODUCER, "not found in string");
 
@@ -1379,15 +1380,15 @@ report_note_producer (annocheck_data * data,
 		      const char *     source,
 		      uint             version)
 {
-  if (! BE_VERBOSE)
-    return;
-
   if (per_file.note_source[producer] == version)
     return;
 
   per_file.note_source[producer] = version;
 
   if (fixed_format_messages)
+    return;
+
+  if (! BE_VERY_VERBOSE)
     return;
 
   einfo (PARTIAL, "%s: %s: info: notes produced by %s plugin ",
@@ -1785,16 +1786,6 @@ build_note_checker (annocheck_data *     data,
   char          attr_type = namedata[pos - 1];
   const char *  attr = namedata + pos;
 
-  /* We skip notes with empty ranges unless we are dealing with unrelocated
-     object files.  */
-  if (! is_object_file ()
-      && note_data->start == note_data->end)
-    {
-      einfo (VERBOSE2, "skip %s note for zero-length range at %#lx",
-	     note_name (attr), note_data->start);
-      return true;
-    }
-
   /* Advance pos to the attribute's value.  */
   if (! isprint (* attr))
     pos ++;
@@ -1845,8 +1836,21 @@ build_note_checker (annocheck_data *     data,
       return true;
     }
 
+  /* We skip notes with empty ranges unless we are dealing with unrelocated
+     object files or version notes.  We always parse version notes so that
+     we always know which tool produced the notes that follow.  */
+  if (! is_object_file ()
+      && note_data->start == note_data->end
+      && * attr != GNU_BUILD_ATTRIBUTE_VERSION)
+    {
+      einfo (VERBOSE2, "skip %s note for zero-length range at %#lx",
+	     note_name (attr), note_data->start);
+      return true;
+    }
+
   einfo (VERBOSE2, "process %s note for range at %#lx..%#lx",
 	 note_name (attr), note_data->start, note_data->end);
+  
   switch (* attr)
     {
     case GNU_BUILD_ATTRIBUTE_VERSION:
@@ -2123,12 +2127,12 @@ build_note_checker (annocheck_data *     data,
 	}
       else if (strstr (attr + 1, "plugin name"))
 	{
-	  einfo (VERBOSE2, "%s: (%s) %s",
-		 get_filename (data), per_file.component_name, attr + 1);
+	  einfo (VERBOSE2, "%s: info: %s",
+		 get_filename (data), attr + 1);
 	}
       else
-	einfo (VERBOSE, "%s: (%s) unable to parse tool attribute: %s",
-	       get_filename (data), per_file.component_name, attr);
+	einfo (VERBOSE, "%s: info: unable to parse tool attribute: %s",
+	       get_filename (data), attr + 1);
       break;
 
     case GNU_BUILD_ATTRIBUTE_PIC:
@@ -2335,7 +2339,7 @@ build_note_checker (annocheck_data *     data,
 
 	  if (! is_C_compiler (per_file.current_tool))
 	    {
-	      skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "not built by gcc/clang");
+	      skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "the part of the sources being scanned were not built by gcc/clang");
 	      break;
 	    }
 	    
@@ -2391,7 +2395,7 @@ build_note_checker (annocheck_data *     data,
 
 	    case 2:
 	    case 3:
-	      pass (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, NULL);
+	      pass (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "fortify note found");
 	      break;
 	    }
 	}
@@ -3985,6 +3989,8 @@ check_for_gaps (annocheck_data * data)
   /* Scan the ranges array.  */
   bool gap_found = false;
   uint i;
+  const char * first_sym = NULL;
+
   for (i = 1; i < next_free_range; i++)
     {      
       if (ranges[i].start <= current.end)
@@ -4026,7 +4032,6 @@ check_for_gaps (annocheck_data * data)
 	      continue;
 	    }
 
-	  const char * first_sym = NULL;
 	  if (sym != NULL)
 	    first_sym = strdup (sym);
 
@@ -4038,7 +4043,8 @@ check_for_gaps (annocheck_data * data)
 	      const char * sym2;
 
 	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
-	      if (sym2 != NULL && strstr (sym2, ".end") == NULL
+	      if (sym2 != NULL
+		  && strstr (sym2, ".end") == NULL
 		  && (first_sym == NULL || strcmp (sym2, first_sym) != 0))
 		{
 		  if (skip_gap_sym (data, sym2))
@@ -4046,6 +4052,7 @@ check_for_gaps (annocheck_data * data)
 		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
 		      /* See comment above.  */
 		      free ((char *) first_sym);
+		      first_sym = NULL;
 		      continue;
 		    }
 
@@ -4072,6 +4079,7 @@ check_for_gaps (annocheck_data * data)
 		      einfo (VERBOSE2, "gap ignored - special symbol: %s", sym2);
 		      /* See comment above.  */
 		      free ((char *) first_sym);
+		      first_sym = NULL;
 		      continue;
 		    }
 
@@ -4105,6 +4113,7 @@ check_for_gaps (annocheck_data * data)
 		     get_filename (data), gap.start, gap.end, first_sym);
 
 	      free ((char *) first_sym);
+	      first_sym = NULL;
 	    }
 	  else
 	    einfo (VERBOSE, "%s: gap:  (%#lx..%#lx) in annobin notes",
@@ -4439,7 +4448,7 @@ finish (annocheck_data * data)
 		  if (tests[TEST_BRANCH_PROTECTION].enabled)
 		    fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section not found (it is needed for branch protection support)");
 		  else
-		    skip (data, i, SOURCE_FINAL_SCAN, "property note test only useful if branch protection is being checked");
+		    skip (data, i, SOURCE_FINAL_SCAN, "test only useful if branch protection is being checked");
 		}
 	      else
 		fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section found");
