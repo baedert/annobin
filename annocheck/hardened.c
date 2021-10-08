@@ -3559,7 +3559,13 @@ check_seg (annocheck_data *    data,
     }
 
   offset = gelf_getnote (seg->data, offset, & note, & name_off, & data_off);
-
+  if (offset == 0)
+    {
+      einfo (VERBOSE2, "Unable to retrieve note");
+      /* Allow scan to continue.  */
+      return true;
+    }
+  
   if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
     {
       if (seg->phdr->p_align != 8)

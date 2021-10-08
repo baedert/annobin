@@ -702,8 +702,6 @@ run_checkers (const char * filename, int fd, Elf * elf)
 		      ret &= tool->check_sec (& data, & sec);
 		    }
 		}
-	      else
-		einfo (VERBOSE2, "is not interested in %s", sec.secname);
 
 	      pop_component ();
 	    }
@@ -749,8 +747,6 @@ run_checkers (const char * filename, int fd, Elf * elf)
 		  assert (tool->check_seg != NULL);
 		  ret &= tool->check_seg (& data, & seg);
 		}
-	      else
-		einfo (VERBOSE2, "is not interested in segment %lu", (unsigned long) cnt);
 
 	      pop_component ();
 	    }
@@ -979,6 +975,7 @@ follow_debuglink (annocheck_data * data)
 				+ strlen (DEBUGDIR_2)
 				+ strlen (DEBUGDIR_3)
 				+ strlen (DEBUGDIR_4)
+				+ (debug_path ? strlen (debug_path) : 1)
 				+ canon_dirlen
 				+ strlen (".debug/")
 				+ strlen (link)
