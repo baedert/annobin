@@ -114,6 +114,7 @@ static struct per_file
   uint        run_minor;
   uint        run_rel;
 
+  uint          seen_tools_with_code;
   uint          seen_tools;
   uint          tool_version;
   uint          current_tool;
@@ -1887,6 +1888,8 @@ build_note_checker (annocheck_data *     data,
 	case ANNOBIN_TOOL_ID_ASSEMBLER:
 	  name = "assembler";
 	  add_producer (data, TOOL_GAS, 2, SOURCE_ANNOBIN_NOTES, true);
+	  if (note_data->start < note_data->end)
+	    per_file.seen_tools_with_code |= TOOL_GAS;
 	  break;
 
 	case ANNOBIN_TOOL_ID_LINKER:
@@ -1906,6 +1909,8 @@ build_note_checker (annocheck_data *     data,
 	    add_producer (data, TOOL_GCC, 0, SOURCE_ANNOBIN_NOTES, true);
 	  /* FIXME: Add code to check that the version of the
 	     note producer is not greater than our version.  */
+	  if (note_data->start < note_data->end)
+	    per_file.seen_tools_with_code |= TOOL_GCC;
 	  break;
 
 	case ANNOBIN_TOOL_ID_GCC_LTO:
@@ -1914,6 +1919,10 @@ build_note_checker (annocheck_data *     data,
 	    add_producer (data, TOOL_GIMPLE, version / 100, SOURCE_ANNOBIN_NOTES, true);
 	  else
 	    add_producer (data, TOOL_GIMPLE, 0, SOURCE_ANNOBIN_NOTES, true);
+	  if (! skip_test (TEST_LTO))
+	    pass (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, "detected in version note");
+	  if (note_data->start < note_data->end)
+	    per_file.seen_tools_with_code |= TOOL_GCC;
 	  break;
 
 	case ANNOBIN_TOOL_ID_LLVM:
@@ -1922,6 +1931,8 @@ build_note_checker (annocheck_data *     data,
 	    add_producer (data, TOOL_LLVM, version / 100, SOURCE_ANNOBIN_NOTES, true);
 	  else
 	    add_producer (data, TOOL_LLVM, 0, SOURCE_ANNOBIN_NOTES, true);
+	  if (note_data->start < note_data->end)
+	    per_file.seen_tools_with_code |= TOOL_LLVM;
 	  break;
 
 	case ANNOBIN_TOOL_ID_CLANG:
@@ -1930,6 +1941,8 @@ build_note_checker (annocheck_data *     data,
 	    add_producer (data, TOOL_CLANG, version / 100, SOURCE_ANNOBIN_NOTES, true);
 	  else
 	    add_producer (data, TOOL_CLANG, 0, SOURCE_ANNOBIN_NOTES, true);
+	  if (note_data->start < note_data->end)
+	    per_file.seen_tools_with_code |= TOOL_CLANG;
 	  break;
 
 	default:
@@ -4296,7 +4309,7 @@ finish (annocheck_data * data)
 	    case TEST_LTO:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "at least part of the binary is compield GO");
-	      else if (is_C_compiler (per_file.seen_tools))
+	      else if (is_C_compiler (per_file.seen_tools_with_code))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "not compiled C/C++ code");
@@ -4376,7 +4389,7 @@ finish (annocheck_data * data)
 		  skip (data, i, SOURCE_FINAL_SCAN, "GO compilation does not use the C preprocessor");
 		  break;
 		}
-	      else if (is_C_compiler (per_file.seen_tools))
+	      else if (is_C_compiler (per_file.seen_tools_with_code))
 		{
 		  fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used (and a C compiler was detected)");
 		  break;
@@ -4396,10 +4409,10 @@ finish (annocheck_data * data)
 	    case TEST_PIC:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support a -fPIC option");
-	      else if (is_C_compiler (per_file.seen_tools))
+	      else if (is_C_compiler (per_file.seen_tools_with_code))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      else
-		skip (data, i, SOURCE_FINAL_SCAN, "not compiled code");
+		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
 	      break;
 
 	    case TEST_STACK_PROT:
@@ -4408,20 +4421,20 @@ finish (annocheck_data * data)
 	      else if (per_file.seen_tools == TOOL_GAS
 		       || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
-	      else if (is_C_compiler (per_file.seen_tools))
+	      else if (is_C_compiler (per_file.seen_tools_with_code))
 		/* The skip is necessary because some glibc code is built this way.  */
 		skip (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this feature");
 	      else
-		skip (data, i, SOURCE_FINAL_SCAN, "not compiled code");
+		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
 	      break;
 
 	    case TEST_OPTIMIZATION:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO optimized by default");
-	      else if (is_C_compiler (per_file.seen_tools))
+	      else if (is_C_compiler (per_file.seen_tools_with_code))
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      else
-		skip (data, i, SOURCE_FINAL_SCAN, "not compiled code");
+		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
 	      break;
 
 	    case TEST_STACK_CLASH:
@@ -4432,8 +4445,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
 	      else if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO is stack safe");
-	      else if (is_C_compiler (per_file.seen_tools))
-		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
+	      else if (! is_C_compiler (per_file.seen_tools_with_code))
+		skip (data, i, SOURCE_FINAL_SCAN, "no C/C++ compiled code found");
 	      else if (is_kernel_module (data))
 		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules do not support stack clash protection");
 	      else if (per_file.seen_tools & TOOL_GO)
