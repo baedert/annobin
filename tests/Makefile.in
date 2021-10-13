@@ -475,12 +475,13 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-TESTS = compile-test abi-test active-checks-test assembler-gap-test \
-	function-sections-test glibc-notes-test hardening-fail-test \
-	hardening-test instrumentation-test lto-test \
-	missing-notes-test objcopy-test section-size-test \
-	missing-notes-test active-checks-test property-note-test \
-	hardening-fail-test $(am__append_1)
+TESTS = abi-test active-checks-test active-checks-test \
+	assembler-gap-test atexit-test compile-test fortify-test \
+	function-sections-test gaps-test glibc-notes-test \
+	hardening-fail-test hardening-fail-test hardening-test \
+	instrumentation-test ldconfig-test lto-test missing-notes-test \
+	missing-notes-test objcopy-test property-note-test \
+	section-size-test $(am__append_1)
 all: all-am
 
 .SUFFIXES:
@@ -668,13 +669,6 @@ recheck: all
 	        am__force_recheck=am--force-recheck \
 	        TEST_LOGS="$$log_list"; \
 	exit $$?
-compile-test.log: compile-test
-	@p='compile-test'; \
-	b='compile-test'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
 abi-test.log: abi-test
 	@p='abi-test'; \
 	b='abi-test'; \
@@ -696,9 +690,37 @@ assembler-gap-test.log: assembler-gap-test
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+atexit-test.log: atexit-test
+	@p='atexit-test'; \
+	b='atexit-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+compile-test.log: compile-test
+	@p='compile-test'; \
+	b='compile-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+fortify-test.log: fortify-test
+	@p='fortify-test'; \
+	b='fortify-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 function-sections-test.log: function-sections-test
 	@p='function-sections-test'; \
 	b='function-sections-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+gaps-test.log: gaps-test
+	@p='gaps-test'; \
+	b='gaps-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -731,6 +753,13 @@ instrumentation-test.log: instrumentation-test
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+ldconfig-test.log: ldconfig-test
+	@p='ldconfig-test'; \
+	b='ldconfig-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 lto-test.log: lto-test
 	@p='lto-test'; \
 	b='lto-test'; \
@@ -752,16 +781,16 @@ objcopy-test.log: objcopy-test
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-section-size-test.log: section-size-test
-	@p='section-size-test'; \
-	b='section-size-test'; \
+property-note-test.log: property-note-test
+	@p='property-note-test'; \
+	b='property-note-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-property-note-test.log: property-note-test
-	@p='property-note-test'; \
-	b='property-note-test'; \
+section-size-test.log: section-size-test
+	@p='section-size-test'; \
+	b='section-size-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

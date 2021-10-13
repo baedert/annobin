@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Copyright (c) 2021 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# Mimics how glibc builds C sources without annotation.
+
+TEST_NAME=ldconfig
+. $srcdir/common.sh
+
+SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection"
+
+LDCONFIG=/sbin/ldconfig
+DEBUG=/usr/lib/debug/sbin/ldconfig.debug
+
+start_test
+
+if [ -f $LDCONFIG ];
+then
+    if [ -f $DEBUG ];
+    then
+      $ANNOCHECK $LDCONFIG $SKIPS --ignore-gaps --debug-file $DEBUG > ldconfig.out
+      grep -e "PASS" ldconfig.out
+      if [ $? != 0 ];
+      then
+          echo "atexit-test: FAIL: generating assembler notes did not hide lack of GCC notes"
+          $ANNOCHECK $LDCONFIG $SKIPS --ignore-gaps --debug-file $DEBUG --verbose
+	  end_test
+          exit 1
+       fi
+    else
+	echo "ldconfig-test: skip: ldconfig.debug file not found"
+    fi
+else
+    echo "ldconfig-test: skip: /sbin/ldconfig file not found"
+fi
+
+end_test

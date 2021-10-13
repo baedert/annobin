@@ -6,23 +6,29 @@
 
 ## Process this file with automake to produce Makefile.in.
 
-TESTS=compile-test \
+TESTS=\
       abi-test \
       active-checks-test \
+      active-checks-test \
       assembler-gap-test \
+      atexit-test \
+      compile-test \
+      fortify-test \
       function-sections-test \
+      gaps-test \
       glibc-notes-test \
+      hardening-fail-test \
       hardening-fail-test \
       hardening-test \
       instrumentation-test \
+      ldconfig-test \
       lto-test \
       missing-notes-test \
-      objcopy-test \
-      section-size-test \
       missing-notes-test \
-      active-checks-test \
+      objcopy-test \
       property-note-test \
-      hardening-fail-test
+      section-size-test
+
 
 if HAVE_DEBUGINFOD
 TESTS += debuginfod-test

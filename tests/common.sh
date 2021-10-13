@@ -1,12 +1,13 @@
-GCC=${GCC:-gcc}
 ANNOCHECK=${ANNOCHECK:-../../annocheck/annocheck}
-OBJCOPY=${OBJCOPY:-objcopy}
-READELF=${READELF:-readelf}
-PLUGIN=${PLUGIN:-../../gcc-plugin/.libs/annobin.so}
-GAS=${GAS:-as}
 CURL=${CURL:-curl}
-SS=${SS:-ss}
 DEBUGINFOD=${DEBUGINFOD:-debuginfod}
+GAS=${GAS:-as}
+GCC=${GCC:-gcc}
+OBJCOPY=${OBJCOPY:-objcopy}
+PLUGIN=${PLUGIN:-../../gcc-plugin/.libs/annobin.so}
+READELF=${READELF:-readelf}
+SS=${SS:-ss}
+STRIP=${STRIP:-strip}
 
 # TEST_NAME must be set before including this
 # In theory we should use ${builddir} instead of "." in the path below, but builddir is not exported.

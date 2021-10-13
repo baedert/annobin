@@ -1456,12 +1456,26 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
       "_Unwind_Resume", /* In /sbin/ldconfig.  */
+      "__b64_ntop",  	/* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
+      "__b64_pton",	/* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
+      "__ctype_get_mb_cur_max",
       "__libc_init_first",
+      "__libc_start_call_main",		/* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
       "__libc_start_main",
+      "__librt_version_placeholder", /* Found in ppc64le, RHEL-9, /lib64/librt.so.1.  */
+      "__td_ta_rtld_global", /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
+      "_dl_start_user", 		/* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
+      "_dl_tunable_set_arena_max",  /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
       "_start",
+      "blacklist_store_name",
+      "dlmopen_doit",  /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
       "free_derivation",
       "free_mem",
-      "print_entry"  /* In /sbin/ldconfig.  */
+      "install_handler",
+      "internal_setgrent",
+      "print_entry",  /* In /sbin/ldconfig.  */
+      "td_init",	/* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
+      "unlink_blk" 	/* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
     };
 
   if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
@@ -1509,6 +1523,8 @@ skip_stack_checks_for_function (annocheck_data * data, enum test_index check, co
      It does not have a well defined set of criteria for name inclusion.  */
   const static char * startup_funcs[] =
     { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "../sysdeps/x86_64/crti.S",
+      "../sysdeps/x86_64/start.S",
       "_GLOBAL__sub_I_main",
       "__libc_csu_fini",
       "__libc_csu_init",
@@ -1530,6 +1546,7 @@ skip_stack_checks_for_function (annocheck_data * data, enum test_index check, co
       "allocate_dtv",   /* Found in AArch64, RHEL-8, /sbin/ldconfig.  */
       "check_match", 	/* Found in AArch64, RHEL-8, /lib64/ld-2.28.so.  */
       "check_one_fd",
+      "dlmopen_doit", 
       "generic_start_main", /* Found in PPC64LE, RHEL-8, /sbin/ldconfig.  */
       "get_common_indices.constprop.0",
       "is_dst",
@@ -1755,11 +1772,7 @@ build_note_checker (annocheck_data *     data,
       if (start != per_file.note_data.start
 	  || end != per_file.note_data.end)
 	{
-	  /* The range has changed.  Check the old range.  If it was non-zero
-	     in length then record the last known producer for code in that region.  */
-	  if (per_file.note_data.start != per_file.note_data.end
-	      && per_file.current_tool != TOOL_UNKNOWN)
-	    add_producer (data, per_file.current_tool, per_file.tool_version, SOURCE_ANNOBIN_NOTES, false);
+	  /* The range has changed.  */
 
 	  /* Update the saved range.  */
 	  per_file.note_data.start = start;
@@ -1780,7 +1793,7 @@ build_note_checker (annocheck_data *     data,
   if (bytes_left < 1 || note->n_namesz > bytes_left)
     goto corrupt_note;
 
-  uint          pos = (namedata[0] == 'G' ? 3 : 1);
+  uint pos = (namedata[0] == 'G' ? 3 : 1);
   if (pos > bytes_left)
     goto corrupt_note;
   
@@ -1795,6 +1808,14 @@ build_note_checker (annocheck_data *     data,
 
   if (pos > bytes_left)
     goto corrupt_note;
+
+  /* If we have a new range and we have previously seen a tool note then apply it to
+     the region that we are about to scan, unless the note that we are about to parse
+     is itself a tool note.  */
+  if (note->n_descsz > 0
+      && per_file.current_tool != TOOL_UNKNOWN
+      && * attr != GNU_BUILD_ATTRIBUTE_VERSION)
+    add_producer (data, per_file.current_tool, per_file.tool_version, SOURCE_ANNOBIN_NOTES, false);
 
   const char *  string = namedata + pos;
   uint          value = -1;
@@ -3583,10 +3604,9 @@ check_seg (annocheck_data *    data,
     {
       if (seg->phdr->p_align != 8)
 	fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "the GNU Property note segment not 8 byte aligned");
-      else if (offset != 0)
-	fail (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, "there is more than one GNU Property note in the note segment");
       else
 	/* FIXME: We should check the contents of the note.  */
+	/* FIXME: We should check so see if there is a second note.  */
 	pass (data, TEST_PROPERTY_NOTE, SOURCE_SEGMENT_CONTENTS, NULL);
     }
   /* FIXME: Should we complain about other note types ?  */
@@ -3771,9 +3791,10 @@ ignore_gap (annocheck_data * data, note_range * gap)
 		{
 		  /* FIXME: Which section should we select ?  */
 		  einfo (VERBOSE2, "multiple code sections (%lx+%lx vs %lx+%lx) contain gap start",
-			 shdr->sh_addr, shdr->sh_size,
-			 elf64_getshdr (addr1_scn)->sh_addr,
-			 elf64_getshdr (addr1_scn)->sh_size
+			 (unsigned long) shdr->sh_addr,
+			 (unsigned long) shdr->sh_size,
+			 (unsigned long) elf64_getshdr (addr1_scn)->sh_addr,
+			 (unsigned long) elf64_getshdr (addr1_scn)->sh_size
 			 );
 		}
 	    }
@@ -3787,9 +3808,10 @@ ignore_gap (annocheck_data * data, note_range * gap)
 		{
 		  /* FIXME: Which section should we select ?  */
 		  einfo (VERBOSE2, "multiple code sections (%lx+%lx vs %lx+%lx) contain gap end",
-			 shdr->sh_addr, shdr->sh_size,
-			 elf64_getshdr (addr1_scn)->sh_addr,
-			 elf64_getshdr (addr1_scn)->sh_size);
+			 (unsigned long) shdr->sh_addr,
+			 (unsigned long) shdr->sh_size,
+			 (unsigned long) elf64_getshdr (addr1_scn)->sh_addr,
+			 (unsigned long) elf64_getshdr (addr1_scn)->sh_size);
 		}
 	    }
 	  else if (shdr->sh_addr == gap->end)
@@ -4375,26 +4397,17 @@ finish (annocheck_data * data)
 	    case TEST_WARNINGS:
 	    case TEST_FORTIFY:
 	      if (tests[TEST_LTO].state == STATE_PASSED)
-		{
-		  skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides preprocessor and warning options");
-		  break;
-		}
+		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides preprocessor and warning options");
 	      else if (is_kernel_module (data))
-		{
-		  skip (data, i, SOURCE_FINAL_SCAN, "kernel modules are not compiled with this feature");
-		  break;
-		}
+		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules are not compiled with this feature");
 	      else if (per_file.seen_tools & TOOL_GO)
-		{
-		  skip (data, i, SOURCE_FINAL_SCAN, "GO compilation does not use the C preprocessor");
-		  break;
-		}
+		skip (data, i, SOURCE_FINAL_SCAN, "GO compilation does not use the C preprocessor");
 	      else if (is_C_compiler (per_file.seen_tools_with_code))
-		{
-		  fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used (and a C compiler was detected)");
-		  break;
-		}
-	      /* Fall through.  */
+		fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used (and a C compiler was detected)");
+	      else
+		skip (data, i, SOURCE_FINAL_SCAN, "no C/C++ compiled code found");
+	      break;
+
 	    default:
 	      /* Do not complain about compiler specific tests being missing
 		 if all that we have seen is assembler produced code.  */

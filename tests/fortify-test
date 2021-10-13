@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Copyright (c) 2021 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# See BZ 2010675
+
+set +x
+echo START
+
+TEST_NAME=fortify
+. $srcdir/common.sh
+
+OPTS="$(rpm --eval '%build_cflags %build_ldflags')"
+
+start_test
+
+$GCC $OPTS -Wp,-U_FORTIFY_SOURCE -fno-lto $srcdir/main.c -o main.exe
+if [ $? != 0 ];
+then
+    echo "fortify-test: FAIL: unable to compile test file"
+    end_test
+    exit 1
+fi
+
+# Run annocheck
+
+SKIPS="--skip-property-note --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection --skip-lto"
+$ANNOCHECK main.exe $SKIPS > main.out
+grep -e "Overall: FAIL" main.out
+if [ $? != 0 ];
+then
+    echo "fortify-test: FAIL: compiling with -D_FORTIFY_SOURCE=2 still produces an executable that passes annocheck"
+    $ANNOCHECK main.exe $SKIPS --verbose
+    uuencode main.exe main.exe
+    end_test
+    exit 1
+fi
+
+end_test

@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# Copyright (c) 2021 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# Mimics how glibc builds C sources without annotation.
+
+TEST_NAME=atexit
+. $srcdir/common.sh
+
+OPTS="-O2 -g -Wl,-z,now -pie -fpie -Wa,--generate-missing-build-notes=yes"
+
+start_test
+
+$GCC $OPTS $srcdir/atexit.c -o atexit.exe
+if [ $? != 0 ];
+then
+    $GCC $OPTS $srcdir/atexit.c -o atexit.exe
+    if [ $? != 0 ];
+    then
+	echo "atexit-test: FAIL: Could not compile source files"
+	end_test
+	exit 1
+    fi
+    echo "atexit-test: Assembler does not support --generate-missing-build-notes, skipping test"
+    end_test
+    exit 0
+fi
+
+$STRIP -g -o atexit.strip atexit.exe
+
+# Run annocheck
+
+SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection --skip-lto"
+$ANNOCHECK atexit.strip $SKIPS --ignore-gaps > atexit.out
+grep -e "PASS" atexit.out
+if [ $? != 0 ];
+then
+    echo "atexit-test: FAIL: generating assembler notes did not hide lack of GCC notes"
+    $ANNOCHECK atexit.strip $SKIPS --ignore-gaps --verbose
+    exit 1
+fi
+
+end_test
