@@ -328,7 +328,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = -I'$(top_builddir)' -I'$(top_srcdir)'
 AUTOMAKE_OPTIONS = no-dependencies
-annocheck_SOURCES = annocheck.c timing.c size.c notes.c hardened.c built-by.c annocheck.h ../annobin-global.h
+annocheck_SOURCES = annocheck.c timing.c size.c notes.c hardened.c built-by.c annocheck.h ../annobin-global.h ../gcc-plugin/config.h
 annocheck_LDADD = -lelf -ldw $(RPMLIBS) -liberty $(LIBDEBUGINFOD)
 all: all-am
 

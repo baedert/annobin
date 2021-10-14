@@ -921,7 +921,10 @@ follow_debuglink (annocheck_data * data)
       build_id_name = n = xmalloc (len * 2 + 1);
       while (len --)
 	n += sprintf (n, "%02x", *d++);      
-      
+
+      einfo (VERBOSE2, "%s: build_id_len: %lu, name: %s", data->filename,
+	     (unsigned long) build_id_len, build_id_name);
+
       if (* path)
 	{
 	  /* If the user has supplied a directory to search then this might be
@@ -941,7 +944,7 @@ follow_debuglink (annocheck_data * data)
       TRY_DEBUG ("%s/%s/%s.debug", leadin, build_id_dir, build_id_name);
 
       free (debugfile);
-      einfo (VERBOSE2, "%s: Could not find separate debug based on build-id", data->filename);
+      einfo (VERBOSE2, "%s: Could not find separate debuginfo file based on build-id", data->filename);
     }
 
   /* Now try using a .gnu.debuglink section.  */
@@ -954,7 +957,7 @@ follow_debuglink (annocheck_data * data)
       return NULL;
     }
 
-  einfo (VERBOSE2, "%s: Testing possibilities based upon the debuglink", data->filename);
+  einfo (VERBOSE2, "%s: Testing possibilities based upon debuglink section(s)", data->filename);
 
   size_t canon_dirlen;
 
@@ -1057,15 +1060,16 @@ follow_debuglink (annocheck_data * data)
 
       if (client != NULL)
         {
-          free (debugfile);
-          debugfile = NULL;
-
+einfo (VERBOSE2, "C");
 	  TRY_DEBUG ("DEBUGINFOD_URLS=%s", getenv (DEBUGINFOD_URLS_ENV_VAR) ?: "" );
+einfo (VERBOSE2, "B");
+	  
           /* If the debug file is successfully downloaded, debugfile will be
              set to the path of the local copy.  */
           fd = debuginfod_find_debuginfo (client, build_id_ptr, build_id_len, & debugfile);
 
           debuginfod_end (client);
+einfo (VERBOSE2, "D");
 
           if (fd >= 0)
             {
@@ -1075,9 +1079,15 @@ follow_debuglink (annocheck_data * data)
                 goto found;
             }
         }
+      else
+	einfo (VERBOSE2, "%s: unable to initialise debuginfod client", data->filename);
     }
+  else
+    einfo (VERBOSE2, "%s: no build-id found, so cannot query debuginfod service", data->filename);
+#else
+  einfo (VERBOSE2, "%s: support for debuginfod not built into annocheck", data->filename);
 #endif /* HAVE_LIBDEBUGINFOD */
-
+  
   /* Failed to find the file.  */
   einfo (VERBOSE2, "%s: warn: Could not find separate debug file: %s", data->filename, link);
   

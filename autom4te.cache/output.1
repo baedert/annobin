@@ -18389,7 +18389,7 @@ fi
 if test "${with_debuginfod+set}" = set; then :
   withval=$with_debuginfod; 
 else
-  with_debuginfod=no
+  with_debuginfod=auto
 fi
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use debuginfod" >&5
@@ -18632,6 +18632,11 @@ fi
 
 ac_config_files="$ac_config_files Makefile"
 
+
+if test "$with_annocheck" != no -o test "$with_gcc_plugin" != no; then
+  ac_config_headers="$ac_config_headers gcc-plugin/config.h"
+
+fi
 if test "$with_docs" != no; then
   ac_config_files="$ac_config_files doc/Makefile"
 
@@ -18650,8 +18655,6 @@ if test "$with_clang" = yes; then
 fi
 if test "$with_gcc_plugin" != no; then
   ac_config_files="$ac_config_files gcc-plugin/Makefile"
-
-  ac_config_headers="$ac_config_headers gcc-plugin/config.h"
 
 fi
 if test "$with_llvm" = yes; then
@@ -19803,12 +19806,12 @@ do
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
     "libtool-rpath-patch") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool-rpath-patch" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
+    "gcc-plugin/config.h") CONFIG_HEADERS="$CONFIG_HEADERS gcc-plugin/config.h" ;;
     "doc/Makefile") CONFIG_FILES="$CONFIG_FILES doc/Makefile" ;;
     "tests/Makefile") CONFIG_FILES="$CONFIG_FILES tests/Makefile" ;;
     "annocheck/Makefile") CONFIG_FILES="$CONFIG_FILES annocheck/Makefile" ;;
     "clang-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES clang-plugin/Makefile" ;;
     "gcc-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES gcc-plugin/Makefile" ;;
-    "gcc-plugin/config.h") CONFIG_HEADERS="$CONFIG_HEADERS gcc-plugin/config.h" ;;
     "llvm-plugin/Makefile") CONFIG_FILES="$CONFIG_FILES llvm-plugin/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;

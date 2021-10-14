@@ -6,7 +6,7 @@ GCC=${GCC:-gcc}
 OBJCOPY=${OBJCOPY:-objcopy}
 PLUGIN=${PLUGIN:-../../gcc-plugin/.libs/annobin.so}
 READELF=${READELF:-readelf}
-SS=${SS:-ss}
+SS=${SS:-/usr/sbin/ss}
 STRIP=${STRIP:-strip}
 
 # TEST_NAME must be set before including this

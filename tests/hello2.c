@@ -18,6 +18,7 @@ int
 big_stack (int arg)
 {
   char array [10240];
+  array[arg] = foo ();
   return extern_func (array, arg) * extern_func2 () + extern_func3 ();
 }
 

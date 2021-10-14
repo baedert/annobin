@@ -4510,21 +4510,22 @@ finish (annocheck_data * data)
 	      break;
 
 	    case TEST_STACK_REALIGN:
-	      if (per_file.seen_tools == TOOL_GAS
-		  || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
-		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
-	      else if (per_file.e_machine == EM_386)
-		fail  (data, i, SOURCE_FINAL_SCAN, "stack realign support is mandatory");
-	      else
+	      if (per_file.e_machine != EM_386)
 		skip (data, i, SOURCE_FINAL_SCAN, "not an x86 executable");
+	      else if (! includes_gcc (per_file.seen_tools_with_code)
+		       && ! includes_gimple (per_file.seen_tools_with_code))
+		skip (data, i, SOURCE_FINAL_SCAN, "no GCC compiled code found");
+	      else
+		fail  (data, i, SOURCE_FINAL_SCAN, "no indication that the -mstackrealign option was used");
 	      break;
 
 	    case TEST_NOT_BRANCH_PROTECTION:
 	    case TEST_BRANCH_PROTECTION:
 	      if (per_file.e_machine != EM_AARCH64)
 		skip (data, i, SOURCE_FINAL_SCAN, "not an AArch64 binary");
-	      else if (! includes_gcc (per_file.seen_tools) && ! includes_gimple (per_file.current_tool))
-		skip (data, i, SOURCE_FINAL_SCAN, "not built by gcc");
+	      else if (! includes_gcc (per_file.seen_tools_with_code)
+		       && ! includes_gimple (per_file.seen_tools_with_code))
+		skip (data, i, SOURCE_FINAL_SCAN, "not built by GCC");
 	      else if (per_file.tool_version < 9)
 		skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
 	      else
