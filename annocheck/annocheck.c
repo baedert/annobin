@@ -674,7 +674,6 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	  /* Note - do not skip empty sections, they may still be interesting to some tools.
 	     If a tool is not interested in an empty section, it can always determine this
 	     in its interesting_sec() function.  */
-	  einfo (VERBOSE2, "%s: Examining section %s", filename, sec.secname);
 
 	  /* Walk the checkers, asking each in turn if they are interested in this section.  */
 	  for (tool = first_sec_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next_sec)
@@ -728,8 +727,6 @@ run_checkers (const char * filename, int fd, Elf * elf)
 	    /* Fuzzzing can produce segments like this.  */
 	    continue;
 			       
-	  einfo (VERBOSE2, "%s: considering segment %lu", filename, (unsigned long) cnt);
-
 	  for (tool = first_seg_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next_seg)
 	    {
 	      if (((checker_internal *)(tool->internal))->skip || tool->interesting_seg == NULL)

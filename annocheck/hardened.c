@@ -3188,8 +3188,10 @@ check_dynamic_section (annocheck_data *    data,
 	      const char * path = elf_strptr (data->elf, sec->shdr.sh_link, dyn->d_un.d_val);
 
 	      if (check_runtime_search_paths (data, path))
-		maybe (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION,
-		       "the RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead");
+		{
+		  pass (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RUNPATH dynamic tag is present and correct");
+		  inform (data, "info: the RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead");
+		}
 	    }
 	  break;
 
@@ -4252,6 +4254,13 @@ check_for_gaps (annocheck_data * data)
   pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
 }
 
+static bool
+C_compiler_seen (void)
+{
+  return is_C_compiler (per_file.seen_tools_with_code)
+    /* Object files do not record a note range, so seen_tools_with_code will not have been updated.  */
+    || (is_object_file () && is_C_compiler (per_file.seen_tools));
+}
 
 static bool
 finish (annocheck_data * data)
@@ -4331,7 +4340,7 @@ finish (annocheck_data * data)
 	    case TEST_LTO:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "at least part of the binary is compield GO");
-	      else if (is_C_compiler (per_file.seen_tools_with_code))
+	      else if (C_compiler_seen ())
 		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "not compiled C/C++ code");
@@ -4402,7 +4411,7 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules are not compiled with this feature");
 	      else if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO compilation does not use the C preprocessor");
-	      else if (is_C_compiler (per_file.seen_tools_with_code))
+	      else if (C_compiler_seen ())
 		fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used (and a C compiler was detected)");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "no C/C++ compiled code found");
@@ -4422,7 +4431,7 @@ finish (annocheck_data * data)
 	    case TEST_PIC:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support a -fPIC option");
-	      else if (is_C_compiler (per_file.seen_tools_with_code))
+	      else if (C_compiler_seen ())
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
@@ -4434,17 +4443,17 @@ finish (annocheck_data * data)
 	      else if (per_file.seen_tools == TOOL_GAS
 		       || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
-	      else if (is_C_compiler (per_file.seen_tools_with_code))
+	      else if (C_compiler_seen ())
 		/* The skip is necessary because some glibc code is built this way.  */
 		skip (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this feature");
 	      else
-		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
+		skip (data, i, SOURCE_FINAL_SCAN, "not compiled C/C++ code");
 	      break;
-
+	      
 	    case TEST_OPTIMIZATION:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO optimized by default");
-	      else if (is_C_compiler (per_file.seen_tools_with_code))
+	      else if (C_compiler_seen ())
 		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
@@ -4458,7 +4467,7 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
 	      else if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO is stack safe");
-	      else if (! is_C_compiler (per_file.seen_tools_with_code))
+	      else if (! C_compiler_seen ())
 		skip (data, i, SOURCE_FINAL_SCAN, "no C/C++ compiled code found");
 	      else if (is_kernel_module (data))
 		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules do not support stack clash protection");
