@@ -510,9 +510,9 @@ private:
 
   class AnnobinDummyConsumer : public SemaConsumer
   {
+  public:
     CompilerInstance & Instance;
 
-  public:
     AnnobinDummyConsumer (CompilerInstance & Instance) : Instance (Instance)
     {}
 
