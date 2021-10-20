@@ -58,10 +58,21 @@ static bool disabled = false;
 static bool ignore_gaps = false;
 static bool fixed_format_messages = false;
 static bool enable_colour = true;
-static bool full_filenames_set = false;
-static bool full_filenames = false;
-static bool provide_url_set = false;
-static bool provide_url = true;
+
+typedef struct bool_option
+{
+  bool option_set;
+  bool option_value;
+} bool_option;
+
+static bool_option         full_filename = { false, false };
+#define USE_FULL_FILENAME  (full_filename.option_value == true)
+
+static bool_option         provide_url = { false, true };
+#define PROVIDE_A_URL      (provide_url.option_value == true)
+
+static bool_option         dt_rpath_is_ok = { false, true };
+#define DT_RPATH_OK        (dt_rpath_is_ok.option_value == true)
 
 #define FIXED_FORMAT_STRING "%s: test: %s file: %s"
 
@@ -314,7 +325,10 @@ includes_gimple (uint mask)
 static inline const char *
 get_filename (annocheck_data * data)
 {
-  return full_filenames ? data->full_filename : data->filename;
+  if (USE_FULL_FILENAME)
+    return data->full_filename;
+  else
+    return data->filename;
 }
 
 static inline void
@@ -475,7 +489,7 @@ skip (annocheck_data * data, uint testnum, const char * source, const char * rea
 static inline void
 show_url (uint testnum, const char * filename)
 {
-  if (provide_url)
+  if (PROVIDE_A_URL)
     einfo (PARTIAL,  "%s: %s: info: For more information visit: %s\n",
 	   HARDENED_CHECKER_NAME, filename, tests[testnum].doc_url);
 }
@@ -1098,16 +1112,26 @@ start (annocheck_data * data)
   if (disabled)
     return false;
 
-  if (! full_filenames_set)
+  if (! full_filename.option_set)
     {
-      full_filenames = BE_VERBOSE ? true : false;
-      full_filenames_set = true;
+      full_filename.option_value = BE_VERBOSE ? true : false;
+      full_filename.option_set = true;
     }
 
-  if (! provide_url_set)
+  if (! provide_url.option_set)
     {
-      provide_url = BE_VERBOSE ? true : false;
-      provide_url_set = true;
+      provide_url.option_value = BE_VERBOSE ? true : false;
+      provide_url.option_set = true;
+    }
+
+  if (! dt_rpath_is_ok.option_set)
+    {
+#ifdef AARCH64_BRANCH_PROTECTION_SUPPORTED
+      dt_rpath_is_ok.option_value = false;
+#else
+      dt_rpath_is_ok.option_value = true;
+#endif
+      dt_rpath_is_ok.option_set = true;
     }
 
   /* Handle mutually exclusive tests.  */
@@ -3189,8 +3213,16 @@ check_dynamic_section (annocheck_data *    data,
 
 	      if (check_runtime_search_paths (data, path))
 		{
-		  pass (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RUNPATH dynamic tag is present and correct");
-		  inform (data, "info: the RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead");
+		  if (DT_RPATH_OK)
+		    {
+		      pass (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the DT_RPATH dynamic tag is present and correct");
+		      inform (data, "info: the RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead");
+		    }
+		  else
+		    {
+		      maybe (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the RPATH dynamic tag has been detected");
+		      inform (data, "info: Link with --enable-new-dtags to use RUNPATH dynamic tag instead");
+		    }
 		}
 	    }
 	  break;
@@ -4706,6 +4738,17 @@ set_profile (enum profile num)
 	break;
       tests[index].enabled = true;
     }
+
+  if (num == profile_rawhide)
+    {
+      dt_rpath_is_ok.option_value = false;
+      dt_rpath_is_ok.option_set = true;
+    }
+  else if (num != profile_none)
+    {
+      dt_rpath_is_ok.option_value = true;
+      dt_rpath_is_ok.option_set = true;
+    }
 }
 
 static bool
@@ -4822,29 +4865,29 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 
   if (streq (arg, "provide-urls") || streq (arg, "provide-url"))
     {
-      provide_url = true;
-      provide_url_set = true;
+      provide_url.option_value = true;
+      provide_url.option_set = true;
       return true;	
     }
 
   if (streq (arg, "no-urls"))
     {
-      provide_url = false;
-      provide_url_set = true;
+      provide_url.option_value = false;
+      provide_url.option_set = true;
       return true;	
     }
 
   if (streq (arg, "full-filenames"))
     {
-      full_filenames = true;
-      full_filenames_set = true;
+      full_filename.option_value = true;
+      full_filename.option_set = true;
       return true;
     }
 
   if (streq (arg, "base-filenames"))
     {
-      full_filenames = false;
-      full_filenames_set = true;
+      full_filename.option_value = false;
+      full_filename.option_set = true;
       return true;
     }
 
