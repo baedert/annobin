@@ -1634,6 +1634,7 @@ queue_attachment (const char * section_name, const char * group_name)
 {
   attach_item * item = (attach_item *) xmalloc (sizeof * item);
 
+  annobin_inform (INFORM_VERBOSE, "queue an attachment for section %s to group %s", section_name, group_name);
   item->section_name = concat (section_name, NULL);
   item->group_name = concat (group_name, NULL);
   item->next = attach_list;
@@ -1662,6 +1663,8 @@ emit_queued_attachments (void)
 	  fprintf (asm_out_file, "\n");
 	  fprintf (asm_out_file, "\t.popsection\n");
 	}
+      else
+	ice ("queued attachment to an empty group");
 
       // FIXME: BZ 1684148: These free()s are triggering "attempt to free unallocated
       // memory" errors from the address sanitizer.  I have no idea why, as they were
@@ -1675,6 +1678,7 @@ emit_queued_attachments (void)
       // pointer certainly looks valid to me.  So for now, suppress the free.
       // free ((void *) item);
     }
+  // attach_list = NULL;
 }
 
 static void
@@ -1757,7 +1761,8 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	     group created for annobin's .text.foo section by using a new
 	     assembler pseudo-op.  This can be disabled to allow the plugin
 	     to work with older assemblers, although it does mean that notes
-	     for function sections will be discarded by the linker.
+	     for garbage collected function sections will not be discarded by
+	     the linker.
 
 	     Note - we do not have to do this for COMDAT sections as they are
 	     already part of a section group, and gcc always includes the group
@@ -2366,6 +2371,13 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      by compiled code.  */
   char producer_char = in_lto () ? ANNOBIN_TOOL_ID_GCC_LTO : ANNOBIN_TOOL_ID_GCC;
   annobin_emit_start_sym_and_version_note ("", producer_char);
+
+  /* On the PPC64 queueing this attachment results in:
+       Error: operation combines symbols in different segments
+     I do not known how to fix this at the moment, so the
+     attachment is currently coditional upon target sym bias.  */
+  if (! target_start_sym_bias)
+    queue_attachment (CODE_SECTION, concat (CODE_SECTION, ANNOBIN_GROUP_NAME, NULL));
   emit_global_notes ("");
 
   /* GCC does not provide any way for a plugin to detect if hot/cold partitioning
@@ -2374,16 +2386,16 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
      two sections.  */
   annobin_emit_start_sym_and_version_note (HOT_SUFFIX, producer_char);
   queue_attachment (HOT_SECTION, concat (HOT_SECTION, ANNOBIN_GROUP_NAME, NULL));
-  // We have to emit notes for these other sections too, as we do not know
-  // which one(s) will actually end up containing any code.  Annocheck will
-  // ignore empty note ranges.
+  /* We have to emit notes for these other sections too, as we do not know
+     which one(s) will actually end up containing any code.  Annocheck will
+     ignore empty note ranges.  */
   emit_global_notes (HOT_SUFFIX);
 
   annobin_emit_start_sym_and_version_note (COLD_SUFFIX, producer_char);
   queue_attachment (COLD_SECTION, concat (COLD_SECTION, ANNOBIN_GROUP_NAME, NULL));
   emit_global_notes (COLD_SUFFIX);
 
-  /* *sigh* As of gcc 9, a .text.startup section can also be created.  */
+  /* As of gcc 9, a .text.startup section can also be created.  */
   annobin_emit_start_sym_and_version_note (STARTUP_SUFFIX, producer_char);
   queue_attachment (STARTUP_SECTION, concat (STARTUP_SECTION, ANNOBIN_GROUP_NAME, NULL));
   emit_global_notes (STARTUP_SUFFIX);
