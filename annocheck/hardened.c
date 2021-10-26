@@ -1479,27 +1479,30 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
     {
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
-      "_Unwind_Resume", /* In /sbin/ldconfig.  */
-      "__b64_ntop",  	/* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
-      "__b64_pton",	/* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
+      "_Unwind_Resume",              /* In /sbin/ldconfig.  */
+      "__b64_ntop",  	             /* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
+      "__b64_pton",	             /* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
       "__ctype_get_mb_cur_max",
       "__libc_init_first",
-      "__libc_start_call_main",		/* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
+      "__libc_start_call_main",	     /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
       "__libc_start_main",
       "__librt_version_placeholder", /* Found in ppc64le, RHEL-9, /lib64/librt.so.1.  */
-      "__td_ta_rtld_global", /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
-      "_dl_start_user", 		/* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
-      "_dl_tunable_set_arena_max",  /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
+      "__td_ta_rtld_global",         /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
+      "_dl_start_user", 	     /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
+      "_dl_tunable_set_arena_max",   /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
+      "_nl_archive_subfreeres",      /* Found in x86_64, RHEL-8.6 /sbin/ldconfig.  */
       "_start",
       "blacklist_store_name",
-      "dlmopen_doit",  /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
+      "dlmopen_doit",                /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
+      "free_category",               /* Found in x86_64, RHEL-8.6 /sbin/ldconfig.  */
       "free_derivation",
       "free_mem",
+      "insert_to_aux_cache.cold.6",  /* Found in x86_64, RHEL-8.6 /sbin/ldconfig.  */
       "install_handler",
       "internal_setgrent",
-      "print_entry",  /* In /sbin/ldconfig.  */
-      "td_init",	/* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
-      "unlink_blk" 	/* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
+      "print_entry",                 /* In /sbin/ldconfig.  */
+      "td_init",	             /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
+      "unlink_blk" 	             /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
     };
 
   if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
