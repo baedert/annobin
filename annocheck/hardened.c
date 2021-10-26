@@ -4790,7 +4790,11 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	    }
 	}
 
-      return false;
+      /* Do not fail if we do not recognise the test name.  It may be from a
+	 future version of annocheck, and it just so happens that a test is
+	 running this version by mistake.  */
+      einfo (INFO, "ignoring unrecognized test name in --skip option: %s", arg);
+      return true;
     }
 
   if (const_strneq (arg, "test-"))
