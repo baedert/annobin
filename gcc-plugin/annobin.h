@@ -69,15 +69,16 @@ typedef struct annobin_function_info
   const char * unlikely_end_sym;
 } annobin_function_info;
 
-enum attach_type
+typedef enum attach_type
 {
   none,
+  not_set,
   group,
   link_order
-};
+} attach_type;
 
 /* How to connection annobin notes to code sections.  */
-extern enum attach_type annobin_attach_type;
+extern attach_type annobin_attach_type;
 
 /* ------ TARGET SPECIFIC FUNCTIONS ----------------------------- */
 

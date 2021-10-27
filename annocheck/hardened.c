@@ -1479,7 +1479,7 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
     {
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
-      "_Unwind_Resume",              /* In /sbin/ldconfig.  */
+      "_Unwind_Resume",
       "__b64_ntop",  	             /* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
       "__b64_pton",	             /* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
       "__ctype_get_mb_cur_max",
@@ -1490,17 +1490,13 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
       "__td_ta_rtld_global",         /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
       "_dl_start_user", 	     /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
       "_dl_tunable_set_arena_max",   /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
-      "_nl_archive_subfreeres",      /* Found in x86_64, RHEL-8.6 /sbin/ldconfig.  */
       "_start",
       "blacklist_store_name",
       "dlmopen_doit",                /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
-      "free_category",               /* Found in x86_64, RHEL-8.6 /sbin/ldconfig.  */
       "free_derivation",
       "free_mem",
-      "insert_to_aux_cache.cold.6",  /* Found in x86_64, RHEL-8.6 /sbin/ldconfig.  */
       "install_handler",
       "internal_setgrent",
-      "print_entry",                 /* In /sbin/ldconfig.  */
       "td_init",	             /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
       "unlink_blk" 	             /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
     };
@@ -1524,11 +1520,9 @@ skip_pic_checks_for_function (annocheck_data * data, enum test_index check, cons
     {
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
-      "_Unwind_Resume",         /* In /sbin/ldconfig.  */
-      "_nl_archive_subfreeres", /* In /sbin/ldconfig.  */
+      "_Unwind_Resume",
       "_start",
-      "atexit",        /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
-      "print_entry"    /* In /sbin/ldconfig.  */
+      "atexit"                  /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
     };
 
   if (skip_this_func (non_pie_funcs, ARRAY_SIZE (non_pie_funcs), component_name))
@@ -1566,15 +1560,12 @@ skip_stack_checks_for_function (annocheck_data * data, enum test_index check, co
       "_dl_start",
       "_dl_start_user", /* Found in ppc64le, RHEL-9 /lib64/ld64.so.2.  */
       "_dl_sysinfo_int80", /* In /lib/ld-linux.so.2.  */
-      "_dl_tls_static_surplus_init", /* In /sbin/ldconfig.  */
       "_fini",
       "_init",
       "_start",
-      "allocate_dtv",   /* Found in AArch64, RHEL-8, /sbin/ldconfig.  */
       "check_match", 	/* Found in AArch64, RHEL-8, /lib64/ld-2.28.so.  */
       "check_one_fd",
       "dlmopen_doit", 
-      "generic_start_main", /* Found in PPC64LE, RHEL-8, /sbin/ldconfig.  */
       "get_common_indices.constprop.0",
       "is_dst",
       "notify_audit_modules_of_loaded_object",
@@ -1665,6 +1656,14 @@ function %s is part of the C library's startup code, which executes before a sec
       return true;
     }
 
+  /* The ldconfig binary is known to be compiled with most security features.  */
+  if (streq (data->full_filename, "/sbin/ldconfig"))
+    {
+      sprintf (reason, "the ldconfig binary is a special case, hand-crafted by the glibc build system");
+      skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+  
   switch (check)
     {
     case TEST_STACK_PROT:

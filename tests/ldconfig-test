@@ -17,7 +17,7 @@
 TEST_NAME=ldconfig
 . $srcdir/common.sh
 
-SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection --skip-lto"
+SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection --skip-lto --skip-pie"
 
 LDCONFIG=/sbin/ldconfig
 DEBUG=/usr/lib/debug/sbin/ldconfig.debug

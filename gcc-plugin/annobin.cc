@@ -100,7 +100,7 @@ static uint           annobin_active_checks = 1;
 
 /* Default to using section groups as the link-order
    method needs a linker from binutils 2.36 or later.  */
-enum attach_type annobin_attach_type = group;
+attach_type annobin_attach_type = not_set;
 
 #ifdef flag_stack_clash_protection
 static int            global_stack_clash_option = -1;
@@ -1510,7 +1510,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 							  current_func.section_name,
 							  NULL);
 	}
-      else
+      else /* assume annobin_attach_type == none  */
 	{
 	  current_func.group_name = NULL;
 	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
@@ -1526,6 +1526,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
        {
 	 switch (annobin_attach_type)
 	   {
+	   default:
 	   case none:
 	     current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
 							     ", \"\", %note",
@@ -1853,6 +1854,7 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
 
   switch (annobin_attach_type)
     {
+    default:
     case none:
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
 					      ", \"\", %note",
@@ -1897,6 +1899,7 @@ emit_global_notes (const char * suffix)
 
   switch (annobin_attach_type)
     {
+    default:
     case none:
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
 					      ", \"\", %note",
@@ -2741,6 +2744,19 @@ plugin_init (struct plugin_name_args *    plugin_info,
     return 1;
 
   target_start_sym_bias = annobin_target_start_symbol_bias ();
+  if (annobin_attach_type == not_set)
+    {
+#if GCCPLUGIN_VERSION_MAJOR >= 11
+      /* For the PPC64LE default to using link order attachment as group attachments do not work.
+	 Only do this if the target supports link_order sections.  For now we use a test of the
+	 GCC version as an approximation to the GAS version that is needed.  See BZ 2016458 for
+         an example of where this solution is needed.  */
+      if (target_start_sym_bias != 0)
+	annobin_attach_type = link_order;
+      else
+#endif
+	annobin_attach_type = group;
+    }
 
   register_callback (plugin_info->base_name,
 		     PLUGIN_INFO,
