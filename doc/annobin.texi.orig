@@ -854,7 +854,6 @@ annocheck
   [@b{--test-all}]
   [@b{--test-@var{name}}]
   [@b{--test-future}]
-  [@b{--test-unicode-all}]
   [@b{--profile=@var{release}}]
   [@b{--ignore-gaps}]
   [@b{--report-gaps}]
@@ -925,9 +924,8 @@ produced by annocheck when the test goes wrong.
 * Test stack realign::            The stack-realign test
 * Test textrel::                  The textrel test
 * Test threads::                  The threads test
-* Test unicode::                  The unicode test
 * Test warnings::                 The warnings test
-* Test writable got::             The writable-got test
+* Test writable got::            The writable-got test
 @end menu
 
 The @var{hardened} tool does support some command line options of its
@@ -1757,6 +1755,7 @@ If necessary the test can be disabled via the
   Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag contains a path that does not start with /usr
   Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag has a path that contains '..'
   Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag has $ORIGIN after a non-$ORIGIN path
+  Example:  MAYB: run-path test because the RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead
 @end smallexample
 
 An application that uses shared libraries contains information on how
@@ -1977,52 +1976,6 @@ If necessary the test can be disabled via the
 @option{--test-threads} option. 
 
 @c -----------------------------------------------------------------
-@node Test unicode
-@subsection The unicode test
-
-@smallexample
-  Problem:  Symbols containing certain unicode characters can conceal their real name
-  Fix By:   Replacing the unicode characters with other characters
-  Waive If: The unicode names are valid
-
-  Example:  FAIL: unicode test because dangerous characters were found in a symbol name
-@end smallexample
-
-This test checks to make sure that symbols in the binary do not
-contain control characters or multibyte (aka unicode) characters.
-Whilst unicode characters are technically allowed in symbol names,
-their presence is suspect since they can be used maliciously.
-
-@c Add URL to description of attack, once it is no longer embargoed.
-
-The test looks for the following characters in symbol names:
-
-@table @code
-@item Any control character
-@item The space and DEL characters
-@item Any non-unicode multibyte character
-@end table
-
-In addition if the @option{--test-unicode-all} option has been enabled
-(either via the command line, or via selecting a RHEL profile with the
-@option{--profile} option) then the test will fail is any multibyte
-character is found.
-
-On the other hand, if the opposite @option{--test-unicode-suspicious}
-option has been enabled then the test looks for:
-
-@table @code
-@item Any character with zero width
-@item Any character that changes the direction of the text
-@end table
-
-Other suspicious multibyte characters may be added in the future.
-
-If necessary the test can be disabled via the
-@option{--skip-unicode} option and re-enabled via the
-@option{--test-unicode} option. 
-
-@c -----------------------------------------------------------------
 @node Test warnings
 @subsection The warnings test
 
@@ -2095,24 +2048,6 @@ features which are not yet implemented, but are planned for the
 future.  The @option{--skip-future} option can be used to restore
 the default behaviour of skipping these tests.
 
-@item --test-unicode-all
-@itemx --test-unicode-suspicious
-The @option{--test-unicode} test checks for the presence of multibyte
-characters in symbol names, which are unusual and potentially
-dangerous.  The test has two modes of operation.  In one mode, enabled
-by @option{--test-unicode-all}, any multibyte character is considered
-suspicious.  This mode is good for code bases where multibyte
-characters are not expected to appear at all.
-
-In the other mode, enabled by @option{--test-unicode-suspicious}, only
-potentially dangerous unicode characters trigger a failure.  See
-@ref{Test unicode} for more details on which characters are considered
-suspicious.
-
-If neither of these options is specified, the default depends upon the
-profile selected.  If a profile is not selected then the default is
-only fail upon the detection of suspicious characters.
-
 @item --profile=el7
 @itemx --profile=el8
 @itemx --profile=el9
@@ -2135,34 +2070,6 @@ being enabled.
 
 For backwards compatibility the form @option{--profile-<name>} can be
 used instead of @option{--profile=<name>}.
-
-Currently the profiles enable and disable the following tests:
-
-@table @code
-@item el9
-Disables the @ref{Test branch protection} and @ref{Test dynamic tags}
-tests and enables their inverse, ie @ref{Test not branch protection}
-and @ref{Test not dynamic tags}.
-
-Also enables @ref{Test unicode} and sets the default to fail for any
-multibyte character.
-
-@item el8
-Like @code{el9} but also disables the @ref{Test lto} test.
-
-@item el9
-Like @code{el8} but also disables the @ref{Test pie}, @ref{Test bind
-now}, @ref{Test fortify} and @ref{Test stack clash} tests.
-
-@item rawhide
-Enables the @ref{Test branch protection} and @ref{Test dynamic tags}
-tests and disables their inverse, ie @ref{Test not branch protection}
-and @ref{Test not dynamic tags}.
-
-Also enables @ref{Test unicode} and sets the default to fail for any
-suspicious multibyte characters.
-
-@end table
 
 @item --disable-hardened
 Disable the tool.

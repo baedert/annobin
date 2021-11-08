@@ -481,7 +481,7 @@ TESTS = abi-test active-checks-test active-checks-test \
 	hardening-fail-test hardening-fail-test hardening-test \
 	instrumentation-test ldconfig-test lto-test missing-notes-test \
 	missing-notes-test objcopy-test property-note-test \
-	section-size-test $(am__append_1)
+	section-size-test unicode-test $(am__append_1)
 all: all-am
 
 .SUFFIXES:
@@ -791,6 +791,13 @@ property-note-test.log: property-note-test
 section-size-test.log: section-size-test
 	@p='section-size-test'; \
 	b='section-size-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+unicode-test.log: unicode-test
+	@p='unicode-test'; \
+	b='unicode-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

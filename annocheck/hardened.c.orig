@@ -26,7 +26,6 @@
 
 /* Predefined names for all of the sources of information scanned by this checker.  */
 #define SOURCE_ANNOBIN_NOTES    "annobin notes"
-#define SOURCE_COMMENT_SECTION  "comment section"
 #define SOURCE_DW_AT_LANGUAGE   "DW_AT_language string"
 #define SOURCE_DW_AT_PRODUCER   "DW_AT_producer string"
 #define SOURCE_DYNAMIC_SECTION  "dynamic section"
@@ -34,13 +33,13 @@
 #define SOURCE_ELF_HEADER       "ELF header"
 #define SOURCE_FINAL_SCAN       "final scan"
 #define SOURCE_PROPERTY_NOTES   "property notes"
-#define SOURCE_RODATA_SECTION   ".rodata section"
 #define SOURCE_SECTION_HEADERS  "section headers"
 #define SOURCE_SEGMENT_CONTENTS "segment contents"
 #define SOURCE_SEGMENT_HEADERS  "segment headers"
 #define SOURCE_SKIP_CHECKS      "special case exceptions"
 #define SOURCE_STRING_SECTION   "string section"
-#define SOURCE_SYMBOL_SECTION   "symbol section"
+#define SOURCE_COMMENT_SECTION  "comment section"
+#define SOURCE_RODATA_SECTION   ".rodata section"
 
 #define GOLD_COLOUR     "\e[33;40m"
 #define RED_COLOUR      "\x1B[31;47m"
@@ -74,9 +73,6 @@ static bool_option         provide_url = { false, true };
 
 static bool_option         dt_rpath_is_ok = { false, true };
 #define DT_RPATH_OK        (dt_rpath_is_ok.option_value == true)
-
-static bool_option 	   fail_for_all_unicode = { false, false };
-#define FAIL_FOR_ANY_UNICODE  (fail_for_all_unicode.option_value == true)
 
 #define FIXED_FORMAT_STRING "%s: test: %s file: %s"
 
@@ -230,7 +226,6 @@ enum test_index
   TEST_STACK_REALIGN,
   TEST_TEXTREL,
   TEST_THREADS,
-  TEST_UNICODE,
   TEST_WARNINGS,
   TEST_WRITABLE_GOT,
 
@@ -290,9 +285,8 @@ static test tests [TEST_MAX] =
   TEST (stack-realign,      STACK_REALIGN,      "Compiled with -mstackrealign (i686 only)"),
   TEST (textrel,            TEXTREL,            "There are no text relocations in the binary"),
   TEST (threads,            THREADS,            "Compiled with -fexceptions"),
-  TEST (unicode,            UNICODE,            "No unicode symbol names"),
   TEST (warnings,           WARNINGS,           "Compiled with -Wall"),
-  TEST (writable-got,       WRITABLE_GOT,       "The .got section is not writable"),
+  TEST (writable-got,      WRITABLE_GOT,      "The .got section is not writable"),
 };
 
 /* Default to not reporting future fails - it could confuse ordinary users.  */
@@ -1140,22 +1134,6 @@ start (annocheck_data * data)
       dt_rpath_is_ok.option_set = true;
     }
 
-  if (! fail_for_all_unicode.option_set)
-    {
-      switch (current_profile)
-	{
-	case profile_el7:
-	case profile_el8:
-	case profile_el9:
-	  fail_for_all_unicode.option_value = true;
-	  break;
-	default:
-	  fail_for_all_unicode.option_value = false;
-	  break;
-	}
-      fail_for_all_unicode.option_set = true;
-    }
-
   /* Handle mutually exclusive tests.  */
   if (tests [TEST_BRANCH_PROTECTION].enabled && tests [TEST_NOT_BRANCH_PROTECTION].enabled)
     {
@@ -1174,7 +1152,7 @@ start (annocheck_data * data)
       tests [TEST_DYNAMIC_TAGS].enabled = false;
 #endif
     }
-
+  
   /* (Re) Set the results for the tests.  */
   int i;
 
@@ -1254,11 +1232,6 @@ interesting_sec (annocheck_data *     data,
       /* We do not actually need to scan the contents of the .text section.  */
       return false;
     }
-
-  if (tests[TEST_UNICODE].enabled
-      && (sec->shdr.sh_type == SHT_SYMTAB
-	  || sec->shdr.sh_type == SHT_DYNSYM))	  
-    return true;
 
   if (per_file.debuginfo_file)
     return false;
@@ -3436,130 +3409,6 @@ check_code_section (annocheck_data *     data,
 }
 
 static bool
-contains_suspicious_characters (const unsigned char * name)
-{
-  uint i;
-  uint len = strlen ((const char *) name);
-
-  /* FIXME: Test that locale is UTF-8.  */
-
-  for (i = 0; i < len; i++)
-    {
-      unsigned char c = name[i];
-
-      if (isgraph (c))
-	continue;
-
-      /* Control characters are always suspect.  So are spaces and DEL  */
-      if (iscntrl (c) || c == ' ' || c == 0x7f)
-	return true;
-
-      if (c < 0x7f) /* This test is probably redundant.  */
-	continue;
-
-      /* If we do not need to classify the multibyte character then stop now.  */
-      if (FAIL_FOR_ANY_UNICODE)
-	return true;
-
-      if (c < 0xc0) /* Not a UTF-8 encoded byte stream character.  This is bad.  */
-	return true;
-
-      /* We have encountered a UTF-8 encoded character that uses at least 2 bytes.
-	 Check to see if the next byte is available.  If it is not then something
-	 bad has happened.  */
-      if (++i >= len)
-	return true;
-
-      if (c < 0xe0) /* Currently there are no 2-byte encoded unicode sequences
-		       that we need to worry about.  */
-	return false;
-
-      if (c >= 0xf0) /* Nor are there any dangerous 4-byte unicode sequences.  */
-	{
-	  i += 2;
-	  if (i >= len) /* But of course if the bytes are not there then something is wrong.  */
-	    return true;
-	  return false;
-	}
-
-      /* We have encountered a UTF-8 encoded character that uses 3 bytes.
-	 Check to see if the next byte is available.  If it is not then something
-	 bad has happened.  */
-      if (++i >= len)
-	return true;
-
-      /* FIXME: Add more checks for valid UTF-8 encoding.  */
-      
-      if (c != 0xe2)
-	continue;
-
-      /* Most unicode characters are fine, but some
-	 have special properties make them dangerous.  */
-      static const unsigned char dangerous[][3] =
-	{
-	  /* Q: Why bother with the first byte in these entries, since we know that it is always 0xe2 ?
-	     A: Because it makes the table easy to compare with online unicode tables.  */
-	  { 0xe2, 0x80, 0x8b }, /* \u200b: zero-width-space.  */
-	  { 0xe2, 0x80, 0x8c }, /* \u200c: zero-width-non-joiner.  */
-	  { 0xe2, 0x80, 0x8d }, /* \u200d: zero-width-joiner.  */
-
-	  { 0xe2, 0x80, 0xaa }, /* \u202a: left-to-right embedding.  */
-	  { 0xe2, 0x80, 0xab }, /* \u202b: right-to-left embedding.  */
-	  { 0xe2, 0x80, 0xac }, /* \u202c: pop directional formatting.  */
-	  { 0xe2, 0x80, 0xad }, /* \u202d: left-to-right override formatting.  */
-	  { 0xe2, 0x80, 0xae }, /* \u202e: right-to-left override.  */
-
-	  { 0xe2, 0x81, 0xa6 }, /* \u2066: left-to-right isolate.  */
-	  { 0xe2, 0x81, 0xa7 }, /* \u2067: right-to-left isolate.  */
-	  { 0xe2, 0x81, 0xa8 }, /* \u2068: first-strong isolate.  */
-	  { 0xe2, 0x81, 0xa9 }  /* \u2069: popdirectional isolate.  */
-	};
-
-      /* FIXME: Should we allow direction changing at the start/end of identifiers ?  */
-
-      uint j;
-      for (j = ARRAY_SIZE (dangerous); j--;)
-	/* FIXME: We could use binary slicing to make this search faster.  */
-	if (name[i-1] == dangerous[j][1] && name[i] == dangerous[j][2])
-	  return true;
-
-      /* FIXME: Add test for confusable unicode characters ?  */
-    }
-
-  return false;
-}
-
-static bool
-check_symbol_section (annocheck_data * data, annocheck_section * sec)
-{
-  if (! tests[TEST_UNICODE].enabled)
-    return true;
-
-  /* Scan the symbols looking for non-ASCII characters in their names
-     that might cause problems.  Note - we do not examine the string
-     tables directly as there are perfectly legitimate reasons why these
-     characters might appear in strings.  But when they are used for
-     identifier names, their use is ... problematic.  */
-  GElf_Sym  sym;
-  uint      symndx;
-
-  for (symndx = 1; gelf_getsym (sec->data, symndx, & sym) != NULL; symndx++)
-    {
-      const char * symname = elf_strptr (data->elf, sec->shdr.sh_link, sym.st_name);
-
-      if (contains_suspicious_characters ((const unsigned char *) symname))
-	{
-	  fail (data, TEST_UNICODE, SOURCE_SYMBOL_SECTION, "suspicious characters were found in a symbol name");
-	  einfo (VERBOSE, "%s: info: symname: '%s', (%lu bytes long) in section: %s",
-		 get_filename (data), symname, (unsigned long) strlen (symname), sec->secname);
-	  if (!BE_VERBOSE)
-	    break;
-	}
-    }
-  return true;
-}
-
-static bool
 check_sec (annocheck_data *     data,
 	   annocheck_section *  sec)
 {
@@ -3570,8 +3419,6 @@ check_sec (annocheck_data *     data,
      selected in interesting_sec().  */
   switch (sec->shdr.sh_type)
     {
-    case SHT_SYMTAB:
-    case SHT_DYNSYM:   return check_symbol_section (data, sec);
     case SHT_NOTE:     return check_note_section (data, sec);
     case SHT_STRTAB:   return check_string_section (data, sec);
     case SHT_DYNAMIC:  return check_dynamic_section (data, sec);
@@ -4543,7 +4390,6 @@ finish (annocheck_data * data)
 	    case TEST_TEXTREL:
 	    case TEST_THREADS:
 	    case TEST_WRITABLE_GOT:
-	    case TEST_UNICODE:
 	      /* The absence of a result for these tests actually means that they have passed.  */
 	      pass (data, i, SOURCE_FINAL_SCAN, NULL);
 	      break;
@@ -4807,13 +4653,8 @@ usage (void)
   einfo (INFO, "  To enable a disabled test use:");
   einfo (INFO, "    --test-<name>             Enables the named test");
 
-  einfo (INFO, "  The unicode test by default only checks for suspicious multibyte characters");
-  einfo (INFO, "  but this can be extended to trigger for any multibyte character with:");
-  einfo (INFO, "    --test-unicode-all        Fail if any multibyte character is detected");
-  einfo (INFO, "    --test-unicode-suspicious Fail if a suspicious multibyte character is detected");
-  
   einfo (INFO, "  Some tests report potential future problems that are not enforced at the moment");
-  einfo (INFO, "    --skip-future             Disables these future fail tests (default)");
+  einfo (INFO, "    --skip-future             Disables these future fail tests");
   einfo (INFO, "    --test-future             Enable the future fail tests");
 
   einfo (INFO, "  To enable/disable tests for a specific environment use:");
@@ -4822,7 +4663,7 @@ usage (void)
 
   einfo (INFO, "  The tool will also report missing annobin data unless:");
   einfo (INFO, "    --ignore-gaps             Ignore missing annobin data");
-  einfo (INFO, "    --report-gaps             Report missing annobin data (default)");
+  einfo (INFO, "    --report-gaps             Report missing annobin data");
 
   einfo (INFO, "  The tool is enabled by default.  This can be changed by:");
   einfo (INFO, "    --disable-hardened        Disables the hardening checker");
@@ -4831,7 +4672,6 @@ usage (void)
   einfo (INFO, "  The tool will generate messages based upon the verbosity level but the format is not fixed");
   einfo (INFO, "  In order to have a consistent output enable this option:");
   einfo (INFO, "    --fixed-format-messages   Display messages in a fixed format");
-
   einfo (INFO, "  By default when not opeating in verbose more only the filename of input files will be displayed in messages");
   einfo (INFO, "  This can be changed with:");
   einfo (INFO, "    --full-filenames          Display the full path of input files");
@@ -4984,22 +4824,6 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	    }
 	}
 
-      if (streq (arg, "unicode-all"))
-	{
-	  fail_for_all_unicode.option_value = true;
-	  fail_for_all_unicode.option_set = true;
-	  tests[TEST_UNICODE].enabled = true;
-	  return true;
-	}
-      
-      if (streq (arg, "unicode-suspicious"))
-	{
-	  fail_for_all_unicode.option_value = false;
-	  fail_for_all_unicode.option_set = true;
-	  tests[TEST_UNICODE].enabled = true;
-	  return true;
-	}
-      
       return false;
     }
   

@@ -1,0 +1,11 @@
+--- annocheck/hardened.c
++++ annocheck/hardened.c
+@@ -63,6 +64,8 @@ static bool full_filenames_set = false;
+ static bool full_filenames = false;
+ static bool provide_url_set = false;
+ static bool provide_url = true;
++static bool fail_for_all_unicode = false;
++static bool fail_for_all_unicode_set = false;
+ 
+ #define FIXED_FORMAT_STRING "%s: test: %s file: %s"
+ 

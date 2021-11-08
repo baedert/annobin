@@ -27,8 +27,8 @@ TESTS=\
       missing-notes-test \
       objcopy-test \
       property-note-test \
-      section-size-test
-
+      section-size-test \
+      unicode-test
 
 if HAVE_DEBUGINFOD
 TESTS += debuginfod-test

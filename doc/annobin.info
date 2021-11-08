@@ -750,6 +750,7 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built By,  Up: Annoche
        [-test-all]
        [-test-NAME]
        [-test-future]
+       [-test-unicode-all]
        [-profile=RELEASE]
        [-ignore-gaps]
        [-report-gaps]
@@ -818,8 +819,9 @@ by annocheck when the test goes wrong.
 * Test stack realign::            The stack-realign test
 * Test textrel::                  The textrel test
 * Test threads::                  The threads test
+* Test unicode::                  The unicode test
 * Test warnings::                 The warnings test
-* Test writable got::            The writable-got test
+* Test writable got::             The writable-got test
 
    The HARDENED tool does support some command line options of its own
 as well.
@@ -1622,7 +1624,6 @@ File: annobin.info,  Node: Test run path,  Next: Test rwx seg,  Prev: Test prope
        Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag contains a path that does not start with /usr
        Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag has a path that contains '..'
        Example:  FAIL: run-path test because the DT_RPATH/DT_RUNPATH dynamic tag has $ORIGIN after a non-$ORIGIN path
-       Example:  MAYB: run-path test because the RPATH dynamic tag is deprecated.  Link with --enable-new-dtags to use RUNPATH instead
 
    An application that uses shared libraries contains information on how
 to locate those libraries.  This information is a list of directories
@@ -1817,7 +1818,7 @@ compiler command line options.
 and re-enabled via the '--test-textrel' option.
 
 
-File: annobin.info,  Node: Test threads,  Next: Test warnings,  Prev: Test textrel,  Up: Hardened
+File: annobin.info,  Node: Test threads,  Next: Test unicode,  Prev: Test textrel,  Up: Hardened
 
 4.2.30 The threads test
 -----------------------
@@ -1838,9 +1839,48 @@ generated.
 and re-enabled via the '--test-threads' option.
 
 
-File: annobin.info,  Node: Test warnings,  Next: Test writable got,  Prev: Test threads,  Up: Hardened
+File: annobin.info,  Node: Test unicode,  Next: Test warnings,  Prev: Test threads,  Up: Hardened
 
-4.2.31 The warnings test
+4.2.31 The unicode test
+-----------------------
+
+       Problem:  Symbols containing certain unicode characters can conceal their real name
+       Fix By:   Replacing the unicode characters with other characters
+       Waive If: The unicode names are valid
+
+       Example:  FAIL: unicode test because dangerous characters were found in a symbol name
+
+   This test checks to make sure that symbols in the binary do not
+contain control characters or multibyte (aka unicode) characters.
+Whilst unicode characters are technically allowed in symbol names, their
+presence is suspect since they can be used maliciously.
+
+   The test looks for the following characters in symbol names:
+
+'Any control character'
+'The space and DEL characters'
+'Any non-unicode multibyte character'
+
+   In addition if the '--test-unicode-all' option has been enabled
+(either via the command line, or via selecting a RHEL profile with the
+'--profile' option) then the test will fail is any multibyte character
+is found.
+
+   On the other hand, if the opposite '--test-unicode-suspicious' option
+has been enabled then the test looks for:
+
+'Any character with zero width'
+'Any character that changes the direction of the text'
+
+   Other suspicious multibyte characters may be added in the future.
+
+   If necessary the test can be disabled via the '--skip-unicode' option
+and re-enabled via the '--test-unicode' option.
+
+
+File: annobin.info,  Node: Test warnings,  Next: Test writable got,  Prev: Test unicode,  Up: Hardened
+
+4.2.32 The warnings test
 ------------------------
 
        Problem:  Compiling without warnings enabled can result in poor code
@@ -1860,7 +1900,7 @@ option and re-enabled via the '--test-warnings' option.
 
 File: annobin.info,  Node: Test writable got,  Next: Hardened Command Line Options,  Prev: Test warnings,  Up: Hardened
 
-4.2.32 The writable-got test
+4.2.33 The writable-got test
 ----------------------------
 
        Problem:  An attacker could intercept and redirect shared library function calls
@@ -1889,7 +1929,7 @@ option and re-enabled via the '--test-writable-got' option.
 
 File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardened Results,  Prev: Test writable got,  Up: Hardened
 
-4.2.33 Command line options specific to the hardened tool
+4.2.34 Command line options specific to the hardened tool
 ---------------------------------------------------------
 
 '--skip-all'
@@ -1906,6 +1946,24 @@ File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardene
      which are not yet implemented, but are planned for the future.  The
      '--skip-future' option can be used to restore the default behaviour
      of skipping these tests.
+
+'--test-unicode-all'
+'--test-unicode-suspicious'
+     The '--test-unicode' test checks for the presence of multibyte
+     characters in symbol names, which are unusual and potentially
+     dangerous.  The test has two modes of operation.  In one mode,
+     enabled by '--test-unicode-all', any multibyte character is
+     considered suspicious.  This mode is good for code bases where
+     multibyte characters are not expected to appear at all.
+
+     In the other mode, enabled by '--test-unicode-suspicious', only
+     potentially dangerous unicode characters trigger a failure.  See
+     *note Test unicode:: for more details on which characters are
+     considered suspicious.
+
+     If neither of these options is specified, the default depends upon
+     the profile selected.  If a profile is not selected then the
+     default is only fail upon the detection of suspicious characters.
 
 '--profile=el7'
 '--profile=el8'
@@ -1929,6 +1987,32 @@ File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardene
 
      For backwards compatibility the form '--profile-<name>' can be used
      instead of '--profile=<name>'.
+
+     Currently the profiles enable and disable the following tests:
+
+     'el9'
+          Disables the *note Test branch protection:: and *note Test
+          dynamic tags:: tests and enables their inverse, ie *note Test
+          not branch protection:: and *note Test not dynamic tags::.
+
+          Also enables *note Test unicode:: and sets the default to fail
+          for any multibyte character.
+
+     'el8'
+          Like 'el9' but also disables the *note Test lto:: test.
+
+     'el9'
+          Like 'el8' but also disables the *note Test pie::, *note Test
+          bind now::, *note Test fortify:: and *note Test stack clash::
+          tests.
+
+     'rawhide'
+          Enables the *note Test branch protection:: and *note Test
+          dynamic tags:: tests and disables their inverse, ie *note Test
+          not branch protection:: and *note Test not dynamic tags::.
+
+          Also enables *note Test unicode:: and sets the default to fail
+          for any suspicious multibyte characters.
 
 '--disable-hardened'
      Disable the tool.
@@ -1989,7 +2073,7 @@ File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardene
 
 File: annobin.info,  Node: Waiving Hardened Results,  Prev: Hardened Command Line Options,  Up: Hardened
 
-4.2.34 How to waive the results of the hardening tests
+4.2.35 How to waive the results of the hardening tests
 ------------------------------------------------------
 
 [This section is Red Hat specific.]
@@ -3116,50 +3200,51 @@ Node: The INSTRUMENT Encoding20401
 Node: Annocheck21775
 Node: Built By25665
 Node: Hardened27168
-Node: Test bind now30868
-Node: Test branch protection32508
-Node: Test cf protection34762
-Node: Test dynamic segment38722
-Node: Test dynamic tags39853
-Node: Test entry42202
-Node: Test fortify43097
-Node: Test glibcxx assertions44610
-Node: Test gnu relro45648
-Node: Test gnu stack47382
-Node: Test go revision49779
-Node: Test instrumentation50827
-Node: Test lto51562
-Node: Test not branch protection52468
-Node: Test not dynamic tags54050
-Node: Test notes55738
-Node: Test only go58021
-Node: Test optimization59172
-Node: Test pic60547
-Node: Test pie62092
-Node: Test production63380
-Node: Test property note64193
-Node: Test run path66670
-Node: Test rwx seg68951
-Node: Test short enums70223
-Node: Test stack clash71240
-Node: Test stack prot72477
-Node: Test stack realign73809
-Node: Test textrel75079
-Node: Test threads76336
-Node: Test warnings77152
-Node: Test writable got77987
-Node: Hardened Command Line Options79273
-Node: Waiving Hardened Results82815
-Node: Notes84199
-Node: Size84835
-Node: Timing86978
-Node: Configure Options87617
-Node: Legacy Scripts89956
-Node: Who Built Me90731
-Node: ABI Checking93491
-Node: Hardening Checks95607
-Node: Checking Archives99693
-Node: GNU FDL102114
+Node: Test bind now30947
+Node: Test branch protection32587
+Node: Test cf protection34841
+Node: Test dynamic segment38801
+Node: Test dynamic tags39932
+Node: Test entry42281
+Node: Test fortify43176
+Node: Test glibcxx assertions44689
+Node: Test gnu relro45727
+Node: Test gnu stack47461
+Node: Test go revision49858
+Node: Test instrumentation50906
+Node: Test lto51641
+Node: Test not branch protection52547
+Node: Test not dynamic tags54129
+Node: Test notes55817
+Node: Test only go58100
+Node: Test optimization59251
+Node: Test pic60626
+Node: Test pie62171
+Node: Test production63459
+Node: Test property note64272
+Node: Test run path66749
+Node: Test rwx seg68895
+Node: Test short enums70167
+Node: Test stack clash71184
+Node: Test stack prot72421
+Node: Test stack realign73753
+Node: Test textrel75023
+Node: Test threads76280
+Node: Test unicode77095
+Node: Test warnings78586
+Node: Test writable got79421
+Node: Hardened Command Line Options80707
+Node: Waiving Hardened Results86147
+Node: Notes87531
+Node: Size88167
+Node: Timing90310
+Node: Configure Options90949
+Node: Legacy Scripts93288
+Node: Who Built Me94063
+Node: ABI Checking96823
+Node: Hardening Checks98939
+Node: Checking Archives103025
+Node: GNU FDL105446
 
 End Tag Table
 

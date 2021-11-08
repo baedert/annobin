@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# Copyright (c) 2021 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# Mimics how glibc builds C sources without annotation.
+
+TEST_NAME=unicode
+. $srcdir/common.sh
+
+start_test
+
+$GCC $srcdir/trick-hello.s -o trick-hello.exe
+if [ $? != 0 ];
+then
+    echo "unicode-test: FAIL: Could not assemble test source file"
+    end_test
+    exit 1
+fi
+
+# Run annocheck
+
+OPTS="--skip-all --ignore-gaps --test-unicode --test-unicode-suspicious"
+
+$ANNOCHECK trick-hello.exe $OPTS > unicode.out
+grep -e "FAIL: unicode" unicode.out
+if [ $? != 0 ];
+then
+    echo "unicode-test: FAIL: annocheck did not detect suspicious symbol names"
+    $ANNOCHECK trick-hello.exe $OPTS --verbose
+    exit 1
+fi
+
+end_test
