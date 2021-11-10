@@ -443,7 +443,12 @@ pass (annocheck_data * data, uint testnum, const char * source, const char * rea
   const char * filename = get_filename (data);
 
   if (fixed_format_messages)
-    einfo (INFO, FIXED_FORMAT_STRING, "PASS", tests[testnum].name, sanitize_filename (filename));
+    {
+      const char * fname = sanitize_filename (filename);
+      einfo (INFO, FIXED_FORMAT_STRING, "PASS", tests[testnum].name, fname);
+      if (fname != filename)
+	free ((void *) fname);
+    }
   else
     {
       if (! BE_VERBOSE)
@@ -517,7 +522,10 @@ fail (annocheck_data * data,
 
   if (fixed_format_messages)
     {
-      einfo (INFO, FIXED_FORMAT_STRING, "FAIL", tests[testnum].name, sanitize_filename (filename));
+      const char * fname = sanitize_filename (filename);
+      einfo (INFO, FIXED_FORMAT_STRING, "FAIL", tests[testnum].name, fname);
+      if (fname != filename)
+	free ((void *) fname);
     }
   else if (tests[testnum].state != STATE_FAILED || BE_VERBOSE)
     {
@@ -566,7 +574,10 @@ maybe (annocheck_data * data,
 
   if (fixed_format_messages)
     {
-      einfo (INFO, FIXED_FORMAT_STRING, "MAYB", tests[testnum].name, sanitize_filename (filename));
+      const char * fname = sanitize_filename (filename);
+      einfo (INFO, FIXED_FORMAT_STRING, "MAYB", tests[testnum].name, fname);
+      if (fname != filename)
+	free ((void *) fname);
     }
   else if (tests[testnum].state == STATE_UNTESTED || BE_VERBOSE)
     {
