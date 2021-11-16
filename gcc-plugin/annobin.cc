@@ -2746,16 +2746,13 @@ plugin_init (struct plugin_name_args *    plugin_info,
   target_start_sym_bias = annobin_target_start_symbol_bias ();
   if (annobin_attach_type == not_set)
     {
-#if GCCPLUGIN_VERSION_MAJOR >= 11
-      /* For the PPC64LE default to using link order attachment as group attachments do not work.
-	 Only do this if the target supports link_order sections.  For now we use a test of the
-	 GCC version as an approximation to the GAS version that is needed.  See BZ 2016458 for
-         an example of where this solution is needed.  */
-      if (target_start_sym_bias != 0)
-	annobin_attach_type = link_order;
-      else
-#endif
-	annobin_attach_type = group;
+      /* Choose a default attachment type.  Link ordering is preferable
+	 as it is more resistant to changes in compiler section building.
+	 But it does not work for the PPC64LE, nor when assembler sources
+	 are used in the creation of a binary.  (This is because the
+	 -Wa,--generate-missing-build-notes=yes option does set the link
+	 ordering bit in the section header).  */
+      annobin_attach_type = group;
     }
 
   register_callback (plugin_info->base_name,

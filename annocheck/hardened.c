@@ -3786,7 +3786,7 @@ interesting_seg (annocheck_data *    data,
 	 the segment.  We check segments rather than sections because executables
 	 do not have to have sections.  */
       if (! skip_test (TEST_ENTRY)
-	  && (per_file.e_type == ET_DYN || per_file.e_type == ET_EXEC)
+	  && is_executable ()
 	  && is_x86 ()
 	  /* If GO is being used then CET is not supported.  */
 	  && ((per_file.seen_tools & TOOL_GO) == 0)
