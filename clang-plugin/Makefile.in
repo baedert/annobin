@@ -16,6 +16,7 @@ PLUGIN_OPTIONS = \
   -O2 \
   -flto \
   -g -grecord-gcc-switches \
+  -Wl,--build-id=md5 \
   -Wl,-z,now
 
 INCDIR = @srcdir@/..

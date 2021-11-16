@@ -1124,6 +1124,100 @@ dwarf_attribute_checker (annocheck_data *  data,
 }
 
 static bool
+is_special_glibc_binary (const char * path)
+{
+  /* If we are testing an uninstalled rpm then the paths will start with "."
+     so skip this.  */
+  if (path[0] == '.')
+    ++path;
+
+  /* Many glibc binaries are hand built without many of the normal
+     security features.  This is known and expected however, so
+     detect them here.  */
+
+  const char * known_glibc_specials[] =
+    {
+      /* NB/ Keep this array alpha sorted.  */
+      "/lib/ld-linux-aarch64.so.1",
+      "/lib/ld-linux.so.2",
+      "/lib/ld64.so.1",
+      "/lib/libBrokenLocale.so.1",
+      "/lib/libSegFault.so",
+      "/lib/libc.so.6",
+      "/lib/libc_malloc_debug.so.0",      
+      "/lib/libm.so.6",
+      "/lib/libnss_compat.so.2",
+      "/lib/libresolv.so.2",
+      "/lib/librt.so.1",
+      "/lib/libthread_db.so.1",
+      "/lib64/ld-linux-x86-64.so.2",
+      "/lib64/ld64.so.2",
+      "/lib64/libBrokenLocale.so.1",
+      "/lib64/libSegFault.so",
+      "/lib64/libc.so.6",
+      "/lib64/libc_malloc_debug.so.0",
+      "/lib64/libm.so.6",
+      "/lib64/libmvec.so.1",
+      "/lib64/libnss_compat.so.2",
+      "/lib64/libresolv.so.2",
+      "/lib64/librt.so.1",
+      "/lib64/libthread_db.so.1",
+      "/sbin/ldconfig",
+      "/usr/lib/audit/sotruss-lib.so",
+      "/usr/lib/gconv/ANSI_X3.110.so",
+      "/usr/lib/gconv/CP1252.so",
+      "/usr/lib/gconv/ISO8859-1.so",
+      "/usr/lib/gconv/ISO8859-15.so",
+      "/usr/lib/gconv/UNICODE.so",
+      "/usr/lib/gconv/UTF-16.so",
+      "/usr/lib/gconv/UTF-32.so",
+      "/usr/lib/gconv/UTF-7.so",
+      "/usr/lib/libmemusage.so",
+      "/usr/lib/libpcprofile.so",
+      "/usr/lib64/audit/sotruss-lib.so",
+      "/usr/lib64/gconv/ANSI_X3.110.so",
+      "/usr/lib64/gconv/CP1252.so",
+      "/usr/lib64/gconv/ISO-8859-1_CP037_Z900.so",
+      "/usr/lib64/gconv/ISO8859-1.so",
+      "/usr/lib64/gconv/ISO8859-15.so",
+      "/usr/lib64/gconv/UNICODE.so",
+      "/usr/lib64/gconv/UTF-16.so",
+      "/usr/lib64/gconv/UTF-32.so",
+      "/usr/lib64/gconv/UTF-7.so",
+      "/usr/lib64/gconv/UTF16_UTF32_Z9.so",
+      "/usr/lib64/gconv/UTF8_UTF16_Z9.so",
+      "/usr/lib64/gconv/UTF8_UTF32_Z9.so",
+      "/usr/lib64/libmemusage.so",
+      "/usr/lib64/libpcprofile.so",
+      "/usr/libexec/getconf/POSIX_V6_ILP32_OFF32",
+      "/usr/libexec/getconf/POSIX_V6_ILP32_OFFBIG",
+      "/usr/libexec/getconf/POSIX_V6_LP64_OFF64",
+      "/usr/libexec/getconf/POSIX_V7_ILP32_OFF32",
+      "/usr/libexec/getconf/POSIX_V7_ILP32_OFFBIG",
+      "/usr/libexec/getconf/POSIX_V7_LP64_OFF64",
+      "/usr/libexec/getconf/XBS5_ILP32_OFF32",
+      "/usr/libexec/getconf/XBS5_ILP32_OFFBIG",
+      "/usr/libexec/getconf/XBS5_LP64_OFF64",
+      "/usr/sbin/iconvconfig",
+      "/usr/sbin/ldconfig"
+    };
+  int i;
+
+  for (i = ARRAY_SIZE (known_glibc_specials); i--;)
+    {
+      int res = strcmp (path, known_glibc_specials[i]);
+
+      if (res == 0)
+	return true;
+      /* Since the array is alpha-sorted and we are searching in reverse order,
+	 a positive result means that path > special and hence we can stop the search.  */
+      if (res > 0)
+	return false;
+    }
+  return false;
+}
+
+static bool
 start (annocheck_data * data)
 {
   if (disabled)
@@ -1228,7 +1322,9 @@ start (annocheck_data * data)
 
   /* We do not expect to find ET_EXEC binaries.  These days
      all binaries should be ET_DYN, even executable programs.  */
-  if (per_file.e_type == ET_EXEC)
+  if (is_special_glibc_binary (data->full_filename))
+    skip (data, TEST_PIE, SOURCE_ELF_HEADER, "glibc binaries do not have to be built for PIE");
+  else if (per_file.e_type == ET_EXEC)
     fail (data, TEST_PIE, SOURCE_ELF_HEADER, "not built with '-Wl,-pie' (gcc/clang) or '-buildmode pie' (go)");
   else
     pass (data, TEST_PIE, SOURCE_ELF_HEADER, NULL);
@@ -1694,10 +1790,9 @@ function %s is part of the C library's startup code, which executes before a sec
       return true;
     }
 
-  /* The ldconfig binary is known to be compiled with most security features.  */
-  if (streq (data->full_filename, "/sbin/ldconfig"))
+  if (is_special_glibc_binary (data->full_filename))
     {
-      sprintf (reason, "the ldconfig binary is a special case, hand-crafted by the glibc build system");
+      sprintf (reason, "the %s binary is a special case, hand-crafted by the glibc build system", data->filename);
       skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
       return true;
     }
@@ -4538,6 +4633,8 @@ finish (annocheck_data * data)
 	    case TEST_LTO:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "at least part of the binary is compield GO");
+	      else if (is_special_glibc_binary (data->full_filename))
+		skip (data, i, SOURCE_FINAL_SCAN, "glibc binaries not compiled with LTO");
 	      else if (C_compiler_seen ())
 		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      else
