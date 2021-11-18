@@ -1603,23 +1603,28 @@ process_ar (const char * filename, int fd, Elf * elf)
 static bool
 process_elf (const char * filename, int fd, Elf * elf)
 {
-  bool ret;
-
   switch (elf_kind (elf))
     {
-    case ELF_K_AR:
-      ret = process_ar (filename, fd, elf);
-      break;
-    case ELF_K_ELF:
-      ret = run_checkers (filename, fd, elf);
-      break;
-    default:
-      if (ignore_unknown == do_ignore)
-	return true;
-      return einfo (WARN, "%s: is not an ELF format file", filename);
+    case ELF_K_AR:  return process_ar (filename, fd, elf);
+    case ELF_K_ELF: return run_checkers (filename, fd, elf);
+    default:        break;
     }
 
-  return ret;
+  /* Try reading the magic number.  */
+  char buf[4];
+  if (read (fd, buf, 4) == 4)
+    {
+      const char llvm_magic[4] = { 0x42, 0x43, 0xc0, 0xde };
+      /* Check for known magic values.  */
+      if (memcmp (buf, llvm_magic, sizeof llvm_magic) == 0)
+	return einfo (WARN, "%s is an LLVM bitcode file - should it be here ?", filename);
+    }
+  else einfo (VERBOSE, "%s: unable to read magic number", filename);
+
+  if (ignore_unknown == do_ignore)
+    return true;
+
+  return einfo (WARN, "%s: is not an ELF format file", filename);
 }
 
 static const char *

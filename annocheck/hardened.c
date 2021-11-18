@@ -4039,10 +4039,13 @@ ignore_gap (annocheck_data * data, note_range * gap)
 	      else
 		{
 		  /* FIXME: Which section should we select ?  */
-		  einfo (VERBOSE2, "multiple code sections (%x+%x vs %x+%x) contain gap end",
-			 shdr->sh_addr, shdr->sh_size,
-			 elf32_getshdr (addr1_scn)->sh_addr,
-			 elf32_getshdr (addr1_scn)->sh_size);
+		  const Elf64_Shdr * addr1 = elf64_getshdr (addr1_scn);
+
+ 		  einfo (VERBOSE2, "multiple code sections (%lx+%lx vs %lx+%lx) contain gap end",
+ 			 (unsigned long) shdr->sh_addr,
+ 			 (unsigned long) shdr->sh_size,
+			 (unsigned long) (addr1 ? addr1->sh_addr : 0),
+			 (unsigned long) (addr1 ? addr1->sh_size : 0));
 		}
 	    }
 	  else if (shdr->sh_addr == gap->end)
@@ -4144,16 +4147,20 @@ ignore_gap (annocheck_data * data, note_range * gap)
   if (elf_getshdrstrndx (data->elf, & shstrndx) >= 0)
     {
       const char * secname;
+
       secname = elf_strptr (data->elf, shstrndx, scn_name);	  
-      if (streq (secname, ".plt"))
+      if (secname != NULL)
 	{
-	  einfo (VERBOSE2, "Ignoring gaps in the .plt section");
-	  return true;
-	}
-      if (streq (secname, ".got"))
-	{
-	  einfo (VERBOSE2, "Ignoring gaps in the .got section");
-	  return true;
+	  if (streq (secname, ".plt"))
+	    {
+	      einfo (VERBOSE2, "Ignoring gaps in the .plt section");
+	      return true;
+	    }
+	  if (streq (secname, ".got"))
+	    {
+	      einfo (VERBOSE2, "Ignoring gaps in the .got section");
+	      return true;
+	    }
 	}
     }
   
