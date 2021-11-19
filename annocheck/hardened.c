@@ -4714,6 +4714,11 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules are not compiled with this feature");
 	      else if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO compilation does not use the C preprocessor");
+	      else if (per_file.e_machine == EM_ARM)
+		/* The macros file from redhat-rpm-config explicitly disables the annobin plugin for ARM32
+		   because of the problems reported in https://bugzilla.redhat.com/show_bug.cgi?id=1951492
+		   So until that issue is resolved (if it ever is), we can expect missing notes for ARM32.  */
+		skip (data, i, SOURCE_FINAL_SCAN, "ARM32 code is usually compiled without annobin plugin support");
 	      else if (C_compiler_seen ())
 		fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used (and a C compiler was detected)");
 	      else
