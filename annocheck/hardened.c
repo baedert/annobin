@@ -3355,7 +3355,7 @@ check_dynamic_section (annocheck_data *    data,
 		    }
 		  else
 		    {
-		      maybe (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the RPATH dynamic tag has been detected");
+		      skip (data, TEST_RUN_PATH, SOURCE_DYNAMIC_SECTION, "the RPATH dynamic tag is deprecated but still supported for now");
 		      inform (data, "info: Link with --enable-new-dtags to use RUNPATH dynamic tag instead");
 		    }
 		}
