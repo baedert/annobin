@@ -1714,9 +1714,14 @@ File: annobin.info,  Node: Test stack clash,  Next: Test stack prot,  Prev: Test
        Example:  FAIL: stack-clash test because -fstack-clash-protection not enabled
 
    This test checks that the application has been compiled with stack
-clash protection enabled.  If this feature is not enabled then an
+clash protection enabled (either gcc's '-fstack-clash-protection' or
+LLVM's 'SafeStack' attribute.  If this feature is not enabled then an
 attacker could trick the application into overlapping its heap and
 stack, allowing them to alter both.
+
+   Note - if LTO compilation is enabled then this option needs to be
+provided both when the object files are built and when they are linked
+together.
 
    For a full explanation of this topic see these blogs:
 
@@ -3227,25 +3232,25 @@ Node: Test run path66749
 Node: Test rwx seg68970
 Node: Test short enums70242
 Node: Test stack clash71259
-Node: Test stack prot72496
-Node: Test stack realign73828
-Node: Test textrel75098
-Node: Test threads76355
-Node: Test unicode77170
-Node: Test warnings78661
-Node: Test writable got79496
-Node: Hardened Command Line Options80782
-Node: Waiving Hardened Results86222
-Node: Notes87606
-Node: Size88242
-Node: Timing90385
-Node: Configure Options91024
-Node: Legacy Scripts93363
-Node: Who Built Me94138
-Node: ABI Checking96898
-Node: Hardening Checks99014
-Node: Checking Archives103100
-Node: GNU FDL105521
+Node: Test stack prot72720
+Node: Test stack realign74052
+Node: Test textrel75322
+Node: Test threads76579
+Node: Test unicode77394
+Node: Test warnings78885
+Node: Test writable got79720
+Node: Hardened Command Line Options81006
+Node: Waiving Hardened Results86446
+Node: Notes87830
+Node: Size88466
+Node: Timing90609
+Node: Configure Options91248
+Node: Legacy Scripts93587
+Node: Who Built Me94362
+Node: ABI Checking97122
+Node: Hardening Checks99238
+Node: Checking Archives103324
+Node: GNU FDL105745
 
 End Tag Table
 

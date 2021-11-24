@@ -1724,10 +1724,13 @@ annobin_create_function_end_symbol (void * gcc_data, void * user_data)
 	  annobin_emit_symbol (current_func.unlikely_end_sym);
 	  fprintf (asm_out_file, "\t.popsection\n");
 
-	  /* Make sure that the unlikely section will be added into the
-	     current function's group.  */
-	  queue_attachment (current_func.unlikely_section_name,
-			    current_func.group_name);
+	  if (annobin_attach_type == group)
+	    {
+	      /* Make sure that the unlikely section will be added into the
+		 current function's group.  */
+	      queue_attachment (current_func.unlikely_section_name,
+				current_func.group_name);
+	    }
 	}
 
       fprintf (asm_out_file, "\t.pushsection %s\n", current_func.section_name);

@@ -1851,9 +1851,15 @@ If necessary the test can be disabled via the
 @end smallexample
 
 This test checks that the application has been compiled with stack
-clash protection enabled.  If this feature is not enabled then an
-attacker could trick the application into overlapping its heap and
-stack, allowing them to alter both.
+clash protection enabled (either gcc's
+@option{-fstack-clash-protection} or LLVM's @option{SafeStack} attribute.
+If this feature is not enabled then an attacker could trick the
+application into overlapping its heap and stack, allowing them to
+alter both.
+
+Note - if LTO compilation is enabled then this option needs to be
+provided both when the object files are built and when they are linked
+together.
 
 For a full explanation of this topic see these blogs:
 
