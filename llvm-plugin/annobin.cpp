@@ -523,7 +523,7 @@ class AnnobinModulePassLegacy : public ModulePass
 {
 public:
   static char ID;
-  int OptLevel;
+  int OptLevel = 2;
   AnnobinModulePassLegacy() : ModulePass (ID) { }
 
   virtual bool runOnModule (Module & module)
