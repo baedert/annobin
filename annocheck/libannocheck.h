@@ -1,4 +1,4 @@
-/* annobin - Header file for the libannocheck library.
+/* libannocheck.h - Header file for the libannocheck library.
    Copyright (c) 2021 Red Hat.
    Created by Nick Clifton.
 
@@ -21,13 +21,17 @@ const unsigned int libannocheck_version = 100;
 typedef enum libannocheck_error
 {
   libannocheck_error_none = 0,
+  libannocheck_error_bad_arguments,
+  libannocheck_error_bad_handle,
   libannocheck_error_bad_version,
-  libannocheck_error_handle_not_known,
-  libannocheck_error_profile_not_known,
-  libannocheck_error_file_not_found,
   libannocheck_error_debug_file_not_found,
   libannocheck_error_file_corrupt,
   libannocheck_error_file_not_ELF,
+  libannocheck_error_file_not_found,
+  libannocheck_error_out_of_memory,
+  libannocheck_error_not_supported,
+  libannocheck_error_profile_not_known,
+  libannocheck_error_test_not_found,
   
   libannocheck_error_MAX
 } libannocheck_error;
@@ -45,14 +49,14 @@ typedef enum libannocheck_test_state
     
 typedef struct libannocheck_test
 {
-  const char *             test_name;
-  const char *             test_description;
+  const char *             name;
+  const char *             description;
   const char *             doc_url;
-  const char *             test_result_reason;
-  const char *             test_result_source;
+  const char *             result_reason;
+  const char *             result_source;
   libannocheck_test_state  state;
-  bool                     test_enabled;
-}
+  bool                     enabled;
+} libannocheck_test;
 
 /* Initialise the libannocheck library.
    Returns a token used to identify the instantiation in future calls.
@@ -69,8 +73,9 @@ extern void *              libannocheck_init (unsigned int VERSION, const char *
 extern libannocheck_error  libannocheck_finish (void * HANDLE);
 
 /* Returns a (read only) string describing an libannocheck error.
-   Returns NULL if the error code is not recognised.  */
-extern const char *        libannocheck_get_error_message (enum libannocheck_error);
+   Returns NULL if the error code is not recognised.
+   Handle can be NULL if one is not available.  */
+  extern const char *        libannocheck_get_error_message (void * HANDLE, enum libannocheck_error);
 
 /* Returns the actual version number of the libannocheck_library.
    This should be >= libannocheck_version as defined in this file.  */
@@ -86,7 +91,7 @@ extern unsigned int        libannocheck_get_version (void * HANDLE);
     or libannocheck_disable_test().
    The test_result_reason and test_result_source fields will initially be NULL.
     They may have their values changed as a result of a call to libannocheck_run_tests().  */
-extern libannocheck_error  libannocheck_get_known_tests (void * HANDLE, libannocheck_test * TESTS_RETURN, unsigned int * NUM_TESTS_RETURN);
+extern libannocheck_error  libannocheck_get_known_tests (void * HANDLE, libannocheck_test ** TESTS_RETURN, unsigned int * NUM_TESTS_RETURN);
 
 /* The following five function calls affect the data held in the array returned
    by libannocheck_get_known_tests().  */
@@ -104,7 +109,7 @@ extern libannocheck_error  libannocheck_enable_profile (void * HANDLE, const cha
    The array is returned in PROFILES_RETURN.
    The number of entries in the array is returned in NUM_PROFILES.
    Returns libannocheck_error_none upons success, or an error code otehrwise.  */
-extern libannocheck_error  libannocheck_get_known_profiles (void * HANDLE, const char ** PROFILES_RETURN, unsigned int * NUM_PROFILES);
+extern libannocheck_error  libannocheck_get_known_profiles (void * HANDLE, const char ** PROFILES_RETURN, unsigned int * NUM_PROFILES_RETURN);
 
 /* Runs all enabled tests.
    Returns the number of failed tests in NUM_FAIL_RETURN (if this parameter is not NULL).

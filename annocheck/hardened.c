@@ -239,15 +239,16 @@ enum test_index
 
 enum profile
 {
-  profile_none = 0,
-  profile_el7,
-  profile_el8,
-  profile_el9,
-  profile_rawhide,
-  max_profile
+  PROFILE_NONE = 0,
+  PROFILE_EL7,
+  PROFILE_EL8,
+  PROFILE_EL9,
+  PROFILE_RAWHIDE,
+
+  PROFILE_MAX
 };
 
-static enum profile current_profile = profile_none;
+static enum profile current_profile = PROFILE_NONE;
 
 #define MIN_GO_REVISION 14
 #define STR(a) #a
@@ -1249,9 +1250,9 @@ start (annocheck_data * data)
     {
       switch (current_profile)
 	{
-	case profile_el7:
-	case profile_el8:
-	case profile_el9:
+	case PROFILE_EL7:
+	case PROFILE_EL8:
+	case PROFILE_EL9:
 	  fail_for_all_unicode.option_value = true;
 	  break;
 	default:
@@ -4980,20 +4981,21 @@ static const struct profiles
   const char *      name;
   enum  test_index  disabled_tests[MAX_DISABLED];
   enum  test_index  enabled_tests[MAX_DISABLED];
-} profiles[max_profile] =
+}
+  profiles [PROFILE_MAX] =
 {
-  [ profile_el7 ] = { "el7",
+  [ PROFILE_EL7 ] = { "el7",
 		      { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_PIE, TEST_BIND_NOW, TEST_FORTIFY, TEST_STACK_CLASH, TEST_LTO },
 		      { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
-  [ profile_el8 ] = { "el8",
+  [ PROFILE_EL8 ] = { "el8",
 		      { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_LTO },
 		      { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
-  [ profile_el9 ] = { "el9",
-		     { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS },
-		     { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
-  [profile_rawhide ] = { "rawhide",
-			 { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS },
-			 { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS } }
+  [ PROFILE_EL9 ] = { "el9",
+		      { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS },
+		      { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
+  [ PROFILE_RAWHIDE ] = { "rawhide",
+			  { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS },
+			  { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS } }
 };
 
 static void
@@ -5021,12 +5023,12 @@ set_profile (enum profile num)
       tests[index].enabled = true;
     }
 
-  if (num == profile_rawhide)
+  if (num == PROFILE_RAWHIDE)
     {
       dt_rpath_is_ok.option_value = false;
       dt_rpath_is_ok.option_set = true;
     }
-  else if (num != profile_none)
+  else if (num != PROFILE_NONE)
     {
       dt_rpath_is_ok.option_value = true;
       dt_rpath_is_ok.option_set = true;
@@ -5208,7 +5210,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	  }
 
       if (streq (arg, "none") || streq (arg, "default"))
-	set_profile (profile_none);
+	set_profile (PROFILE_NONE);
       else
 	einfo (ERROR, "Argument to --profile- option not recognised");
 
@@ -5219,8 +5221,11 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
   return false;
 }
 
+/* -------------------------------------------------------------------------------------------- */
 
-struct checker hardened_checker =
+#ifndef LIBANNOCHECK
+
+static struct checker hardened_checker =
 {
   HARDENED_CHECKER_NAME,
   start,
@@ -5243,3 +5248,310 @@ register_checker (void)
   if (! annocheck_add_checker (& hardened_checker, ANNOBIN_VERSION / 100))
     disabled = true;
 }
+
+#else /* LIBANNOCHECK defined */
+
+#include "libannocheck.h"
+
+typedef struct libannocheck_internals
+{
+  const char * filepath;
+  const char * debugpath;
+
+  libannocheck_test     tests[TEST_MAX];
+
+} libannocheck_internals;
+
+/* For now we just support one handle at a time.  */
+static libannocheck_internals *  cached_handle;
+static const char *              cached_reason;
+
+static libannocheck_error
+set_error (libannocheck_error err, const char * reason)
+{
+  cached_reason = reason;
+  return err;
+}
+
+static bool
+verify_handle (void * handle)
+{
+  // FIXME: Add more sanity tests ?
+  return handle == cached_handle;
+}
+
+void *
+libannocheck_init (unsigned int  version,
+		   const char *  filepath,
+		   const char *  debugpath)
+{
+  if (version < libannocheck_version)
+    {
+      (void) set_error (libannocheck_error_bad_version, "version number too small");
+      return NULL;
+    }
+
+  if (filepath == NULL || * filepath == 0)
+    {
+      (void) set_error (libannocheck_error_file_not_found, "filepath empty");
+      return NULL;
+    }
+
+  libannocheck_internals * handle  = calloc (1, sizeof * handle);
+
+  if (handle == NULL)
+    {
+      (void) set_error (libannocheck_error_out_of_memory, "allocating new handle");
+      return NULL;
+    }
+
+  handle->filepath = strdup (filepath);
+  if (debugpath)
+    handle->debugpath = strdup (debugpath);
+
+  unsigned int i;
+  for (i = 0; i < TEST_MAX; i++)
+    {
+      handle->tests[i].name = tests[i].name;
+      handle->tests[i].description = tests[i].description;
+      handle->tests[i].doc_url = tests[i].doc_url;
+      handle->tests[i].enabled = true;
+      handle->tests[i].state = libannocheck_test_state_not_run;
+    }
+
+  cached_handle = handle;
+  cached_reason = NULL;
+  return (void *) handle;
+}
+
+libannocheck_error
+libannocheck_finish (void * handle)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "cannot release handle");
+
+  free ((void *) real_handle->filepath);
+  free ((void *) real_handle->debugpath);
+  free ((void *) real_handle);
+
+  cached_handle = NULL;
+  return libannocheck_error_none;
+}
+
+const char *
+libannocheck_get_error_message (void * handle ATTRIBUTE_UNUSED,
+				enum libannocheck_error err)
+{
+  if (cached_reason != NULL)
+    return cached_reason;
+
+  switch (err)
+    {
+    case libannocheck_error_none: return "no error";
+    case libannocheck_error_bad_arguments: return "bad arguments";
+    case libannocheck_error_bad_handle: return "bad handle";
+    case libannocheck_error_bad_version: return "bad version";
+    case libannocheck_error_debug_file_not_found: return "debug file not found";
+    case libannocheck_error_file_corrupt: return "file corrupt";
+    case libannocheck_error_file_not_ELF: return "not an ELF file";
+    case libannocheck_error_file_not_found: return "file not found";
+    case libannocheck_error_not_supported: return "operation not supported";
+    case libannocheck_error_out_of_memory: return "out of memory";
+    case libannocheck_error_profile_not_known: return "profile not known";
+    case libannocheck_error_test_not_found: return "test not found";
+    default: return "INTERNAL ERROR - error code not recognised";
+    }
+}
+
+unsigned int
+libannocheck_get_version (void * handle ATTRIBUTE_UNUSED)
+{
+  return libannocheck_version;
+}
+
+libannocheck_error
+libannocheck_get_known_tests (void * handle, libannocheck_test ** tests_return, unsigned int * num_tests_return)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "unrecognised handle");
+
+  if (tests_return == NULL || num_tests_return == NULL)
+    return set_error (libannocheck_error_bad_arguments, "NULL passed as an argument");
+
+  * tests_return = real_handle->tests;
+  * num_tests_return = TEST_MAX;
+
+  return libannocheck_error_none;
+}
+
+libannocheck_error
+libannocheck_enable_all_tests (void * handle)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "unrecognised handle");
+
+  unsigned int i;
+
+  for (i = 0; i < TEST_MAX; i++)
+    real_handle->tests[i].enabled = true;
+
+  return libannocheck_error_none;
+}
+
+libannocheck_error
+libannocheck_disable_all_tests (void * handle)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "unrecognised handle");
+
+  unsigned int i;
+
+  for (i = 0; i < TEST_MAX; i++)
+    real_handle->tests[i].enabled = false;
+
+  return libannocheck_error_none;
+}
+
+static libannocheck_test *
+find_test (libannocheck_internals * handle, const char * name)
+{
+  unsigned int i;
+
+  for (i = 0; i < TEST_MAX; i++)
+    if (streq (handle->tests[i].name, name))
+      return handle->tests + i;
+
+  return NULL;
+}
+
+libannocheck_error
+libannocheck_enable_test (void * handle, const char * name)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "unrecognised handle");
+
+  if (name == NULL)
+    return set_error (libannocheck_error_bad_arguments, "NAME is NULL");
+
+  libannocheck_test * test;
+
+  if ((test = find_test (real_handle, name)) == NULL)
+    return set_error (libannocheck_error_test_not_found, "no such test");
+
+  test->enabled = true;
+
+  return libannocheck_error_none;
+}
+
+libannocheck_error
+libannocheck_disable_test (void * handle, const char * name)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "unrecognised handle");
+
+  if (name == NULL)
+    return set_error (libannocheck_error_bad_arguments, "NAME is NULL");
+
+  libannocheck_test * test;
+
+  if ((test = find_test (real_handle, name)) == NULL)
+    return set_error (libannocheck_error_test_not_found, "no such test");
+
+  test->enabled = false;
+
+  return libannocheck_error_none;
+}
+
+libannocheck_error
+libannocheck_enable_profile (void * handle, const char * name)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "unrecognised handle");
+
+  if (name == NULL)
+    return set_error (libannocheck_error_bad_arguments, "NAME is NULL");
+
+  unsigned int i;
+
+  for (i = ARRAY_SIZE (profiles); i--;)
+    {
+      if (streq (name, profiles[i].name))
+	{
+	  unsigned int j;
+
+	  for (j = 0; j < MAX_DISABLED; j++)
+	    {
+	      enum test_index index = profiles[i].disabled_tests[j];
+
+	      if (index == TEST_NOTES)
+		break;
+	      real_handle->tests[index].enabled = false;
+	    }
+
+	  for (j = 0; j < MAX_DISABLED; j++)
+	    {
+	      enum test_index index = profiles[i].enabled_tests[j];
+
+	      if (index == TEST_NOTES)
+		break;
+	      real_handle->tests[index].enabled = true;
+	    }
+
+	  return libannocheck_error_none;
+	}
+    }
+
+    return set_error (libannocheck_error_profile_not_known, "no such profile");
+}
+
+libannocheck_error
+libannocheck_get_known_profiles (void *           handle,
+				 const char **    profiles_return,
+				 unsigned int *   num_profiles_return)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "unrecognised handle");
+
+  if (profiles_return == NULL || num_profiles_return == NULL)
+    return set_error (libannocheck_error_bad_arguments, "NULL passed as argument");
+  
+  * profiles_return = NULL;
+  * num_profiles_return = 0;
+
+  return libannocheck_error_not_supported;
+}
+
+libannocheck_error
+libannocheck_run_tests (void * handle, unsigned int * num_fail_return, unsigned int * num_mayb_return)
+{
+  libannocheck_internals * real_handle = (libannocheck_internals *) handle;
+
+  if (! verify_handle (real_handle))
+    return set_error (libannocheck_error_bad_handle, "unrecognised handle");
+
+  if (num_fail_return == NULL || num_mayb_return == NULL)
+    return set_error (libannocheck_error_bad_arguments, "NULL passed as argument");
+  
+  * num_fail_return = 0;
+  * num_mayb_return = 0;
+
+  return libannocheck_error_none;
+}
+
+#endif /* ENABLE_LIBANNOCHECK */

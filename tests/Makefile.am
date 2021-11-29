@@ -34,6 +34,10 @@ if HAVE_DEBUGINFOD
 TESTS += debuginfod-test
 endif
 
+if COND_ANNOCHECK
+TESTS += libannocheck-test
+endif
+
 # FIXME: Add a test for merging notes...
 # FIXME: Add a test for examining archives...
 # FIXME: Add a test for examining rpms...

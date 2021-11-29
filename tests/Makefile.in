@@ -89,6 +89,7 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 @HAVE_DEBUGINFOD_TRUE@am__append_1 = debuginfod-test
+@COND_ANNOCHECK_TRUE@am__append_2 = libannocheck-test
 subdir = tests
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/config/acx.m4 \
@@ -481,7 +482,7 @@ TESTS = abi-test active-checks-test active-checks-test \
 	hardening-fail-test hardening-fail-test hardening-test \
 	instrumentation-test ldconfig-test lto-test missing-notes-test \
 	missing-notes-test objcopy-test property-note-test \
-	section-size-test unicode-test $(am__append_1)
+	section-size-test unicode-test $(am__append_1) $(am__append_2)
 all: all-am
 
 .SUFFIXES:
@@ -805,6 +806,13 @@ unicode-test.log: unicode-test
 debuginfod-test.log: debuginfod-test
 	@p='debuginfod-test'; \
 	b='debuginfod-test'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+libannocheck-test.log: libannocheck-test
+	@p='libannocheck-test'; \
+	b='libannocheck-test'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Copyright (c) 2021 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+TEST_NAME=libannocheck
+. $srcdir/common.sh
+
+LIBANNOCHECKDIR=${LIBANNOCHECKDIR:-../../annocheck/.libs}
+INCDIR=${INCDIR:-$srcdir/../annocheck}
+OPTS="-O2 -I $INCDIR"
+
+start_test
+
+COMMAND="$GCC $OPTS $srcdir/use-libannocheck.c -L $LIBANNOCHECKDIR -lannocheck -o use-libannocheck -lelf -ldw -liberty -Wl,-rpath=$LIBANNOCHECKDIR"
+$COMMAND
+if [ $? != 0 ];
+then
+	echo " $TEST_NAME: FAIL: Could not compile source file"
+	echo " $TEST_NAME: command: $COMMAND"
+	exit 1
+fi
+
+./use-libannocheck > libannocheck.out
+if [ $? != 0 ];
+then
+	echo " $TEST_NAME: FAIL: Could not run libannocheck tester"
+	exit 1
+fi
+
+end_test

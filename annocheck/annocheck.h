@@ -223,6 +223,14 @@ extern bool annocheck_find_symbol_by_name
    the filename associated with the file that prompted the need for these extra checks is ORIGINAL_FILENAME.  */
 extern bool annocheck_process_extra_file (checker * CHECKER, const char * EXTRA_FILENAME, const char * ORIGINAL_FILENAME, int FD);
 
+/* Functions used by LIBANNOCHECK to access annocheck features.  */
+/* Add FILENAME to the list of files to process.  */
+extern void add_file (const char * FILENAME);
+/* Process the current list of files.  */
+extern bool process_files (void);
+
+
+
 /* An enum controlling the behaviour of the einfo function:  */
 typedef enum einfo_type
 {

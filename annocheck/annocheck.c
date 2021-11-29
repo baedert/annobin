@@ -1,5 +1,5 @@
 /* annocheck - A tool for checking security features of binares.
-   Copyright (c) 2018 - 2020 Red Hat.
+   Copyright (c) 2018 - 2021 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -21,8 +21,10 @@
 #include <sys/stat.h>
 #include <elfutils/libdwelf.h>
 #include <elfutils/libdwfl.h>
+#ifndef LIBANNOCHECK
 #if HAVE_LIBDEBUGINFOD
 #include <elfutils/debuginfod.h>
+#endif
 #endif
 
 /* Prefix used to isolate annobin symbols from program symbols.  */
@@ -41,17 +43,19 @@ enum ignore_enum
 static ulong         	num_files = 0;
 static ulong            num_allocated_files = 0;
 static const char **    files;
-static const char *     full_progname;
 static const char *     progname;
 static enum ignore_enum ignore_unknown = ignore_not_set;
-static char *           saved_args = NULL;
 static char *           prefix = "";
-static const char *     debug_rpm = NULL;
-static const char *     debug_rpm_dir = NULL;
 static const char *     debug_path = NULL;
 static const char *     debug_file = NULL;
+#ifndef LIBANNOCHECK
+static const char *     full_progname;
 static uint             level = 0;
+static char *           saved_args = NULL;
+static const char *     debug_rpm = NULL;
+static const char *     debug_rpm_dir = NULL;
 static const char *     tmpdir = NULL;
+#endif
 
 static checker *        first_checker = NULL;
 static checker *        first_sec_checker = NULL;
@@ -198,7 +202,7 @@ einfo (einfo_type type, const char * format, ...)
 
 /* -------------------------------------------------------------------- */
 
-static void
+void
 add_file (const char * filename)
 {
   if (num_files == num_allocated_files)
@@ -208,344 +212,6 @@ add_file (const char * filename)
     }
 
   files[num_files ++] = filename;
-}
-
-static void
-print_version (void)
-{
-  einfo (INFO, "Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
-
-  checker * tool;
-  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-    if (tool->version)
-      {
-	push_component (tool);
-	einfo (PARTIAL, " ");
-	tool->version ();
-	pop_component ();
-      }
-}
-
-static void
-usage (void)
-{
-  einfo (INFO, "Runs various scans on the given files");
-  einfo (INFO, "Useage: %s [options] <file(s)>", CURRENT_COMPONENT_NAME);
-  einfo (INFO, " Options are:");
-  einfo (INFO, "   --debug-rpm=<RPM>  [Find separate dwarf debug information in <RPM>]");
-  einfo (INFO, "   --debug-file=<FILE>[Find separate dwarf debug information in <FILE>]");
-  einfo (INFO, "   --debug-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
-  einfo (INFO, "   --help             [Display this message & exit]");
-  einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types]");
-  einfo (INFO, "   --report-unknown   [Do complain about unknown file types]");
-  einfo (INFO, "   --quiet            [Do not print anything, just return an exit status]");
-  einfo (INFO, "   --verbose          [Produce informational messages whilst working.  Repeat for more information]");
-  einfo (INFO, "   --version          [Report the verion of the tool & exit]");
-
-  einfo (INFO, "The following options are internal to the scanner and not expected to be supplied by the user:");
-  einfo (INFO, "   --prefix=<TEXT>    [Include <TEXT> in the output description]");
-  einfo (INFO, "   --tmpdir=<NAME>    [Absolute pathname of a temporary directory used to pass data between iterations]");
-  einfo (INFO, "   --level=<N>        [Recursion level of the scanner]");
-
-  einfo (INFO, "Tools have their own options:");
-  einfo (INFO, "   --enable-<tool>    [Turn on <tool>][By default the hardened tool is enabled]");
-  einfo (INFO, "   --disable-<tool>   [Turn off <tool>]");
-  einfo (INFO, "   --<tool>-help      [Display help message for <tool> & exit]");
-  einfo (INFO, "   --help-<tool>      [Display help message for <tool> & exit]");
-  einfo (INFO, "   --<tool>-<option>  [Pass <option> to <tool>]");
-  einfo (INFO, "Tool names are case insensitive, so --hardened-help is the same as --Hardened-help");
-  einfo (INFO, "If an option is unique to a tool then it can be passed without the --tool prefix");
-  einfo (INFO, "For example the hardened tool's test skipping options can be passed as either");
-  einfo (INFO, "--hardened-skip-<test> or just --skip-<test>");
-  
-  einfo (INFO, "The following scanning tools are available:");
-
-  checker * tool;
-  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-    einfo (INFO, "  %s\n", tool->name);
-}
-
-static void
-save_arg (const char * arg)
-{
-  if (saved_args)
-    {
-      char * new_saved_args = concat (saved_args, " ", arg, NULL);
-      free (saved_args);
-      saved_args = new_saved_args;
-    }
-  else
-    saved_args = concat (arg, NULL);
-}
-
-/* Handle command line options.  Returns to caller if there is
-   something to do.  */
-
-static bool
-process_command_line (uint argc, const char * argv[])
-{
-  uint a = 1;
-
-  progname = component_names[0];
-
-  if (argc > 0 && argv == NULL)
-    return false;
-
-  while (a < argc)
-    {
-      const char *  arg = argv[a];
-      bool          used = false;
-      checker *     tool;
-      const char *  orig_arg = arg;
-
-      ++ a;
-
-      for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-	{
-	  if (arg[0] == '-' && arg[1] == '-' && strncasecmp (arg + 2, tool->name, strlen (tool->name)) == 0)
-	    {
-	      arg += 2 + strlen (tool->name);
-	      if (arg[0] == '-')
-		++arg;
-
-	      if (streq (arg, "help"))
-		{
-		  if (tool->usage)
-		    {
-		      push_component (tool);
-		      tool->usage ();
-		      pop_component ();
-		    }
-		  else
-		    einfo (INFO, "Tool %s does not have any specific options", tool->name);
-
-		  exit (EXIT_SUCCESS);
-		}	      
-
-	      if (tool->process_arg != NULL)
-		{
-		  push_component (tool);
-		  if (tool->process_arg (arg, argv, argc, & a))
-		    used = true;
-		  pop_component ();
-		}
-
-	      if (! used)
-		goto unknown_arg;
-	    }
-	  else if (tool->process_arg != NULL)
-	    {
-	      push_component (tool);
-	      if (tool->process_arg (arg, argv, argc, & a))
-		used = true;
-	      pop_component ();
-	    }
-	}
-
-      if (used)
-	{
-	  save_arg (arg);
-	  continue;
-	}
-
-      if (arg[0] == '-')
-        {
-	  const char *  parameter;
-
-	  arg += (arg[1] == '-' ? 2 : 1);
-	  switch (*arg)
-	    {
-	    case 'h': /* --help */
-	      /* As an assit to users treat --help-<tool> as --<tool>-help.  */
-	      if (const_strneq (arg, "help-"))
-		{
-		  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
-		    {
-		      if (tool->usage
-			  && strncasecmp (arg + strlen ("help-"), tool->name, strlen (tool->name)) == 0)
-			{
-			  push_component (tool);
-			  tool->usage ();
-			  pop_component ();
-			  exit (EXIT_SUCCESS);
-			}
-		    }
-		}
-	      usage ();
-	      exit (EXIT_SUCCESS);
-
-	    case 'i': /* --ignore-unknown  */
-	      ignore_unknown = do_ignore;
-	      break;
-
-	    case 'r': /* --report-unknown  */
-	      ignore_unknown = do_not_ignore;
-	      break;
-
-	    case 'q': /* --quiet */
-	      save_arg (orig_arg);
-	      verbosity = -1UL;
-	      break;
-
-	    case 'd': /* --debug-rpm, --debug-file or --debug-dir.  */
-	      parameter = strchr (arg, '=');
-	      if (parameter == NULL)
-		parameter = argv[a++];
-	      else
-		parameter ++;
-
-	      if (const_strneq (arg, "dwarf-dir") /* Old name for --debug-dir.  */
-		  || const_strneq (arg, "debug-dir")
-		  || const_strneq (arg, "debugdir"))
-		{
-		  if (debug_path != NULL)
-		    einfo (WARN, "overriding previous --debug-dir option (%s) with %s",
-			   debug_path, parameter);
-		  debug_path = parameter;
-		}
-	      else if (const_strneq (arg, "debug-rpm") || const_strneq (arg, "debugrpm"))
-		{
-		  if (debug_rpm != NULL)
-		    einfo (WARN, "overriding previous --debug-rpm option (%s) with %s",
-			   debug_rpm, parameter);
-		  debug_rpm = parameter;
-		}
-	      else if (const_strneq (arg, "debug-file") || const_strneq (arg, "debugfile"))
-		{
-		  if (debug_file != NULL)
-		    einfo (WARN, "overriding previous --debug-file option (%s) with %s",
-			   debug_file, parameter);
-		  debug_file = parameter;
-		}
-	      else
-		goto unknown_arg;
-
-	      if (parameter == NULL)
-		goto arg_missing_argument;
-
-	      if (parameter[0] != '/')
-		{
-		  const char * tmp;
-		  /* Convert a relative path to an absolute one so that if/when
-		     we recurse into a directory, the path will remain valid.  */
-		  if (parameter == argv[a-1])
-		    tmp = concat (orig_arg, " ", getcwd (NULL, 0), "/", parameter, NULL);
-		  else if (debug_rpm == parameter)
-		    tmp = concat ("--debug-rpm=", getcwd (NULL, 0), "/", parameter, NULL);
-		  else if (debug_path == parameter)
-		    tmp = concat ("--debug-dir=", getcwd (NULL, 0), "/", parameter, NULL);
-		  else /* debug_file == parameter  */
-		    tmp = concat ("--debug-file=", getcwd (NULL, 0), "/", parameter, NULL);
-		  save_arg (tmp);
-		  free ((void *) tmp);
-		}
-	      else
-		{
-		  save_arg (orig_arg);
-		  if (parameter == argv[a-1])
-		    save_arg (parameter);
-		}
-
-	      if (debug_path != NULL && debug_rpm != NULL)
-		{
-		  static bool warned = false;
-		  if (! warned)
-		    einfo (WARN, "Behaviour is undefined when both --debug-rpm and --debug-dir are specified");
-		  warned = true;
-		}
-	      break;
-
-	    case 'p': /* --prefix  */
-	      save_arg (orig_arg);
-	      parameter = strchr (arg, '=');
-	      if (parameter == NULL)
-		parameter = argv[a++];
-	      else
-		parameter ++;
-
-	      if (parameter == NULL)
-		goto arg_missing_argument;
-
-	      /* Prefix arguments accumulate.  */
-	      prefix = concat (prefix, parameter, NULL);
-	      break;
-
-	    case 'l': /* --level */
-	      parameter = strchr (arg, '=');
-	      if (parameter == NULL)
-		parameter = argv[a++];
-	      else
-		parameter ++;	      
-
-	      if (parameter == NULL)
-		goto arg_missing_argument;
-
-	      level = strtoul (parameter, NULL, 0);
-	      if (level < 1)
-		{
-		  einfo (WARN, "improper --level option: %s", parameter);
-		  level = 1;
-		}
-	      break;
-
-	    case 't': /* --tmpdir */
-	      if (const_strneq (arg, "tmpdir"))
-		{
-		  parameter = strchr (arg, '=');
-		  if (parameter == NULL)
-		    parameter = argv[a++];
-		  else
-		    parameter ++;	      
-
-		  if (parameter == NULL)
-		    goto arg_missing_argument;
-
-		  tmpdir = parameter;
-		  assert (tmpdir[0] == '/');
-		}
-	      else
-		goto unknown_arg;
-	      break;
-	      
-	    case 'v': /* --verbose or --version */
-	      if (const_strneq (arg, "version"))
-		{
-		  print_version ();
-		  exit (EXIT_SUCCESS);
-		}
-	      else if (const_strneq (arg, "verbose")
-		       /* Allow -v as an alias for --verbose.  */
-		       || arg[1] == 0)
-		{
-		  save_arg (orig_arg);
-		  verbosity ++;
-		}
-	      else
-		goto unknown_arg;
-	      break;
-
-	    default:
-	    unknown_arg:
-	      einfo (WARN, "Unrecognised command line option: %s", orig_arg);
-	      usage ();
-	      return false;
-	    arg_missing_argument:
-	      einfo (ERROR, "Command line option '%s' needs an argument", orig_arg);
-	      return false;
-	    }
-	}
-      else
-	add_file (arg);
-    }
-
-  if (num_files == 0)
-    {
-      einfo (WARN, "No input files specified");
-      usage ();
-      return false;
-    }
-
-  return true;
 }
 
 /* -------------------------------------------------------------------- */
@@ -767,6 +433,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
   return ret;
 }
 
+#ifndef LIBANNOCHECK
 /* Like process_rpm_file, except that the rpm is just
    extracted and then left untouched.  Returns the name
    of the directory holding the rpm contents.  */
@@ -835,6 +502,8 @@ extract_rpm_file (const char * filename)
   return debug_rpm_dir = dirname;
 }
 
+#endif /* not LIBANNOCHECK */
+
 #define TRY_DEBUG(format,args...)					\
   do									\
     {									\
@@ -898,11 +567,14 @@ follow_debuglink (annocheck_data * data)
 
       einfo (VERBOSE2, "%s: Testing possibilities based upon the build-id", data->filename);
 
+#ifndef LIBANNOCHECK      
       if (debug_rpm)
 	/* If the user has told us an rpm file that contains
 	   debug information then extract it and use it.  */
 	path = extract_rpm_file (debug_rpm);
-      else if (debug_path)
+      else
+#endif
+	if (debug_path)
 	path = debug_path;
 
       if (path == NULL)
@@ -985,6 +657,7 @@ follow_debuglink (annocheck_data * data)
   if (debug_path)
     TRY_DEBUG ("%s/%s", debug_path, link);
 
+#ifndef LIBANNOCHECK
   /* If we have been pointed at an debuginfo rpm then try that next.  */
   if (debug_rpm)
     {
@@ -995,6 +668,7 @@ follow_debuglink (annocheck_data * data)
       TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_3, link);
       TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_4, link);
     }
+#endif
   
   /* next try in the current directory.  */
   TRY_DEBUG ("./%s", link);
@@ -1050,6 +724,7 @@ follow_debuglink (annocheck_data * data)
 	}
     }
 
+#ifndef LIBANNOCHECK
 #if HAVE_LIBDEBUGINFOD
   if (build_id_len > 0)
     {
@@ -1084,6 +759,7 @@ einfo (VERBOSE2, "D");
 #else
   einfo (VERBOSE2, "%s: support for debuginfod not built into annocheck", data->filename);
 #endif /* HAVE_LIBDEBUGINFOD */
+#endif /* not LIBANNOCHECK */
   
   /* Failed to find the file.  */
   einfo (VERBOSE2, "%s: warn: Could not find separate debug file: %s", data->filename, link);
@@ -1627,6 +1303,7 @@ process_elf (const char * filename, int fd, Elf * elf)
   return einfo (WARN, "%s: is not an ELF format file", filename);
 }
 
+#ifndef LIBANNOCHECK
 static const char *
 itoa (uint level)
 {
@@ -1663,7 +1340,9 @@ process_rpm_file (const char * filename)
   else
     fname = concat (filename, NULL);
 
-  if (full_progname[0] != '/' && strchr (full_progname, '/'))
+  if (full_progname == NULL || * full_progname == 0)
+    pname = concat (cwd, "/", "libannocheck", NULL);
+  else if (full_progname[0] != '/' && strchr (full_progname, '/'))
     pname = concat (cwd, "/", full_progname, NULL);
   else
     pname = concat (full_progname, NULL);
@@ -1710,11 +1389,14 @@ process_rpm_file (const char * filename)
   einfo (VERBOSE2, "RPM processed successfully");
   return result == EXIT_SUCCESS;
 }
+#endif /* not LIBANNOCHECK */
 
 static bool
 process_file (const char * filename)
 {
+#ifndef LIBANNOCHECK
   size_t       len;
+#endif
   struct stat  statbuf;
   int          res;
 
@@ -1796,6 +1478,7 @@ process_file (const char * filename)
   if (statbuf.st_size < 0)
     return einfo (WARN, "'%s' has negative size, probably it is too large", filename);
 
+#ifndef LIBANNOCHECK
   /* If the file is an RPM hand it off for separate processing.  */
 
   /* FIXME: the rpmReadPackageFile() function can generate a seg-fault
@@ -1818,6 +1501,7 @@ process_file (const char * filename)
       if (res)
 	return true;
     }
+#endif /* not LIBANNOCHECK */
 
   /* Otherwise open it and try to process it as an ELF file.  */
   int fd = open (filename, O_RDONLY);
@@ -1994,7 +1678,7 @@ annocheck_process_extra_file (checker *     checker,
   return ret;
 }
 
-static bool
+bool
 process_files (void)
 {
   bool result = true;
@@ -2005,6 +1689,10 @@ process_files (void)
 
   return result;
 }
+
+/* -------------------------------------------------------------------- */
+
+#ifndef LIBANNOCHECK
 
 static const char *
 create_tmpdir (void)
@@ -2032,7 +1720,343 @@ create_tmpdir (void)
   return tmpdir;
 }
 
-/* -------------------------------------------------------------------- */
+static void
+print_version (void)
+{
+  einfo (INFO, "Version %d.%02d", ANNOBIN_VERSION / 100, ANNOBIN_VERSION % 100);
+
+  checker * tool;
+  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+    if (tool->version)
+      {
+	push_component (tool);
+	einfo (PARTIAL, " ");
+	tool->version ();
+	pop_component ();
+      }
+}
+
+static void
+usage (void)
+{
+  einfo (INFO, "Runs various scans on the given files");
+  einfo (INFO, "Useage: %s [options] <file(s)>", CURRENT_COMPONENT_NAME);
+  einfo (INFO, " Options are:");
+  einfo (INFO, "   --debug-rpm=<RPM>  [Find separate dwarf debug information in <RPM>]");
+  einfo (INFO, "   --debug-file=<FILE>[Find separate dwarf debug information in <FILE>]");
+  einfo (INFO, "   --debug-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
+  einfo (INFO, "   --help             [Display this message & exit]");
+  einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types]");
+  einfo (INFO, "   --report-unknown   [Do complain about unknown file types]");
+  einfo (INFO, "   --quiet            [Do not print anything, just return an exit status]");
+  einfo (INFO, "   --verbose          [Produce informational messages whilst working.  Repeat for more information]");
+  einfo (INFO, "   --version          [Report the verion of the tool & exit]");
+
+  einfo (INFO, "The following options are internal to the scanner and not expected to be supplied by the user:");
+  einfo (INFO, "   --prefix=<TEXT>    [Include <TEXT> in the output description]");
+  einfo (INFO, "   --tmpdir=<NAME>    [Absolute pathname of a temporary directory used to pass data between iterations]");
+  einfo (INFO, "   --level=<N>        [Recursion level of the scanner]");
+
+  einfo (INFO, "Tools have their own options:");
+  einfo (INFO, "   --enable-<tool>    [Turn on <tool>][By default the hardened tool is enabled]");
+  einfo (INFO, "   --disable-<tool>   [Turn off <tool>]");
+  einfo (INFO, "   --<tool>-help      [Display help message for <tool> & exit]");
+  einfo (INFO, "   --help-<tool>      [Display help message for <tool> & exit]");
+  einfo (INFO, "   --<tool>-<option>  [Pass <option> to <tool>]");
+  einfo (INFO, "Tool names are case insensitive, so --hardened-help is the same as --Hardened-help");
+  einfo (INFO, "If an option is unique to a tool then it can be passed without the --tool prefix");
+  einfo (INFO, "For example the hardened tool's test skipping options can be passed as either");
+  einfo (INFO, "--hardened-skip-<test> or just --skip-<test>");
+  
+  einfo (INFO, "The following scanning tools are available:");
+
+  checker * tool;
+  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+    einfo (INFO, "  %s\n", tool->name);
+}
+
+static void
+save_arg (const char * arg)
+{
+  if (saved_args)
+    {
+      char * new_saved_args = concat (saved_args, " ", arg, NULL);
+      free (saved_args);
+      saved_args = new_saved_args;
+    }
+  else
+    saved_args = concat (arg, NULL);
+}
+
+/* Handle command line options.  Returns to caller if there is
+   something to do.  */
+
+static bool
+process_command_line (uint argc, const char * argv[])
+{
+  uint a = 1;
+
+  progname = component_names[0];
+
+  if (argc > 0 && argv == NULL)
+    return false;
+
+  while (a < argc)
+    {
+      const char *  arg = argv[a];
+      bool          used = false;
+      checker *     tool;
+      const char *  orig_arg = arg;
+
+      ++ a;
+
+      for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+	{
+	  if (arg[0] == '-' && arg[1] == '-' && strncasecmp (arg + 2, tool->name, strlen (tool->name)) == 0)
+	    {
+	      arg += 2 + strlen (tool->name);
+	      if (arg[0] == '-')
+		++arg;
+
+	      if (streq (arg, "help"))
+		{
+		  if (tool->usage)
+		    {
+		      push_component (tool);
+		      tool->usage ();
+		      pop_component ();
+		    }
+		  else
+		    einfo (INFO, "Tool %s does not have any specific options", tool->name);
+
+		  exit (EXIT_SUCCESS);
+		}	      
+
+	      if (tool->process_arg != NULL)
+		{
+		  push_component (tool);
+		  if (tool->process_arg (arg, argv, argc, & a))
+		    used = true;
+		  pop_component ();
+		}
+
+	      if (! used)
+		goto unknown_arg;
+	    }
+	  else if (tool->process_arg != NULL)
+	    {
+	      push_component (tool);
+	      if (tool->process_arg (arg, argv, argc, & a))
+		used = true;
+	      pop_component ();
+	    }
+	}
+
+      if (used)
+	{
+	  save_arg (arg);
+	  continue;
+	}
+
+      if (arg[0] == '-')
+        {
+	  const char *  parameter;
+
+	  arg += (arg[1] == '-' ? 2 : 1);
+	  switch (*arg)
+	    {
+	    case 'h': /* --help */
+	      /* As an assit to users treat --help-<tool> as --<tool>-help.  */
+	      if (const_strneq (arg, "help-"))
+		{
+		  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
+		    {
+		      if (tool->usage
+			  && strncasecmp (arg + strlen ("help-"), tool->name, strlen (tool->name)) == 0)
+			{
+			  push_component (tool);
+			  tool->usage ();
+			  pop_component ();
+			  exit (EXIT_SUCCESS);
+			}
+		    }
+		}
+	      usage ();
+	      exit (EXIT_SUCCESS);
+
+	    case 'i': /* --ignore-unknown  */
+	      ignore_unknown = do_ignore;
+	      break;
+
+	    case 'r': /* --report-unknown  */
+	      ignore_unknown = do_not_ignore;
+	      break;
+
+	    case 'q': /* --quiet */
+	      save_arg (orig_arg);
+	      verbosity = -1UL;
+	      break;
+
+	    case 'd': /* --debug-rpm, --debug-file or --debug-dir.  */
+	      parameter = strchr (arg, '=');
+	      if (parameter == NULL)
+		parameter = argv[a++];
+	      else
+		parameter ++;
+
+	      if (const_strneq (arg, "dwarf-dir") /* Old name for --debug-dir.  */
+		  || const_strneq (arg, "debug-dir")
+		  || const_strneq (arg, "debugdir"))
+		{
+		  if (debug_path != NULL)
+		    einfo (WARN, "overriding previous --debug-dir option (%s) with %s",
+			   debug_path, parameter);
+		  debug_path = parameter;
+		}
+	      else if (const_strneq (arg, "debug-rpm") || const_strneq (arg, "debugrpm"))
+		{
+		  if (debug_rpm != NULL)
+		    einfo (WARN, "overriding previous --debug-rpm option (%s) with %s",
+			   debug_rpm, parameter);
+		  debug_rpm = parameter;
+		}
+	      else if (const_strneq (arg, "debug-file") || const_strneq (arg, "debugfile"))
+		{
+		  if (debug_file != NULL)
+		    einfo (WARN, "overriding previous --debug-file option (%s) with %s",
+			   debug_file, parameter);
+		  debug_file = parameter;
+		}
+	      else
+		goto unknown_arg;
+
+	      if (parameter == NULL)
+		goto arg_missing_argument;
+
+	      if (parameter[0] != '/')
+		{
+		  const char * tmp;
+		  /* Convert a relative path to an absolute one so that if/when
+		     we recurse into a directory, the path will remain valid.  */
+		  if (parameter == argv[a-1])
+		    tmp = concat (orig_arg, " ", getcwd (NULL, 0), "/", parameter, NULL);
+		  else if (debug_rpm == parameter)
+		    tmp = concat ("--debug-rpm=", getcwd (NULL, 0), "/", parameter, NULL);
+		  else if (debug_path == parameter)
+		    tmp = concat ("--debug-dir=", getcwd (NULL, 0), "/", parameter, NULL);
+		  else /* debug_file == parameter  */
+		    tmp = concat ("--debug-file=", getcwd (NULL, 0), "/", parameter, NULL);
+		  save_arg (tmp);
+		  free ((void *) tmp);
+		}
+	      else
+		{
+		  save_arg (orig_arg);
+		  if (parameter == argv[a-1])
+		    save_arg (parameter);
+		}
+
+	      if (debug_path != NULL && debug_rpm != NULL)
+		{
+		  static bool warned = false;
+		  if (! warned)
+		    einfo (WARN, "Behaviour is undefined when both --debug-rpm and --debug-dir are specified");
+		  warned = true;
+		}
+	      break;
+
+	    case 'p': /* --prefix  */
+	      save_arg (orig_arg);
+	      parameter = strchr (arg, '=');
+	      if (parameter == NULL)
+		parameter = argv[a++];
+	      else
+		parameter ++;
+
+	      if (parameter == NULL)
+		goto arg_missing_argument;
+
+	      /* Prefix arguments accumulate.  */
+	      prefix = concat (prefix, parameter, NULL);
+	      break;
+
+	    case 'l': /* --level */
+	      parameter = strchr (arg, '=');
+	      if (parameter == NULL)
+		parameter = argv[a++];
+	      else
+		parameter ++;	      
+
+	      if (parameter == NULL)
+		goto arg_missing_argument;
+
+	      level = strtoul (parameter, NULL, 0);
+	      if (level < 1)
+		{
+		  einfo (WARN, "improper --level option: %s", parameter);
+		  level = 1;
+		}
+	      break;
+
+	    case 't': /* --tmpdir */
+	      if (const_strneq (arg, "tmpdir"))
+		{
+		  parameter = strchr (arg, '=');
+		  if (parameter == NULL)
+		    parameter = argv[a++];
+		  else
+		    parameter ++;	      
+
+		  if (parameter == NULL)
+		    goto arg_missing_argument;
+
+		  tmpdir = parameter;
+		  assert (tmpdir[0] == '/');
+		}
+	      else
+		goto unknown_arg;
+	      break;
+	      
+	    case 'v': /* --verbose or --version */
+	      if (const_strneq (arg, "version"))
+		{
+		  print_version ();
+		  exit (EXIT_SUCCESS);
+		}
+	      else if (const_strneq (arg, "verbose")
+		       /* Allow -v as an alias for --verbose.  */
+		       || arg[1] == 0)
+		{
+		  save_arg (orig_arg);
+		  verbosity ++;
+		}
+	      else
+		goto unknown_arg;
+	      break;
+
+	    default:
+	    unknown_arg:
+	      einfo (WARN, "Unrecognised command line option: %s", orig_arg);
+	      usage ();
+	      return false;
+	    arg_missing_argument:
+	      einfo (ERROR, "Command line option '%s' needs an argument", orig_arg);
+	      return false;
+	    }
+	}
+      else
+	add_file (arg);
+    }
+
+  if (num_files == 0)
+    {
+      einfo (WARN, "No input files specified");
+      usage ();
+      return false;
+    }
+
+  return true;
+}
 
 int
 main (int argc, const char ** argv)
@@ -2153,3 +2177,5 @@ annocheck_add_checker (struct checker * new_checker, uint major)
 
   return true;
 }
+
+#endif /* not LIBANNOCHECK */
