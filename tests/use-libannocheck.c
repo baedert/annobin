@@ -22,14 +22,14 @@ main (void)
 {
   void * handle;
 
-  handle = libannocheck_init (libannocheck_version, "fred", "jim");
+  handle = libannocheck_init (libannocheck_version, "use-libannocheck", NULL);
   if (handle == NULL)
     {
       printf ("FAILED to open library\n");
       return EXIT_FAILURE;
     }
 
-  printf ("open library: PASS\n");
+  printf ("Open library: PASS\n");
 
   printf ("Library version: %u (header version %u)\n",
 	  libannocheck_get_version (handle),
@@ -46,15 +46,8 @@ main (void)
       return EXIT_FAILURE;
     }
 
-  printf ("got test list containing %u entries\n", num_tests);
+  printf ("Got test list containing %u entries\n", num_tests);
 
-  if ((res = libannocheck_disable_all_tests (handle)) != libannocheck_error_none)
-    {
-      printf ("FAILED to disable all tests\n");
-      libannocheck_finish (handle);
-      return EXIT_FAILURE;
-    }
-  
   if ((res = libannocheck_enable_all_tests (handle)) != libannocheck_error_none)
     {
       printf ("FAILED to enable all tests\n");
@@ -69,13 +62,6 @@ main (void)
       return EXIT_FAILURE;
     }
 
-  if ((res = libannocheck_enable_test (handle, "bind-now")) != libannocheck_error_none)
-    {
-      printf ("FAILED to enable bind-now");
-      libannocheck_finish (handle);
-      return EXIT_FAILURE;
-    }
-  
   if ((res = libannocheck_disable_test (handle, "bind-now")) != libannocheck_error_none)
     {
       printf ("FAILED to disable bind-now");
@@ -83,13 +69,27 @@ main (void)
       return EXIT_FAILURE;
     }
 
+  if ((res = libannocheck_disable_all_tests (handle)) != libannocheck_error_none)
+    {
+      printf ("FAILED to disable all tests\n");
+      libannocheck_finish (handle);
+      return EXIT_FAILURE;
+    }
+  
+  if ((res = libannocheck_enable_test (handle, "bind-now")) != libannocheck_error_none)
+    {
+      printf ("FAILED to enable bind-now");
+      libannocheck_finish (handle);
+      return EXIT_FAILURE;
+    }
+  
   printf ("Enabled and disabled tests\n");
 
   unsigned int num_fails, num_maybs;
 
   if ((res = libannocheck_run_tests (handle, & num_fails, & num_maybs)) != libannocheck_error_none)
     {
-      printf ("FAILED to run tests");
+      printf ("FAILED to run tests\n");
       libannocheck_finish (handle);
       return EXIT_FAILURE;
     }
@@ -102,7 +102,7 @@ main (void)
       return EXIT_FAILURE;
     }
 
-  printf ("close library: PASS\n");
+  printf ("Close library: PASS\n");
   
-  return EXIT_SUCCESS;
+  return num_fails ? EXIT_FAILURE : EXIT_SUCCESS;
 }

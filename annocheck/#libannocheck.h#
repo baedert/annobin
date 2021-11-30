@@ -33,7 +33,7 @@ typedef enum libannocheck_error
   libannocheck_error_profile_not_known,
   libannocheck_error_test_not_found,
   
-  libannocheck_error_MAX
+xo  libannocheck_error_MAX
 } libannocheck_error;
 
 typedef enum libannocheck_test_state

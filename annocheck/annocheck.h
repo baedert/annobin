@@ -228,7 +228,8 @@ extern bool annocheck_process_extra_file (checker * CHECKER, const char * EXTRA_
 extern void add_file (const char * FILENAME);
 /* Process the current list of files.  */
 extern bool process_files (void);
-
+/* Set the debug file path.  */
+extern bool set_debug_file (const char *);
 
 
 /* An enum controlling the behaviour of the einfo function:  */

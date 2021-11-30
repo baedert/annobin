@@ -154,6 +154,10 @@ einfo (einfo_type type, const char * format, ...)
       fprintf (stderr, "ICE: Unknown einfo type %x\n", type);
       exit (-1);
     }
+
+#ifdef LIBANNOCHECK
+  return res;
+#endif
   
   if (verbosity == -1UL
       || (type == VERBOSE && verbosity < 1)
@@ -1692,6 +1696,46 @@ process_files (void)
 
 /* -------------------------------------------------------------------- */
 
+bool
+annocheck_add_checker (struct checker * new_checker, uint major)
+{
+  if (major < (ANNOBIN_VERSION / 100))
+    return false;
+
+  checker_internal * internal = XCNEW (checker_internal);
+
+  new_checker->internal = internal;
+  if (new_checker->interesting_sec)
+    {
+      internal->next_sec = first_sec_checker;
+      first_sec_checker = new_checker;
+    }
+
+  if (new_checker->interesting_seg)
+    {
+      internal->next_seg = first_seg_checker;
+      first_seg_checker = new_checker;
+    }
+
+  internal->next = first_checker;
+  first_checker = new_checker;
+
+  return true;
+}
+
+bool
+set_debug_file (const char * file)
+{
+  if (debug_file != NULL)
+    einfo (WARN, "overriding previous --debug-file option (%s) with %s",
+	   debug_file, file);
+  debug_file = file;
+
+  return true;
+}
+
+/* -------------------------------------------------------------------- */
+
 #ifndef LIBANNOCHECK
 
 static const char *
@@ -1922,10 +1966,7 @@ process_command_line (uint argc, const char * argv[])
 		}
 	      else if (const_strneq (arg, "debug-file") || const_strneq (arg, "debugfile"))
 		{
-		  if (debug_file != NULL)
-		    einfo (WARN, "overriding previous --debug-file option (%s) with %s",
-			   debug_file, parameter);
-		  debug_file = parameter;
+		  set_debug_file (parameter);
 		}
 	      else
 		goto unknown_arg;
@@ -2147,35 +2188,6 @@ main (int argc, const char ** argv)
     }
 
   return res ? EXIT_SUCCESS : EXIT_FAILURE;
-}
-
-/* -------------------------------------------------------------------- */
-
-bool
-annocheck_add_checker (struct checker * new_checker, uint major)
-{
-  if (major < (ANNOBIN_VERSION / 100))
-    return false;
-
-  checker_internal * internal = XCNEW (checker_internal);
-
-  new_checker->internal = internal;
-  if (new_checker->interesting_sec)
-    {
-      internal->next_sec = first_sec_checker;
-      first_sec_checker = new_checker;
-    }
-
-  if (new_checker->interesting_seg)
-    {
-      internal->next_seg = first_seg_checker;
-      first_seg_checker = new_checker;
-    }
-
-  internal->next = first_checker;
-  first_checker = new_checker;
-
-  return true;
 }
 
 #endif /* not LIBANNOCHECK */
