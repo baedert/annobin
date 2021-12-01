@@ -28,6 +28,7 @@ TESTS=\
       objcopy-test \
       property-note-test \
       section-size-test \
+      stat-test \
       unicode-test
 
 if HAVE_DEBUGINFOD

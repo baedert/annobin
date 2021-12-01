@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Copyright (c) 2021 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# Mimics the glibc stat.c test run by rpminspect
+
+TEST_NAME=stat
+. $srcdir/common.sh
+
+OPTS="$(rpm --eval '%build_cflags %build_ldflags')"
+
+start_test
+
+COMMAND="$GCC $OPTS -o stat.exe $srcdir/stat.c"
+$COMMAND
+if [ $? != 0 ];
+then
+	echo " $TEST_NAME: FAIL: Could not compile source file"
+	echo " $TEST_NAME: command: $COMMAND"
+	end_test
+	exit 1
+fi
+
+# Run annocheck
+
+SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-lto --skip-fortify --skip-warnings"
+COMMAND="$ANNOCHECK stat.exe $SKIPS --ignore-gaps"
+$COMMAND > stat.out
+grep -e "PASS" stat.out
+if [ $? != 0 ];
+then
+    echo " $TEST_NAME: FAIL: annocheck did not PASS the test executable"
+    echo " $TEST_NAME: command: $COMMAND"
+    cat stat.out
+    end_test
+    exit 1
+fi
+
+end_test

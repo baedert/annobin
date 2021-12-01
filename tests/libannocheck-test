@@ -28,6 +28,7 @@ if [ $? != 0 ];
 then
 	echo " $TEST_NAME: FAIL: Could not compile source file"
 	echo " $TEST_NAME: command: $COMMAND"
+	end_test
 	exit 1
 fi
 
@@ -37,6 +38,7 @@ if [ $? != 0 ];
 then
 	echo " $TEST_NAME: FAIL: Could not link source file"
 	echo " $TEST_NAME: command: $COMMAND"
+	end_test
 	exit 1
 fi
 
@@ -44,6 +46,7 @@ fi
 if [ $? != 0 ];
 then
 	echo " $TEST_NAME: FAIL: libannocheck tester returned FAIL exit code"
+	end_test
 	exit 1
 fi
 
@@ -53,6 +56,7 @@ if [ $? != 0 ];
 then
 	echo " $TEST_NAME: FAIL: Could not link source file (second version)"
 	echo " $TEST_NAME: command: $COMMAND"
+	end_test
 	exit 1
 fi
 
@@ -60,6 +64,7 @@ fi
 if [ $? == 0 ];
 then
 	echo " $TEST_NAME: FAIL: libannocheck tester returned PASS exit code for a failing binary"
+	end_test
 	exit 1
 fi
 
