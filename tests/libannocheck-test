@@ -15,12 +15,12 @@
 TEST_NAME=libannocheck
 . $srcdir/common.sh
 
+start_test
+
 LIBANNOCHECKDIR=${LIBANNOCHECKDIR:-../../annocheck/.libs}
 INCDIR=${INCDIR:-$srcdir/../annocheck}
 
 OPTS="-O2 -I $INCDIR"
-
-start_test
 
 COMMAND="$GCC $OPTS -c $srcdir/use-libannocheck.c"
 $COMMAND

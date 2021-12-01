@@ -33,7 +33,7 @@ fi
 
 # Run annocheck
 
-SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-lto --skip-fortify --skip-warnings"
+SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-lto --skip-fortify --skip-warnings --skip-dynamic-tags --skip-not-dynamic-tags"
 COMMAND="$ANNOCHECK stat.exe $SKIPS --ignore-gaps"
 $COMMAND > stat.out
 grep -e "PASS" stat.out
