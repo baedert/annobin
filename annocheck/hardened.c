@@ -3557,6 +3557,10 @@ contains_suspicious_characters (const unsigned char * name)
       if (isgraph (c))
 	continue;
 
+      /* Golang allows spaces in some symbols.  */
+      if (c == ' ' && (per_file.lang == LANG_GO || (per_file.seen_tools & TOOL_GO)))
+	continue;
+
       /* Control characters are always suspect.  So are spaces and DEL  */
       if (iscntrl (c) || c == ' ' || c == 0x7f)
 	return true;
