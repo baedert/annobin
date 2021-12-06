@@ -45,7 +45,9 @@ static ulong            num_allocated_files = 0;
 static const char **    files;
 static const char *     progname;
 static enum ignore_enum ignore_unknown = ignore_not_set;
+#ifndef LIBANNOCHECK
 static char *           prefix = "";
+#endif
 static const char *     debug_path = NULL;
 static const char *     debug_file = NULL;
 #ifndef LIBANNOCHECK
@@ -116,6 +118,10 @@ pop_component (void)
 bool
 einfo (einfo_type type, const char * format, ...)
 {
+#ifdef LIBANNOCHECK
+  return type == VERBOSE || type == VERBOSE2 || type == INFO || type == PARTIAL;
+#else
+  
   FILE *        file;
   const char *  pref = NULL;
   va_list       args;
@@ -155,10 +161,6 @@ einfo (einfo_type type, const char * format, ...)
       exit (-1);
     }
 
-#ifdef LIBANNOCHECK
-  return res;
-#endif
-  
   if (verbosity == -1UL
       || (type == VERBOSE && verbosity < 1)
       || (type == VERBOSE2 && verbosity < 2))
@@ -202,6 +204,7 @@ einfo (einfo_type type, const char * format, ...)
   if (type != PARTIAL)
     fprintf (file, "%s", do_newline);
   return res;
+#endif
 }
 
 /* -------------------------------------------------------------------- */

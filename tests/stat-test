@@ -19,10 +19,22 @@ TEST_NAME=stat
 
 # Use the same command line options that normal spec file will use,
 # *except* that we disable the use of the annobin plugin, since this
-# will pick up the one in the system directory, not the one just built"
+# will pick up the one in the system directory, not the one just built
+
 OPTS="$(rpm --eval '%undefine _annotated_build %build_cflags %build_ldflags')"
+
+# For some unknown reason this fails with some Koji builds, just evaluating to an empty string.
+
+if ! [[ $OPTS == *"redhat-hardened-cc1"* ]];
+then
+    echo " $TEST_NAME: warn: rpm --eval failed.."
+    echo " $TEST_NAME: OPTS = $OPTS"
+    echo " $TEST_NAME: using built-in option selection instead"
+    OPTS="-O2 -fexceptions -g -grecord-gcc-switches -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -fasynchronous-unwind-tables -fstack-clash-protection -Wl,-z,relro -Wl,--as-needed  -Wl,-z,now -specs=/usr/lib/rpm/redhat/redhat-hardened-ld"
+fi
+
 # Now add in our newly built plugin.
-OPTS+=" -fplugin=$PLUGIN"
+OPTS="$OPTS -fplugin=$PLUGIN"
 
 start_test
 
@@ -38,7 +50,7 @@ fi
 
 # Run annocheck
 
-SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-lto --skip-fortify --skip-warnings --skip-dynamic-tags --skip-not-dynamic-tags"
+SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-lto --skip-fortify --skip-warnings --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection"
 COMMAND2="$ANNOCHECK stat.exe $SKIPS --ignore-gaps"
 $COMMAND2 > stat.out
 grep -e "PASS" stat.out
@@ -47,6 +59,7 @@ then
     echo " $TEST_NAME: FAIL: annocheck did not PASS the test executable"
     echo " $TEST_NAME: gcc command: $COMMAND"
     echo " $TEST_NAME: annocheck command: $COMMAND2"
+    echo " $TEST_NAME: annocheck output:"
     cat stat.out
     end_test
     exit 1
