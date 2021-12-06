@@ -17,7 +17,12 @@
 TEST_NAME=gaps
 . $srcdir/common.sh
 
-OPTS="$(rpm --eval '%build_cflags %build_ldflags')"
+# Use the same command line options that normal spec file will use,
+# *except* that we disable the use of the annobin plugin, since this
+# will pick up the one in the system directory, not the one just built"
+OPTS="$(rpm --eval '%undefine _annotated_build %build_cflags %build_ldflags')"
+# Now add in our newly built plugin.
+OPTS+=" -fplugin=$PLUGIN"
 
 start_test
 
