@@ -4608,9 +4608,12 @@ finish (annocheck_data * data)
   if (! ignore_gaps)
     {
       if (is_object_file ())
-	einfo (VERBOSE, "%s: Not checking for gaps (object file)", get_filename (data));
+	einfo (VERBOSE, "%s: skip: Not checking for gaps (object file)", get_filename (data));
       else if (! is_C_compiler (per_file.seen_tools) && ! includes_assembler (per_file.seen_tools))
-	einfo (VERBOSE, "%s: Not checking for gaps (binary created by a tool without an annobin plugin)",
+	einfo (VERBOSE, "%s: skip: Not checking for gaps (binary created by a tool without an annobin plugin)",
+	       get_filename (data));
+      else if (per_file.seen_tools & TOOL_GO)
+	einfo (VERBOSE, "%s: skip: Not checking for gaps (binary at least created by GO)",
 	       get_filename (data));
       else
 	check_for_gaps (data);
