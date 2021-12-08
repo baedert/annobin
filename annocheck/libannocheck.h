@@ -74,23 +74,24 @@ extern libannocheck_error  libannocheck_finish (struct libannocheck_internals * 
 
 /* Returns a (read only) string describing an libannocheck error.
    Returns NULL if the error code is not recognised.
-   Handle can be NULL if one is not available.  */
-  extern const char *      libannocheck_get_error_message (struct libannocheck_internals * HANDLE, enum libannocheck_error);
+   Handle can be NULL if one is not available.
+   A more detailed error message may be returned if HANDLE is provided.  */
+extern const char *        libannocheck_get_error_message (struct libannocheck_internals * HANDLE, enum libannocheck_error ERRNUM);
 
 /* Returns the actual version number of the libannocheck_library.
    This should be >= libannocheck_version as defined in this file.  */
-extern unsigned int        libannocheck_get_version (struct libannocheck_internals * HANDLE);
+extern unsigned int        libannocheck_get_version (void);
 
 /* Returns a (read/write) array of tests known to libannocheck in TESTS_RETURN.
    Returns the number of elements in the array in NUM_TESTS_RETURN.
    Returns libannocheck_error_none if the retrieval succeeded, or an error result otherwise.
    The returned array should not be freed.
-   The array is used by liblibannocheck internally, so if fields are changed
+   The array is used by libannocheck internally, so if fields are changed
     this will affect the library's behaviour.  In particular tests can be
     enabled and disabled without needing to call libannocheck_enable_test()
     or libannocheck_disable_test().
    The test_result_reason and test_result_source fields will initially be NULL.
-    They may have their values changed as a result of a call to libannocheck_run_tests().  */
+   They may have their values changed as a result of a call to libannocheck_run_tests().  */
 extern libannocheck_error  libannocheck_get_known_tests (struct libannocheck_internals * HANDLE, libannocheck_test ** TESTS_RETURN, unsigned int * NUM_TESTS_RETURN);
 
 /* The following five function calls affect the data held in the array returned
@@ -108,17 +109,16 @@ extern libannocheck_error  libannocheck_enable_profile (struct libannocheck_inte
 /* Retrieves a (read only) array of profile strings known to libannocheck.
    The array is returned in PROFILES_RETURN.
    The number of entries in the array is returned in NUM_PROFILES.
-   Returns libannocheck_error_none upons success, or an error code otehrwise.  */
-extern libannocheck_error  libannocheck_get_known_profiles (struct libannocheck_internals * HANDLE, const char ** PROFILES_RETURN, unsigned int * NUM_PROFILES_RETURN);
+   Returns libannocheck_error_none upons success, or an error code otherwise.  */
+extern libannocheck_error  libannocheck_get_known_profiles (struct libannocheck_internals * HANDLE, const char *** PROFILES_RETURN, unsigned int * NUM_PROFILES_RETURN);
 
 /* Runs all enabled tests.
    Returns the number of failed tests in NUM_FAIL_RETURN (if this parameter is not NULL).
    Returns the number of "maybe" results in NUM_MAYB_RETURN (if this parameter is not NULL).
    Retuns libannocheck_error_none if everything went OK.
    Updates the STATE, TEST_RESULT_REASON and TEST_RESULT_SOURCES fields in the entries in
-    the array returned by libannocheck_get_known_tests() for any enabled test.
-   Can be called multiple times.
-   before running the tests.  */
+   the array returned by libannocheck_get_known_tests() for any enabled test.
+   Can be called multiple times.  */
 extern libannocheck_error  libannocheck_run_tests (struct libannocheck_internals * HANDLE, unsigned int * NUM_FAIL_RETURN, unsigned int * NUM_MAYB_RETURN);
 
 #ifdef __cplusplus

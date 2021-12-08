@@ -20,7 +20,7 @@
 int
 main (void)
 {
-  void * handle;
+  struct libannocheck_internals * handle;
 
   handle = libannocheck_init (libannocheck_version, "use-libannocheck", NULL);
   if (handle == NULL)
@@ -32,7 +32,7 @@ main (void)
   printf ("Open library: PASS\n");
 
   printf ("Library version: %u (header version %u)\n",
-	  libannocheck_get_version (handle),
+	  libannocheck_get_version (),
 	  libannocheck_version);
 
   libannocheck_error   res;

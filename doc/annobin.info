@@ -39,6 +39,7 @@ the section entitled "GNU Free Documentation License".
 * Plugins::                How to add Binary Annotations to your application.
 * Examining::              How to examine the information stored in the binary.
 * Annocheck::              Analysing binary files.
+* Libannocheck::           Allowing other programs to run security checks.
 * Configure Options::      Configuring annobin and annocheck.
 * Legacy Scripts::         Other ways to use the information stored in the binary.
 * GNU FDL::                GNU Free Documentation License
@@ -583,7 +584,7 @@ The exact meaning of the values is specific to gcc, but any non-zero
 number means that the feature has been enabled in some way.
 
 
-File: annobin.info,  Node: Annocheck,  Next: Configure Options,  Prev: Examining,  Up: Top
+File: annobin.info,  Node: Annocheck,  Next: Libannocheck,  Prev: Examining,  Up: Top
 
 4 Analysing binary files.
 *************************
@@ -2204,9 +2205,278 @@ with the '--nsec'.  The default can be restored with the '--usec'
 option.
 
 
-File: annobin.info,  Node: Configure Options,  Next: Legacy Scripts,  Prev: Annocheck,  Up: Top
+File: annobin.info,  Node: Libannocheck,  Next: Configure Options,  Prev: Annocheck,  Up: Top
 
-5 Configuring annobin and annocheck
+5 Allowing other programs to run security checks
+************************************************
+
+The 'annocheck' program is mostly seen as a security checking tool and
+in order to allow third party programs such as 'rpminspect' the ability
+to access these checks a library interface is provided.
+
+   An example of how to use the libannocheck library can be found in the
+annobin testsuite.  In particular the 'tests/use-libannocheck.c' file
+contains code to initialise, run and then close the library.  In theory
+however the code flow looks like this:
+
+       #include <libannocheck.h>
+       struct libannocheck_internals * handle;
+       unsigned int num_fails, num_maybs;
+       handle = libannocheck_init (libannocheck_version, "a.out", NULL);
+       libannocheck_disable_all_tests (handle);
+       libannocheck_enable_test (handle, "bind-now");
+       libannocheck_run_tests (handle, & num_fails, & num_maybs);
+       libannocheck_finish (handle);
+
+   The library consists of a header file ('libannocheck.h') and a shared
+object file (libannocheck.so).  It provides the following functions:
+
+* Menu:
+
+* libannocheck_init::               Initialise the library
+* libannocheck_finish::             Close the library
+* libannocheck_get_version::        Get the library version
+* libannocheck_get_error_message::  Convert an error number into an error message
+* libannocheck_get_known_tests::    Get a list of tests supported by the library
+* libannocheck_enable_all_tests::   Enable all tests
+* libannocheck_disable_all_tests::  Disable all tests
+* libannocheck_enable_test::        Enable a specific test
+* libannocheck_disable_test::       Disable a specific test
+* libannocheck_enable_profile::     Enable a profile
+* libannocheck_get_known_profiles:: Get a list of known profiles
+* libannocheck_run_tests::          Run enabled tests
+
+
+File: annobin.info,  Node: libannocheck_init,  Next: libannocheck_finish,  Up: Libannocheck
+
+5.1 Initialise the library
+==========================
+
+     struct libannocheck_internals *
+     libannocheck_init (unsigned int  VERSION,
+                        const char *  FILEPATH,
+                        const char *  DEBUGPATH)
+
+   Returns a token used to identify the instantiation in future calls.
+
+   VERSION is the expected version of the libannocheck library.  This
+should normally be 'libannocheck_version'.  If the actual version of the
+library cannot support VERSION then libannocheck_error_bad_version is
+returned.
+
+   FILEPATH is a path the binary to be tested.  It can be absolute or
+relative.  It may not be NULL.
+
+   DEBUGPATH is a path the debug info file associated with FILEPATH. It
+can be NULL.
+
+   Returns an enum libannocheck_error cast to a struct
+libannocheck_internals * if something goes wrong.
+
+
+File: annobin.info,  Node: libannocheck_finish,  Next: libannocheck_get_version,  Prev: libannocheck_init,  Up: Libannocheck
+
+5.2 Close the library
+=====================
+
+     libannocheck_error
+     libannocheck_finish (struct libannocheck_internals * HANDLE)
+
+   Closes the connection to libannocheck.  Closes any files opened by
+the library and releases any memory that is may have allocated.  After
+this any library call using HANDLE should fail.
+
+   Returns libannocheck_error_none upon successful closure, otherwise
+returns an error code.
+
+
+File: annobin.info,  Node: libannocheck_get_version,  Next: libannocheck_get_error_message,  Prev: libannocheck_finish,  Up: Libannocheck
+
+5.3 Get the library version
+===========================
+
+     unsigned int
+     libannocheck_get_version (void)
+
+   Returns the actual version number of the libannocheck_library.  This
+should be >= libannocheck_version as defined in the 'libannocheck.h'
+header file.
+
+
+File: annobin.info,  Node: libannocheck_get_error_message,  Next: libannocheck_get_known_tests,  Prev: libannocheck_get_version,  Up: Libannocheck
+
+5.4 Convert an error number into an error message
+=================================================
+
+     const char *
+     libannocheck_get_error_message
+       (struct libannocheck_internals *  HANDLE,
+        enum libannocheck_error          ERRNUM)
+
+   Returns a (read only) string describing libannocheck error number
+ERRNUM. Returns NULL if the error code is not recognised.
+
+   Handle can be NULL if one is not available.  If provided a more
+detailed error message may be returned.
+
+
+File: annobin.info,  Node: libannocheck_get_known_tests,  Next: libannocheck_enable_all_tests,  Prev: libannocheck_get_error_message,  Up: Libannocheck
+
+5.5 Get a list of tests supported by the library
+================================================
+
+     libannocheck_error
+     libannocheck_get_known_tests
+       (struct libannocheck_internals * HANDLE,
+        libannocheck_test **            TESTS_RETURN,
+        unsigned int *                  NUM_TESTS_RETURN)
+
+   Returns a (read/write) array of tests known to libannocheck in
+TESTS_RETURN. Returns the number of elements in the array in
+NUM_TESTS_RETURN. Returns libannocheck_error_none if the retrieval
+succeeded, or an error result otherwise.  The returned array should not
+be freed.
+
+   The array is used by libannocheck internally, so if fields are
+changed this will affect the library's behaviour.  In particular tests
+can be enabled and disabled without needing to call
+'libannocheck_enable_test' or 'libannocheck_disable_test'.
+
+   The test_result_reason and test_result_source fields will initially
+be NULL. They may have their values changed as a result of a call to
+'libannocheck_run_tests'.
+
+
+File: annobin.info,  Node: libannocheck_enable_all_tests,  Next: libannocheck_disable_all_tests,  Prev: libannocheck_get_known_tests,  Up: Libannocheck
+
+5.6 Enable all tests
+====================
+
+     libannocheck_error
+     libannocheck_enable_all_tests (struct libannocheck_internals * HANDLE)
+
+   Enables all the tests supported by libannocheck.
+
+   This function may change some of the fields in the data structure
+returned by the 'libannocheck_get_known_tests' function.
+
+
+File: annobin.info,  Node: libannocheck_disable_all_tests,  Next: libannocheck_enable_test,  Prev: libannocheck_enable_all_tests,  Up: Libannocheck
+
+5.7 Disable all tests
+=====================
+
+     libannocheck_error
+     libannocheck_disable_all_tests (struct libannocheck_internals * HANDLE)
+
+   Disables all of the tests supported by libannocheck.  Not normally
+useful unless followed by code to enable one or more tests.
+
+   This function may change some of the fields in the data structure
+returned by the 'libannocheck_get_known_tests' function.
+
+
+File: annobin.info,  Node: libannocheck_enable_test,  Next: libannocheck_disable_test,  Prev: libannocheck_disable_all_tests,  Up: Libannocheck
+
+5.8 Enable a specific test
+==========================
+
+     libannocheck_error
+     libannocheck_enable_test
+       (struct libannocheck_internals * HANDLE,
+        const char *                    TEST_NAME)
+
+   Enables a specific test.  Returns 'libannocheck_error_none' upon
+success or an error code otherwise.  If the test is not known then
+'libannocheck_error_test_not_found' is returned.
+
+   This function may change some of the fields in the data structure
+returned by the 'libannocheck_get_known_tests' function.
+
+
+File: annobin.info,  Node: libannocheck_disable_test,  Next: libannocheck_enable_profile,  Prev: libannocheck_enable_test,  Up: Libannocheck
+
+5.9 Disable a specific test
+===========================
+
+     libannocheck_error
+     libannocheck_disable_test
+       (struct libannocheck_internals * HANDLE,
+       const char *                     TEST_NAME)
+
+   Disables a specific test.  Returns 'libannocheck_error_none' upon
+success or an error code otherwise.  If the test is not known then
+'libannocheck_error_test_not_found' is returned.
+
+   This function may change some of the fields in the data structure
+returned by the 'libannocheck_get_known_tests' function.
+
+
+File: annobin.info,  Node: libannocheck_enable_profile,  Next: libannocheck_get_known_profiles,  Prev: libannocheck_disable_test,  Up: Libannocheck
+
+5.10 Enable a profile
+=====================
+
+     libannocheck_error
+     libannocheck_enable_profile
+       (struct libannocheck_internals * HANDLE,
+        const char *                    PROFILE_NAME)
+
+   Enables and disables certain tests known to be relevant to a specific
+profile.
+
+   Returns libannocheck_error_profile_not_known if the profile is not
+recognised.
+
+
+File: annobin.info,  Node: libannocheck_get_known_profiles,  Next: libannocheck_run_tests,  Prev: libannocheck_enable_profile,  Up: Libannocheck
+
+5.11 Get a list of known profiles
+=================================
+
+     libannocheck_error
+     libannocheck_get_known_profiles
+       (struct libannocheck_internals * HANDLE,
+        const char ***                  PROFILES_RETURN,
+        unsigned int *                  NUM_PROFILES_RETURN)
+
+   Retrieves a (read only) array of profile strings known to
+libannocheck.  The array is returned in PROFILES_RETURN. The number of
+entries in the array is returned in NUM_PROFILES. Returns
+libannocheck_error_none upons success, or an error code otherwise.
+
+
+File: annobin.info,  Node: libannocheck_run_tests,  Prev: libannocheck_get_known_profiles,  Up: Libannocheck
+
+5.12 Run enabled tests
+======================
+
+     libannocheck_error
+     libannocheck_run_tests
+       (struct libannocheck_internals * HANDLE,
+        unsigned int *                  NUM_FAIL_RETURN,
+        unsigned int *                  NUM_MAYB_RETURN)
+
+   Runs all enabled tests.
+
+   Returns the number of failed tests in NUM_FAIL_RETURN (if this
+parameter is not NULL).
+
+   Returns the number of "maybe" results in NUM_MAYB_RETURN (if this
+parameter is not NULL).
+
+   Retuns libannocheck_error_none if everything went OK.
+
+   Updates the STATE, TEST_RESULT_REASON and TEST_RESULT_SOURCES fields
+in the entries in the array returned by 'libannocheck_get_known_tests'
+for any enabled test.
+
+   Can be called multiple times.
+
+
+File: annobin.info,  Node: Configure Options,  Next: Legacy Scripts,  Prev: Libannocheck,  Up: Top
+
+6 Configuring annobin and annocheck
 ***********************************
 
 When building annobin and annocheck from the sources there are a few
@@ -2265,7 +2535,7 @@ configure options available to customise the build:
 
 File: annobin.info,  Node: Legacy Scripts,  Next: GNU FDL,  Prev: Configure Options,  Up: Top
 
-6 How to use the information stored in the binary.
+7 How to use the information stored in the binary.
 **************************************************
 
 The 'annobin' package includes some example scripts that demonstrate how
@@ -2288,7 +2558,7 @@ still included in the annobin sources.
 
 File: annobin.info,  Node: Who Built Me,  Next: ABI Checking,  Up: Legacy Scripts
 
-6.1 The built-by script
+7.1 The built-by script
 =======================
 
      built-by
@@ -2390,7 +2660,7 @@ version of a tool that was built between a range of dates.
 
 File: annobin.info,  Node: ABI Checking,  Next: Hardening Checks,  Prev: Who Built Me,  Up: Legacy Scripts
 
-6.2 The check-abi script
+7.2 The check-abi script
 ========================
 
      check-abi
@@ -2475,7 +2745,7 @@ used uniformly throughout the binary.
 
 File: annobin.info,  Node: Hardening Checks,  Next: Checking Archives,  Prev: ABI Checking,  Up: Legacy Scripts
 
-6.3 The hardened script
+7.3 The hardened script
 =======================
 
      hardened
@@ -2622,7 +2892,7 @@ compiled with '-O2' or higher and the '-fstack-protector-strong',
 
 File: annobin.info,  Node: Checking Archives,  Prev: Hardening Checks,  Up: Legacy Scripts
 
-6.4 The run-on-binaries-in script
+7.4 The run-on-binaries-in script
 =================================
 
      run-on-binaries-in
@@ -3193,64 +3463,77 @@ their use in free software.
 
 Tag Table:
 Node: Top705
-Node: Introduction1768
-Node: Plugins3816
-Node: Examining11942
-Node: The Version Encoding14671
-Node: The STACK Encoding15911
-Node: The PIC Encoding16509
-Node: The GOW Encoding17137
-Node: The CF Encoding18940
-Node: The ENUM Encoding20012
-Node: The INSTRUMENT Encoding20401
-Node: Annocheck21775
-Node: Built By25665
-Node: Hardened27168
-Node: Test bind now30947
-Node: Test branch protection32587
-Node: Test cf protection34841
-Node: Test dynamic segment38801
-Node: Test dynamic tags39932
-Node: Test entry42281
-Node: Test fortify43176
-Node: Test glibcxx assertions44689
-Node: Test gnu relro45727
-Node: Test gnu stack47461
-Node: Test go revision49858
-Node: Test instrumentation50906
-Node: Test lto51641
-Node: Test not branch protection52547
-Node: Test not dynamic tags54129
-Node: Test notes55817
-Node: Test only go58100
-Node: Test optimization59251
-Node: Test pic60626
-Node: Test pie62171
-Node: Test production63459
-Node: Test property note64272
-Node: Test run path66749
-Node: Test rwx seg68970
-Node: Test short enums70242
-Node: Test stack clash71259
-Node: Test stack prot72720
-Node: Test stack realign74052
-Node: Test textrel75322
-Node: Test threads76579
-Node: Test unicode77394
-Node: Test warnings78885
-Node: Test writable got79720
-Node: Hardened Command Line Options81006
-Node: Waiving Hardened Results86446
-Node: Notes87830
-Node: Size88466
-Node: Timing90609
-Node: Configure Options91248
-Node: Legacy Scripts93587
-Node: Who Built Me94362
-Node: ABI Checking97122
-Node: Hardening Checks99238
-Node: Checking Archives103324
-Node: GNU FDL105745
+Node: Introduction1843
+Node: Plugins3891
+Node: Examining12017
+Node: The Version Encoding14746
+Node: The STACK Encoding15986
+Node: The PIC Encoding16584
+Node: The GOW Encoding17212
+Node: The CF Encoding19015
+Node: The ENUM Encoding20087
+Node: The INSTRUMENT Encoding20476
+Node: Annocheck21850
+Node: Built By25735
+Node: Hardened27238
+Node: Test bind now31017
+Node: Test branch protection32657
+Node: Test cf protection34911
+Node: Test dynamic segment38871
+Node: Test dynamic tags40002
+Node: Test entry42351
+Node: Test fortify43246
+Node: Test glibcxx assertions44759
+Node: Test gnu relro45797
+Node: Test gnu stack47531
+Node: Test go revision49928
+Node: Test instrumentation50976
+Node: Test lto51711
+Node: Test not branch protection52617
+Node: Test not dynamic tags54199
+Node: Test notes55887
+Node: Test only go58170
+Node: Test optimization59321
+Node: Test pic60696
+Node: Test pie62241
+Node: Test production63529
+Node: Test property note64342
+Node: Test run path66819
+Node: Test rwx seg69040
+Node: Test short enums70312
+Node: Test stack clash71329
+Node: Test stack prot72790
+Node: Test stack realign74122
+Node: Test textrel75392
+Node: Test threads76649
+Node: Test unicode77464
+Node: Test warnings78955
+Node: Test writable got79790
+Node: Hardened Command Line Options81076
+Node: Waiving Hardened Results86516
+Node: Notes87900
+Node: Size88536
+Node: Timing90679
+Node: Libannocheck91318
+Node: libannocheck_init93257
+Node: libannocheck_finish94179
+Node: libannocheck_get_version94727
+Node: libannocheck_get_error_message95136
+Node: libannocheck_get_known_tests95776
+Node: libannocheck_enable_all_tests96942
+Node: libannocheck_disable_all_tests97421
+Node: libannocheck_enable_test97977
+Node: libannocheck_disable_test98645
+Node: libannocheck_enable_profile99314
+Node: libannocheck_get_known_profiles99836
+Node: libannocheck_run_tests100539
+Node: Configure Options101384
+Node: Legacy Scripts103726
+Node: Who Built Me104501
+Node: ABI Checking107261
+Node: Hardening Checks109377
+Node: Checking Archives113463
+Node: GNU FDL115884
 
 End Tag Table
 

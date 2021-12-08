@@ -92,6 +92,7 @@ in the section entitled ``GNU Free Documentation License''.
 * Plugins::                How to add Binary Annotations to your application.
 * Examining::              How to examine the information stored in the binary.
 * Annocheck::              Analysing binary files.
+* Libannocheck::           Allowing other programs to run security checks.
 * Configure Options::      Configuring annobin and annocheck.
 * Legacy Scripts::         Other ways to use the information stored in the binary.
 * GNU FDL::                GNU Free Documentation License
@@ -2384,6 +2385,264 @@ nanoseconds with the @option{--nsec}.  The default can be restored
 with the @option{--usec} option.
 
 @c man end
+
+@c -----------------------------------------------------------------
+@node Libannocheck
+@chapter Allowing other programs to run security checks
+The @code{annocheck} program is mostly seen as a security checking
+tool and in order to allow third party programs such as
+@code{rpminspect} the ability to access these checks a library
+interface is provided.
+
+An example of how to use the libannocheck library can be found in the
+annobin testsuite.  In particular the @code{tests/use-libannocheck.c}
+file contains code to initialise, run and then close the library.  In
+theory however the code flow looks like this:
+
+@smallexample
+  #include <libannocheck.h>
+  struct libannocheck_internals * handle;
+  unsigned int num_fails, num_maybs;
+  handle = libannocheck_init (libannocheck_version, "a.out", NULL);
+  libannocheck_disable_all_tests (handle);
+  libannocheck_enable_test (handle, "bind-now");
+  libannocheck_run_tests (handle, & num_fails, & num_maybs);
+  libannocheck_finish (handle);
+@end smallexample
+
+The library consists of a header file (@code{libannocheck.h}) and a
+shared object file (libannocheck.so).  It provides the following
+functions:
+
+@menu
+* libannocheck_init::               Initialise the library
+* libannocheck_finish::             Close the library
+* libannocheck_get_version::        Get the library version
+* libannocheck_get_error_message::  Convert an error number into an error message
+* libannocheck_get_known_tests::    Get a list of tests supported by the library
+* libannocheck_enable_all_tests::   Enable all tests
+* libannocheck_disable_all_tests::  Disable all tests
+* libannocheck_enable_test::        Enable a specific test
+* libannocheck_disable_test::       Disable a specific test
+* libannocheck_enable_profile::     Enable a profile
+* libannocheck_get_known_profiles:: Get a list of known profiles
+* libannocheck_run_tests::          Run enabled tests
+@end menu
+
+@c -----------------------------------------------------------------
+@node libannocheck_init
+@section Initialise the library
+@smallexample
+struct libannocheck_internals *
+libannocheck_init (unsigned int  VERSION,
+                   const char *  FILEPATH,
+                   const char *  DEBUGPATH)
+@end smallexample
+
+Returns a token used to identify the instantiation in future calls.
+
+VERSION is the expected version of the libannocheck library.  This
+should normally be 'libannocheck_version'.  If the actual version of
+the library cannot support VERSION then libannocheck_error_bad_version
+is returned.
+
+FILEPATH is a path the binary to be tested.  It can be absolute or
+relative.  It may not be NULL.
+
+DEBUGPATH is a path the debug info file associated with FILEPATH.  It
+can be NULL.
+
+Returns an enum libannocheck_error cast to a struct
+libannocheck_internals * if something goes wrong.
+
+@c -----------------------------------------------------------------
+@node libannocheck_finish
+@section Close the library
+@smallexample
+libannocheck_error
+libannocheck_finish (struct libannocheck_internals * HANDLE)
+@end smallexample
+
+Closes the connection to libannocheck.  Closes any files opened by the
+library and releases any memory that is may have allocated.  After
+this any library call using HANDLE should fail.
+
+Returns libannocheck_error_none upon successful closure, otherwise
+returns an error code.
+
+@c -----------------------------------------------------------------
+@node libannocheck_get_version
+@section Get the library version
+@smallexample
+unsigned int
+libannocheck_get_version (void)
+@end smallexample
+
+Returns the actual version number of the libannocheck_library.
+This should be >= libannocheck_version as defined in the
+@code{libannocheck.h} header file.
+
+@c -----------------------------------------------------------------
+@node libannocheck_get_error_message
+@section Convert an error number into an error message
+@smallexample
+const char *
+libannocheck_get_error_message
+  (struct libannocheck_internals *  HANDLE,
+   enum libannocheck_error          ERRNUM)
+@end smallexample
+
+Returns a (read only) string describing libannocheck error number
+ERRNUM. Returns NULL if the error code is not recognised.
+
+Handle can be NULL if one is not available.  If provided a more
+detailed error message may be returned.
+
+@c -----------------------------------------------------------------
+@node libannocheck_get_known_tests
+@section Get a list of tests supported by the library
+@smallexample
+libannocheck_error
+libannocheck_get_known_tests
+  (struct libannocheck_internals * HANDLE,
+   libannocheck_test **            TESTS_RETURN,
+   unsigned int *                  NUM_TESTS_RETURN)
+@end smallexample
+
+Returns a (read/write) array of tests known to libannocheck in
+TESTS_RETURN.  Returns the number of elements in the array in
+NUM_TESTS_RETURN.  Returns libannocheck_error_none if the retrieval
+succeeded, or an error result otherwise.  The returned array should
+not be freed.
+
+The array is used by libannocheck internally, so if fields are
+changed this will affect the library's behaviour.  In particular tests
+can be enabled and disabled without needing to call
+@code{libannocheck_enable_test} or @code{libannocheck_disable_test}.
+
+The test_result_reason and test_result_source fields will initially be 
+NULL.  They may have their values changed as a result of a call to
+@code{libannocheck_run_tests}.
+
+@c -----------------------------------------------------------------
+@node libannocheck_enable_all_tests
+@section Enable all tests
+@smallexample
+libannocheck_error
+libannocheck_enable_all_tests (struct libannocheck_internals * HANDLE)
+@end smallexample
+
+Enables all the tests supported by libannocheck.
+
+This function may change some of the fields in the data structure
+returned by the @code{libannocheck_get_known_tests} function.
+
+@c -----------------------------------------------------------------
+@node libannocheck_disable_all_tests
+@section Disable all tests
+@smallexample
+libannocheck_error
+libannocheck_disable_all_tests (struct libannocheck_internals * HANDLE)
+@end smallexample
+
+Disables all of the tests supported by libannocheck.  Not normally
+useful unless followed by code to enable one or more tests.
+
+This function may change some of the fields in the data structure
+returned by the @code{libannocheck_get_known_tests} function.
+
+@c -----------------------------------------------------------------
+@node libannocheck_enable_test
+@section Enable a specific test
+@smallexample
+libannocheck_error
+libannocheck_enable_test
+  (struct libannocheck_internals * HANDLE,
+   const char *                    TEST_NAME)
+@end smallexample
+
+Enables a specific test.  Returns @code{libannocheck_error_none} upon
+success or an error code otherwise.  If the test is not known then
+@code{libannocheck_error_test_not_found} is returned.
+
+This function may change some of the fields in the data structure
+returned by the @code{libannocheck_get_known_tests} function.
+
+@c -----------------------------------------------------------------
+@node libannocheck_disable_test
+@section Disable a specific test
+@smallexample
+libannocheck_error
+libannocheck_disable_test
+  (struct libannocheck_internals * HANDLE,
+  const char *                     TEST_NAME)
+@end smallexample
+  
+Disables a specific test.  Returns @code{libannocheck_error_none} upon
+success or an error code otherwise.  If the test is not known then
+@code{libannocheck_error_test_not_found} is returned.
+
+This function may change some of the fields in the data structure
+returned by the @code{libannocheck_get_known_tests} function.
+
+@c -----------------------------------------------------------------
+@node libannocheck_enable_profile
+@section Enable a profile
+@smallexample
+libannocheck_error
+libannocheck_enable_profile
+  (struct libannocheck_internals * HANDLE,
+   const char *                    PROFILE_NAME)
+@end smallexample
+
+Enables and disables certain tests known to be relevant to a specific
+profile. 
+
+Returns libannocheck_error_profile_not_known if the profile is not
+recognised.
+
+@c -----------------------------------------------------------------
+@node libannocheck_get_known_profiles
+@section Get a list of known profiles
+@smallexample
+libannocheck_error
+libannocheck_get_known_profiles
+  (struct libannocheck_internals * HANDLE,
+   const char ***                  PROFILES_RETURN,
+   unsigned int *                  NUM_PROFILES_RETURN)
+@end smallexample
+
+Retrieves a (read only) array of profile strings known to
+libannocheck.  The array is returned in PROFILES_RETURN.
+The number of entries in the array is returned in NUM_PROFILES.
+Returns libannocheck_error_none upons success, or an error code otherwise.
+
+@c -----------------------------------------------------------------
+@node libannocheck_run_tests
+@section Run enabled tests
+@smallexample
+libannocheck_error
+libannocheck_run_tests
+  (struct libannocheck_internals * HANDLE,
+   unsigned int *                  NUM_FAIL_RETURN,
+   unsigned int *                  NUM_MAYB_RETURN)
+@end smallexample
+
+Runs all enabled tests.
+
+Returns the number of failed tests in NUM_FAIL_RETURN (if this
+parameter is not NULL).
+
+Returns the number of "maybe" results in NUM_MAYB_RETURN (if this
+parameter is not NULL).
+
+Retuns libannocheck_error_none if everything went OK.
+
+Updates the STATE, TEST_RESULT_REASON and TEST_RESULT_SOURCES fields
+in the entries in the array returned by
+@code{libannocheck_get_known_tests} for any enabled test. 
+
+Can be called multiple times.
 
 @c -----------------------------------------------------------------
 @node Configure Options

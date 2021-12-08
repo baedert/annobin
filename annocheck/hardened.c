@@ -5374,7 +5374,7 @@ libannocheck_get_error_message (struct libannocheck_internals * handle ATTRIBUTE
 }
 
 unsigned int
-libannocheck_get_version (struct libannocheck_internals * handle ATTRIBUTE_UNUSED)
+libannocheck_get_version (void)
 {
   return libannocheck_version;
 }
@@ -5516,17 +5516,20 @@ libannocheck_enable_profile (libannocheck_internals * handle, const char * name)
 
 libannocheck_error
 libannocheck_get_known_profiles (libannocheck_internals *  handle,
-				 const char **             profiles_return,
+				 const char ***      profiles_return,
 				 unsigned int *            num_profiles_return)
 {
+  static const char * profiles[4] =
+    { "el7", "el8", "el9", "rawhide" };
+
   if (! verify_handle (handle))
     return set_error (libannocheck_error_bad_handle, "unrecognised handle");
 
   if (profiles_return == NULL || num_profiles_return == NULL)
     return set_error (libannocheck_error_bad_arguments, "NULL passed as argument");
   
-  * profiles_return = NULL;
-  * num_profiles_return = 0;
+  * profiles_return = profiles;
+  * num_profiles_return = 4;
 
   return libannocheck_error_not_supported;
 }
