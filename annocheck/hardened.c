@@ -2472,18 +2472,6 @@ build_note_checker (annocheck_data *     data,
 	  if (skip_test (TEST_CF_PROTECTION))
 	    break;
 	  
-	  if (! is_C_compiler (per_file.current_tool))
-	    {
-	      skip (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "not built by gcc/clang");
-	      break;
-	    }
-
-	  if (includes_gcc (per_file.current_tool) && per_file.tool_version < 8)
-	    {
-	      skip (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "needs gcc v8+");
-	      break;
-	    }
-
 	  /* Note - the annobin plugin adds one to the value of gcc's flag_cf_protection,
 	     thus a setting of CF_FULL (3) is actually recorded as 4, and so on.  */
 	  switch (value)
@@ -2531,12 +2519,6 @@ build_note_checker (annocheck_data *     data,
 	  if (skip_test (TEST_FORTIFY))
 	    break;
 
-	  if (! is_C_compiler (per_file.current_tool))
-	    {
-	      skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "the part of the sources being scanned were not built by gcc/clang");
-	      break;
-	    }
-	    
 	  switch (value)
 	    {
 	    case -1:
@@ -2693,18 +2675,6 @@ build_note_checker (annocheck_data *     data,
 	  if (skip_test (TEST_GLIBCXX_ASSERTIONS))
 	    break;
 
-	  if (per_file.lang != LANG_UNKNOWN && per_file.lang != LANG_CXX)
-	    {
-	      skip (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_ANNOBIN_NOTES, "source language not C++");
-	      break;
-	    }
-	  
-	  if (! is_C_compiler (per_file.current_tool))
-	    {
-	      skip (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_ANNOBIN_NOTES, "current tool not gcc/clang");
-	      break;
-	    }
-
 	  switch (value)
 	    {
 	    case 0:
@@ -2778,18 +2748,6 @@ build_note_checker (annocheck_data *     data,
 	  if (skip_test (TEST_STACK_CLASH))
 	    break;
 
-	  if (! includes_gcc (per_file.current_tool) && ! includes_gimple (per_file.current_tool))
-	    {
-	      skip (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "not compiled by gcc");
-	      break;
-	    }
-	  
-	  if (per_file.tool_version < 7)
-	    {
-	      skip (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "needs gcc 7+");
-	      break;
-	    }
-
 	  switch (value)
 	    {
 	    case 0:
@@ -2818,12 +2776,6 @@ build_note_checker (annocheck_data *     data,
 	  if (skip_test (TEST_STACK_REALIGN))
 	    break;
 
-	  if (! includes_gcc (per_file.current_tool) && ! includes_gimple (per_file.current_tool))
-	    {
-	      skip (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "Not built by gcc");
-	      break;
-	    }
-
 	  switch (value)
 	    {
 	    default:
@@ -2848,8 +2800,6 @@ build_note_checker (annocheck_data *     data,
 	{
 	  if (skip_test (TEST_CF_PROTECTION))
 	    ;
-	  else if (! includes_clang (per_file.current_tool))
-	    skip (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "not built by clang");
 	  else if (value < 1)
 	    fail (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "insufficient Control Flow sanitization");
 	  else /* FIXME: Should we check that specific sanitizations are enabled ?  */
@@ -2860,8 +2810,6 @@ build_note_checker (annocheck_data *     data,
 	{
 	  if (skip_test (TEST_STACK_PROT))
 	    ;
-	  else if (! includes_clang (per_file.current_tool))
-	    skip (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "not built by clang");
 	  else if (value < 1)
 	    {
 	      if (! skip_test_for_current_func (data, TEST_STACK_PROT))
@@ -4836,7 +4784,12 @@ finish (annocheck_data * data)
 
 	    case TEST_STACK_REALIGN:
 	      if (per_file.e_machine != EM_386)
-		skip (data, i, SOURCE_FINAL_SCAN, "not an x86 executable");
+		{
+		  if (per_file.e_machine == EM_X86_64)
+		    skip (data, i, SOURCE_FINAL_SCAN, "not a 32-bit i686 executable");
+		  else
+		    skip (data, i, SOURCE_FINAL_SCAN, "not an x86 executable");
+		}
 	      else if (! includes_gcc (per_file.seen_tools_with_code)
 		       && ! includes_gimple (per_file.seen_tools_with_code))
 		skip (data, i, SOURCE_FINAL_SCAN, "no GCC compiled code found");

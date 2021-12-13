@@ -16,7 +16,9 @@
 extern "C" {
 #endif
 
-const unsigned int libannocheck_version = 100;
+/* NB/ Keep this value in sync with ANNOBIN_VERSION defined in
+   annobin-global.h.  */
+const unsigned int libannocheck_version = 1035;
 
 typedef enum libannocheck_error
 {

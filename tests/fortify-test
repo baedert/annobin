@@ -20,26 +20,45 @@ echo START
 TEST_NAME=fortify
 . $srcdir/common.sh
 
-OPTS="$(rpm --eval '%build_cflags %build_ldflags')"
+# Use the same command line options that normal spec file will use,
+# *except* that we disable the use of the annobin plugin, since this
+# will pick up the one in the system directory, not the one just built"
+
+OPTS="$(rpm --eval '%undefine _annotated_build %build_cflags %build_ldflags')"
+
+# The rpm macros may not be available, so if necessary use our own
+
+if ! [[ $OPTS == *"redhat-hardened-cc1"* ]];
+then
+    echo " $TEST_NAME: using built-in option selection instead"
+    OPTS="-O2 -fexceptions -g -grecord-gcc-switches -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fPIE -fstack-protector-strong -fasynchronous-unwind-tables -fstack-clash-protection -Wl,-z,relro -Wl,--as-needed  -Wl,-z,now -pie"
+fi
+
+# Now add in our newly built plugin.
+OPTS+=" -fplugin=$PLUGIN"
 
 start_test
 
 $GCC $OPTS -Wp,-U_FORTIFY_SOURCE -fno-lto $srcdir/main.c -o main.exe
 if [ $? != 0 ];
 then
-    echo "fortify-test: FAIL: unable to compile test file"
+    echo " $TEST_NAME: FAIL: unable to compile test file"
+    echo " $TEST_NAME: compile command: $GCC $OPTS -Wp,-U_FORTIFY_SOURCE -fno-lto $srcdir/main.c -o main.exe"
     end_test
     exit 1
 fi
 
 # Run annocheck
 
-SKIPS="--skip-property-note --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection --skip-lto"
+SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-lto --skip-warnings --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection"
 $ANNOCHECK main.exe $SKIPS > main.out
 grep -e "Overall: FAIL" main.out
 if [ $? != 0 ];
 then
-    echo "fortify-test: FAIL: compiling with -D_FORTIFY_SOURCE=2 still produces an executable that passes annocheck"
+    echo " $TEST_NAME: FAIL: compiling with -D_FORTIFY_SOURCE=2 still produces an executable that passes annocheck"
+    echo " $TEST_NAME: compile command: $GCC $OPTS -Wp,-U_FORTIFY_SOURCE -fno-lto $srcdir/main.c -o main.exe"
+    echo " $TEST_NAME: annocheck command: $ANNOCHECK main.exe $SKIPS"
+    echo " $TEST_NAME: annocheck output (with verbose enabled):"
     $ANNOCHECK main.exe $SKIPS --verbose
     uuencode main.exe main.exe
     end_test

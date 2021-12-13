@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2018-2020 Red Hat.
+# Copyright (c) 2018-2021 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -20,7 +20,7 @@ TEST_NAME=debuginfod
 
 PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
 
-FAIL="debuginfod-test: FAIL:"
+FAIL=" $TEST_NAME: FAIL:"
 
 if [ -z $(command -v $DEBUGINFOD) ]; then
   echo "$FAIL Could not find debuginfod"
@@ -37,9 +37,24 @@ if [ -z $(command -v $SS) ]; then
   exit 1
 fi
 
-start_test
+# Use the same command line options that normal spec file will use,
+# *except* that we disable the use of the annobin plugin, since this
+# will pick up the one in the system directory, not the one just built"
 
-OPTS="$(rpm --eval '%build_cflags %build_ldflags')"
+OPTS="$(rpm --eval '%undefine _annotated_build %build_cflags %build_ldflags')"
+
+# The rpm macros may not be available, so if necessary use our own.
+
+if ! [[ $OPTS == *"redhat-hardened-cc1"* ]];
+then
+    echo " $TEST_NAME: using built-in option selection instead"
+    OPTS="-O2 -fexceptions -g -grecord-gcc-switches -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fPIE -fstack-protector-strong -fasynchronous-unwind-tables -fstack-clash-protection -Wl,-z,relro -Wl,--as-needed  -Wl,-z,now -pie"
+fi
+
+# Now add in our newly built plugin.
+OPTS+=" -fplugin=$PLUGIN"
+
+start_test
 
 $GCC $OPTS -c $srcdir/hello.c $srcdir/hello2.c $srcdir/hello3.c $srcdir/hello_lib.c
 $GCC hello.o hello2.o hello3.o hello_lib.o $OPTS -o debuginfod-test.exe
@@ -83,7 +98,7 @@ wait_ready()
   value=$3;
   timeout=20;
 
-  echo "Wait $timeout seconds on $port for metric $what to change to $value"
+  echo " $TEST_NAME: Wait $timeout seconds on $port for metric $what to change to $value"
   while [ $timeout -gt 0 ]; do
     mvalue="$($CURL -s http://127.0.0.1:$port/metrics \
               | grep "$what" | awk '{print $NF}')"

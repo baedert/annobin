@@ -23,14 +23,12 @@ TEST_NAME=stat
 
 OPTS="$(rpm --eval '%undefine _annotated_build %build_cflags %build_ldflags')"
 
-# For some unknown reason this fails with some Koji builds, just evaluating to an empty string.
+# The rpm macros may not be available, so if necessary use our own.
 
 if ! [[ $OPTS == *"redhat-hardened-cc1"* ]];
 then
-    echo " $TEST_NAME: warn: rpm --eval failed.."
-    echo " $TEST_NAME: OPTS = $OPTS"
     echo " $TEST_NAME: using built-in option selection instead"
-    OPTS="-O2 -fexceptions -g -grecord-gcc-switches -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -fasynchronous-unwind-tables -fstack-clash-protection -Wl,-z,relro -Wl,--as-needed  -Wl,-z,now -specs=/usr/lib/rpm/redhat/redhat-hardened-ld"
+    OPTS="-O2 -fexceptions -g -grecord-gcc-switches -Wall -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -Wp,-D_GLIBCXX_ASSERTIONS -fPIE -fstack-protector-strong -fasynchronous-unwind-tables -fstack-clash-protection -Wl,-z,relro -Wl,--as-needed  -Wl,-z,now -pie"
 fi
 
 # Now add in our newly built plugin.

@@ -2091,6 +2091,7 @@ for certain packages.  This can be done on a per-package basis by
 editing the contents of the 'rpminspect.yaml' file and adding an entry
 like this:
 
+      ---
       annocheck:
          - hardened: --skip-property-note --ignore-unknown --verbose
 
@@ -3511,29 +3512,29 @@ Node: Test warnings78955
 Node: Test writable got79790
 Node: Hardened Command Line Options81076
 Node: Waiving Hardened Results86516
-Node: Notes87900
-Node: Size88536
-Node: Timing90679
-Node: Libannocheck91318
-Node: libannocheck_init93257
-Node: libannocheck_finish94179
-Node: libannocheck_get_version94727
-Node: libannocheck_get_error_message95136
-Node: libannocheck_get_known_tests95776
-Node: libannocheck_enable_all_tests96942
-Node: libannocheck_disable_all_tests97421
-Node: libannocheck_enable_test97977
-Node: libannocheck_disable_test98645
-Node: libannocheck_enable_profile99314
-Node: libannocheck_get_known_profiles99836
-Node: libannocheck_run_tests100539
-Node: Configure Options101384
-Node: Legacy Scripts103726
-Node: Who Built Me104501
-Node: ABI Checking107261
-Node: Hardening Checks109377
-Node: Checking Archives113463
-Node: GNU FDL115884
+Node: Notes87910
+Node: Size88546
+Node: Timing90689
+Node: Libannocheck91328
+Node: libannocheck_init93267
+Node: libannocheck_finish94189
+Node: libannocheck_get_version94737
+Node: libannocheck_get_error_message95146
+Node: libannocheck_get_known_tests95786
+Node: libannocheck_enable_all_tests96952
+Node: libannocheck_disable_all_tests97431
+Node: libannocheck_enable_test97987
+Node: libannocheck_disable_test98655
+Node: libannocheck_enable_profile99324
+Node: libannocheck_get_known_profiles99846
+Node: libannocheck_run_tests100549
+Node: Configure Options101394
+Node: Legacy Scripts103736
+Node: Who Built Me104511
+Node: ABI Checking107271
+Node: Hardening Checks109387
+Node: Checking Archives113473
+Node: GNU FDL115894
 
 End Tag Table
 

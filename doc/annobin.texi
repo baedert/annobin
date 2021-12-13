@@ -2250,6 +2250,7 @@ basis by editing the contents of the @file{rpminspect.yaml} file and
 adding an entry like this:
 
 @smallexample
+ ---
  annocheck:
     - hardened: --skip-property-note --ignore-unknown --verbose
 @end smallexample
