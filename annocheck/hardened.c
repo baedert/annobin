@@ -2788,7 +2788,7 @@ build_note_checker (annocheck_data *     data,
 
 	    case 0:
 	      if (! skip_test_for_current_func (data, TEST_STACK_REALIGN))
-		fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-mstack-realign not enabled");
+		fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-mstackrealign not enabled");
 	      break;
 
 	    case 1:
@@ -4793,6 +4793,8 @@ finish (annocheck_data * data)
 	      else if (! includes_gcc (per_file.seen_tools_with_code)
 		       && ! includes_gimple (per_file.seen_tools_with_code))
 		skip (data, i, SOURCE_FINAL_SCAN, "no GCC compiled code found");
+	      else if (tests[TEST_LTO].state == STATE_PASSED)
+		skip  (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -mstackrealign option");
 	      else
 		fail  (data, i, SOURCE_FINAL_SCAN, "no indication that the -mstackrealign option was used");
 	      break;
