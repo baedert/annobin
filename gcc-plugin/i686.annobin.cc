@@ -72,18 +72,26 @@ annobin_record_global_target_notes (annobin_function_info * info)
 
   annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, global_x86_isa,
 			       "numeric: ABI", true /* Is OPEN.  */, info);
-  annobin_inform (INFORM_VERBOSE, "x86_64: Record global isa of %lx", global_x86_isa);
+  annobin_inform (INFORM_VERBOSE, "i686: Record global isa of %lx", global_x86_isa);
 
-  
+
   global_stack_realign = GET_INT_OPTION_BY_NAME (ix86_force_align_arg_pointer);
-
-  char buffer [128];
-  unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
-  annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
-		       "bool: -mstackrealign status",
-		       true /* Is OPEN.  */, info);
-  annobin_inform (INFORM_VERBOSE, "x86_64: Record global stack realign setting of %s",
-		  global_stack_realign ? "false" : "true");
+  if (in_lto () && global_stack_realign == 0)
+    {
+      /* The LTO compiler determines stack realignment on a per-function basis
+	 unless enabled globally.  So do not record a negative global setting.  */
+      annobin_inform (INFORM_VERBOSE, "i686: Not recording unset global stack realignment setting when in LTO mode");
+    }
+  else
+    {
+      char buffer [128];
+      unsigned len = sprintf (buffer, "GA%cstack_realign", global_stack_realign ? BOOL_T : BOOL_F);
+      annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
+			   "bool: -mstackrealign status",
+			   true /* Is OPEN.  */, info);
+      annobin_inform (INFORM_VERBOSE, "i686: Record global stack realign setting of %s",
+		      global_stack_realign ? "false" : "true");
+    }
 }
 
 void
@@ -94,7 +102,7 @@ annobin_target_specific_function_notes (annobin_function_info * info, bool force
   val = GET_INT_OPTION_BY_NAME (ix86_isa_flags);
   if (force || val != global_x86_isa)
     {
-      annobin_inform (INFORM_VERBOSE, "x86_64: Record ISA value of %lx for %s",
+      annobin_inform (INFORM_VERBOSE, "i686: Record ISA value of %lx for %s",
 		      val, info->func_name);
 
       annobin_output_numeric_note (GNU_BUILD_ATTRIBUTE_ABI, val,
@@ -116,7 +124,7 @@ annobin_target_specific_function_notes (annobin_function_info * info, bool force
       char buffer [128];
       unsigned len = sprintf (buffer, "GA%cstack_realign", val ? BOOL_T : BOOL_F);
 
-      annobin_inform (INFORM_VERBOSE, "x86_64: Record function specific stack realign setting of %s for %s",
+      annobin_inform (INFORM_VERBOSE, "i686: Record function specific stack realign setting of %s for %s",
 		      val ? "false" : "true", info->func_name);
       annobin_output_note (buffer, len + 1, true /* The name is ASCII.  */,
 			   "bool: -mstackrealign status",
