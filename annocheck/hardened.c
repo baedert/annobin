@@ -4794,9 +4794,9 @@ finish (annocheck_data * data)
 		       && ! includes_gimple (per_file.seen_tools_with_code))
 		skip (data, i, SOURCE_FINAL_SCAN, "no GCC compiled code found");
 	      else if (tests[TEST_LTO].state == STATE_PASSED)
-		skip  (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -mstackrealign option");
+		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -mstackrealign option");
 	      else
-		fail  (data, i, SOURCE_FINAL_SCAN, "no indication that the -mstackrealign option was used");
+		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that the -mstackrealign option was used");
 	      break;
 
 	    case TEST_NOT_BRANCH_PROTECTION:
@@ -4806,12 +4806,15 @@ finish (annocheck_data * data)
 	      else if (! includes_gcc (per_file.seen_tools_with_code)
 		       && ! includes_gimple (per_file.seen_tools_with_code))
 		skip (data, i, SOURCE_FINAL_SCAN, "not built by GCC");
-	      else if (per_file.tool_version < 9)
-		skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
 	      else
 		{
 		  if (i == TEST_BRANCH_PROTECTION)
-		    fail (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
+		    {
+		      if (per_file.tool_version < 9 && per_file.tool_version > 3)
+			skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
+		      else
+			fail (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
+		    }
 		  else
 		    pass (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
 		}
