@@ -4236,7 +4236,13 @@ skip_gap_sym (annocheck_data * data, const char * sym)
     }
   per_file.component_name = saved_sym;
 
-  if (per_file.e_machine == EM_386)
+  if (per_file.e_machine == EM_X86_64)
+    {
+      /* See BZ 2031133 for example of this happening with RHEL-7 builds.  */
+      if (const_strneq (sym, "deregister_tm_clones"))
+	return true;
+    }
+  else if (per_file.e_machine == EM_386)
     {
       if (const_strneq (sym, "__x86.get_pc_thunk")
 	  || const_strneq (sym, "_x86_indirect_thunk_"))
