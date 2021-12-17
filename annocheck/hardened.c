@@ -1173,6 +1173,7 @@ is_special_glibc_binary (const char * path)
       "/usr/lib/gconv/UTF-16.so",
       "/usr/lib/gconv/UTF-32.so",
       "/usr/lib/gconv/UTF-7.so",
+      "/usr/lib/ld-linux-aarch64.so.1",
       "/usr/lib/libmemusage.so",
       "/usr/lib/libpcprofile.so",
       "/usr/lib64/audit/sotruss-lib.so",

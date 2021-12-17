@@ -1094,11 +1094,14 @@ Fixing this check either means enabling the
 options (for Clang).
 
 If an assembler source file is used as part of an application then it
-too needs to be updated.  Any location in the assembler where a branch
-or function call can land must now have an @var{ENDBR64} instruction
-as the first instruction executed.  In addition the assembler needs a
-note to indicate that it supports CET.  This note can be added via
-including this code snippet in the sources:
+too needs to be updated.  Any location in the source code where an
+indirect branch or function call can land must now have either
+@var{ENDBR64} (for 64-bit assembler) or @var{ENDBR32} (for 32-bit
+assembler) as the first instruction executed.
+
+In addition the assembler needs a note to indicate that it supports
+now CET.  This note can be added via including this code snippet in the
+sources: 
 
 @smallexample
 	.section	.note.gnu.property,"a"
@@ -1121,6 +1124,9 @@ including this code snippet in the sources:
 
 If necessary the test can be disabled via the @option{--skip-cf-protection}
 option and re-enabled via the @option{--test-cf-protection} option.
+
+For more information on CET see: 
+@url{https://www.intel.com/content/dam/develop/external/us/en/documents/catc17-introduction-intel-cet-844137.pdf}
 
 @c -----------------------------------------------------------------
 @node Test dynamic segment
