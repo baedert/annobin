@@ -161,6 +161,7 @@ static struct per_file
   bool        has_cf_protection;
   bool        has_modinfo;
   bool        has_gnu_linkonce_this_module;
+  bool        lto_used;
 } per_file;
 
 /* Extensible array of note ranges  */
@@ -1039,10 +1040,13 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       else
 	info (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "not found in string");
 
-      if (skip_test (TEST_LTO))
-	;
-      else if (strstr (string, "-flto"))
-	pass (data, TEST_LTO, SOURCE_DW_AT_PRODUCER, "detected in DWARF information");
+      if (strstr (string, "-flto"))
+	{
+	  per_file.lto_used = true;
+
+	  if (! skip_test (TEST_LTO))
+	    pass (data, TEST_LTO, SOURCE_DW_AT_PRODUCER, "detected in DWARF information");
+	}
 
       if (skip_test (TEST_PIC))
 	;
@@ -2105,6 +2109,7 @@ build_note_checker (annocheck_data *     data,
 	    pass (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, "detected in version note");
 	  if (note_data->start < note_data->end)
 	    per_file.seen_tools_with_code |= TOOL_GCC;
+	  per_file.lto_used = true;
 	  break;
 
 	case ANNOBIN_TOOL_ID_LLVM:
@@ -2649,7 +2654,10 @@ build_note_checker (annocheck_data *     data,
 
 
 	  if (skip_test (TEST_LTO))
-	    ;
+	    {
+	      if (value & (1 << 16))
+		per_file.lto_used = true;
+	    }
 	  else if (value & (1 << 16))
 	    {
 	      if (value & (1 << 17))
@@ -4671,7 +4679,7 @@ finish (annocheck_data * data)
 	      /* Fall through.  */
 	    case TEST_WARNINGS:
 	    case TEST_FORTIFY:
-	      if (tests[TEST_LTO].state == STATE_PASSED)
+	      if (per_file.lto_used)
 		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides preprocessor and warning options");
 	      else if (is_kernel_module (data))
 		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules are not compiled with this feature");
@@ -4714,6 +4722,8 @@ finish (annocheck_data * data)
 	      else if (per_file.seen_tools == TOOL_GAS
 		       || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
+	      else if (per_file.lto_used)
+		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -fstack-protector-strong option");
 	      else if (C_compiler_seen ())
 		/* The skip is necessary because some glibc code is built this way.  */
 		skip (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this feature");
@@ -4744,6 +4754,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules do not support stack clash protection");
 	      else if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support stack clash protection");
+	      else if (per_file.lto_used)
+		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -fstack-clash-protection option");
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this test");
 	    break;
@@ -4767,26 +4779,27 @@ finish (annocheck_data * data)
 	      break;
 
 	    case TEST_CF_PROTECTION:
-	      if (is_x86 () && is_executable ())
-		{
-		  if (per_file.seen_tools & TOOL_GO)
-		    skip (data, i, SOURCE_FINAL_SCAN, "control flow protection is not needed for GO binaries");
-		  else if (tests[TEST_PROPERTY_NOTE].enabled)
-		    {
-		      if (tests[TEST_PROPERTY_NOTE].state == STATE_UNTESTED)
-			fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section = no control flow information");
-		      else if (tests[TEST_PROPERTY_NOTE].state != STATE_PASSED)
-			fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the expected notes");
-		      else if (! per_file.has_cf_protection)
-			fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the necessary flags");
-		      else
-			pass (data, i, SOURCE_FINAL_SCAN, "control flow information is correct");
-		    }
-		  else
-		    fail (data, i, SOURCE_FINAL_SCAN, "control flow protection is not enabled");
-		}
-	      else
+	      if (! is_x86 ())
+		skip (data, i, SOURCE_FINAL_SCAN, "not an x86 binary");
+	      else if (! is_executable ())
 		skip (data, i, SOURCE_FINAL_SCAN, "not an x86 executable");
+	      else if (per_file.seen_tools & TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "control flow protection is not needed for GO binaries");
+	      else if (tests[TEST_PROPERTY_NOTE].enabled)
+		{
+		  if (tests[TEST_PROPERTY_NOTE].state == STATE_UNTESTED)
+		    fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section = no control flow information");
+		  else if (tests[TEST_PROPERTY_NOTE].state != STATE_PASSED)
+		    fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the expected notes");
+		  else if (! per_file.has_cf_protection)
+		    fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the necessary flags");
+		  else
+		    pass (data, i, SOURCE_FINAL_SCAN, "control flow information is correct");
+		}
+	      else if (per_file.lto_used)
+		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -fcf-protection option");
+	      else
+		fail (data, i, SOURCE_FINAL_SCAN, "control flow protection is not enabled");
 	      break;
 
 	    case TEST_STACK_REALIGN:
@@ -4800,7 +4813,7 @@ finish (annocheck_data * data)
 	      else if (! includes_gcc (per_file.seen_tools_with_code)
 		       && ! includes_gimple (per_file.seen_tools_with_code))
 		skip (data, i, SOURCE_FINAL_SCAN, "no GCC compiled code found");
-	      else if (tests[TEST_LTO].state == STATE_PASSED)
+	      else if (per_file.lto_used)
 		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -mstackrealign option");
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that the -mstackrealign option was used");
