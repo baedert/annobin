@@ -1,5 +1,5 @@
 /* annocheck - A tool for checking security features of binares.
-   Copyright (c) 2018 - 2021 Red Hat.
+   Copyright (c) 2018 - 2022 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -580,9 +580,13 @@ follow_debuglink (annocheck_data * data)
 	   debug information then extract it and use it.  */
 	path = extract_rpm_file (debug_rpm);
       else
+	{
 #endif
-	if (debug_path)
-	path = debug_path;
+	  if (debug_path)
+	    path = debug_path;
+#ifndef LIBANNOCHECK
+	}
+#endif
 
       if (path == NULL)
 	path = "";
@@ -665,15 +669,18 @@ follow_debuglink (annocheck_data * data)
     TRY_DEBUG ("%s/%s", debug_path, link);
 
 #ifndef LIBANNOCHECK
-  /* If we have been pointed at an debuginfo rpm then try that next.  */
+  /* If we have been pointed at a debuginfo rpm then try that next.  */
   if (debug_rpm)
     {
       const char * dir = extract_rpm_file (debug_rpm);
-      TRY_DEBUG ("./%s/%s", dir, link);
-      TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_1, link);
-      TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_2, link);
-      TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_3, link);
-      TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_4, link);
+      if (dir != NULL)
+	{
+	  TRY_DEBUG ("./%s/%s", dir, link);
+	  TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_1, link);
+	  TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_2, link);
+	  TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_3, link);
+	  TRY_DEBUG ("./%s%s/%s", dir, DEBUGDIR_4, link);
+	}
     }
 #endif
   
@@ -2181,7 +2188,12 @@ main (int argc, const char ** argv)
       }
   
  if (debug_rpm_dir)
-    rmdir (debug_rpm_dir);
+   {
+     char * command = concat ("rm -fr ", debug_rpm_dir, NULL);
+     if (system (command))
+       einfo (WARN, "Failed to delete temporary directory: %s", debug_rpm_dir);
+     free (command);
+   }
 
   if (self_made_tmpdir)
     {

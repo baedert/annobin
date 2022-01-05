@@ -1624,12 +1624,12 @@ skip_this_func (const char ** func_names, unsigned int num_names, const char * c
     {
       int res = strcmp (component_name, func_names[i]);
 
+      if (res == 0)
+	return true;
+
       if (res > 0)
 	/* The array is alpha-sorted, and we are scanning in reverse... */
 	break;
-
-      if (res == 0)
-	return true;
     }
 
   return false;
@@ -1645,26 +1645,35 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
       "_Unwind_Resume",
+      "__assert_fail_base.cold",     /* Found in libc.a(assert.o).  */
       "__b64_ntop",  	             /* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
       "__b64_pton",	             /* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
       "__ctype_get_mb_cur_max",
+      "__errno_location",
       "__libc_init_first",
       "__libc_start_call_main",	     /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
       "__libc_start_main",
       "__librt_version_placeholder", /* Found in ppc64le, RHEL-9, /lib64/librt.so.1.  */
+      "__run_exit_handlers",
       "__td_ta_rtld_global",         /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
+      "__tls_get_offset",
       "_dl_start_user", 	     /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
       "_dl_tunable_set_arena_max",   /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
       "_start",
+      "abort",
       "blacklist_store_name",
+      "call_fini",
+      "check_one_fd",		     /* Found in libc.a(check_fds.o).  */
       "dlmopen_doit",                /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
       "free_derivation",
       "free_mem",
+      "handle_zhaoxin",		     /* Found in libc.a(libc-start.o).  */
       "install_handler",
       "internal_setgrent",
       "td_init",	             /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
       "unlink_blk" 	             /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
     };
+  
 
   if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
     {
@@ -1686,8 +1695,15 @@ skip_pic_checks_for_function (annocheck_data * data, enum test_index check, cons
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
       "_Unwind_Resume",
+      "__errno_location",
+      "__libc_start_call_main",
+      "__tls_get_offset",
+      "_nl_finddomain_subfreeres",
       "_start",
-      "atexit"                  /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+      "abort",
+      "atexit",                  /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+      "check_one_fd",
+      "free_mem"
     };
 
   if (skip_this_func (non_pie_funcs, ARRAY_SIZE (non_pie_funcs), component_name))
@@ -1725,6 +1741,7 @@ skip_stack_checks_for_function (annocheck_data * data, enum test_index check, co
       "_dl_start",
       "_dl_start_user", /* Found in ppc64le, RHEL-9 /lib64/ld64.so.2.  */
       "_dl_sysinfo_int80", /* In /lib/ld-linux.so.2.  */
+      "_dl_tls_static_surplus_init",
       "_fini",
       "_init",
       "_start",
