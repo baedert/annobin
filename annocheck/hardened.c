@@ -1,5 +1,5 @@
 /* Checks the hardened status of the given file.
-   Copyright (c) 2018 - 2021 Red Hat.
+   Copyright (c) 2018 - 2022 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -301,6 +301,12 @@ static test tests [TEST_MAX] =
 static bool report_future_fail = false;
 
 static inline bool
+startswith (const char *str, const char *prefix)
+{
+  return strncmp (str, prefix, strlen (prefix)) == 0;
+}
+
+static inline bool
 is_C_compiler (uint tool)
 {
   return (tool & (TOOL_GCC | TOOL_CLANG | TOOL_LLVM | TOOL_GIMPLE)) != 0;
@@ -540,7 +546,7 @@ fail (annocheck_data * data,
       const char * name = per_file.component_name;
       if (name && BE_VERBOSE)
 	{
-	  if (const_strneq (name, "component: "))
+	  if (startswith (name, "component: "))
 	    einfo (PARTIAL, "(function: %s) ", name + strlen ("component: "));
 	  else
 	    einfo (PARTIAL, "(%s) ", name);
@@ -594,7 +600,7 @@ maybe (annocheck_data * data,
 	{
 	  const char * name = per_file.component_name;
 
-	  if (const_strneq (name, "component: "))
+	  if (startswith (name, "component: "))
 	    einfo (PARTIAL, "(function: %s) ", name + strlen ("component: "));
 	  else
 	    einfo (PARTIAL, "(%s) ", name);
@@ -1103,7 +1109,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
     }
   else if (BE_VERBOSE && ! per_file.warned_command_line)
     {
-      inform (data, "Command line options not recorded in DWARF DW_AT_producer variable");
+      inform (data, "info: Command line options not recorded in DWARF DW_AT_producer variable");
       per_file.warned_command_line = true;
     }
 }
@@ -1128,86 +1134,105 @@ dwarf_attribute_checker (annocheck_data *  data,
   return true;
 }
 
+/* Many glibc binaries are hand built without many of the normal security features.
+   This is known and expected however, so detect them here.  */
+
 static bool
 is_special_glibc_binary (const char * path)
 {
+  int i;
+
   /* If we are testing an uninstalled rpm then the paths will start with "."
      so skip this.  */
   if (path[0] == '.')
     ++path;
 
-  /* Many glibc binaries are hand built without many of the normal
-     security features.  This is known and expected however, so
-     detect them here.  */
+  if (path[0] == '/')
+    {
+      /* If the path is absolute, then strip the prefix.
+	 This allows us to cope with symbolic links and 32-bit/64-bit multilibs.  */
+      static const char * known_prefixes [] =
+	{
+	  /* NB/ Keep this array alpha-sorted.  */
+	  "/lib/",
+	  "/lib64/",
+	  "/sbin/",
+	  "/usr/lib/",
+	  "/usr/lib64/",
+	  "/usr/libexec/",
+	  "/usr/sbin/"
+	};
+
+      for (i = ARRAY_SIZE (known_prefixes); i--;)
+	{
+	  /* FIXME: To save time we could store the string lengths in the known_prefixes array.  */
+	  size_t len = strlen (known_prefixes[i]);
+	  int res = strncmp (path, known_prefixes[i], len);
+
+	  if (res == 0)
+	    {
+	      path += len;
+	      break;
+	    }
+	  /* Since the array is alpha-sorted and we are searching in reverse order,
+	     a positive result means that path > prefix and hence we can stop the search.  */
+	  if (res > 0)
+	    /* All (absolute) glibc binaries should have a known prefix.  */
+	    return false;
+	}
+
+      if (i < 0)
+	/* All (absolute) glibc binaries should have a known prefix.  */
+	return false;
+    }
 
   const char * known_glibc_specials[] =
     {
       /* NB/ Keep this array alpha sorted.  */
-      "/lib/ld-linux-aarch64.so.1",
-      "/lib/ld-linux.so.2",
-      "/lib/ld64.so.1",
-      "/lib/libBrokenLocale.so.1",
-      "/lib/libSegFault.so",
-      "/lib/libc.so.6",
-      "/lib/libc_malloc_debug.so.0",      
-      "/lib/libm.so.6",
-      "/lib/libnss_compat.so.2",
-      "/lib/libresolv.so.2",
-      "/lib/librt.so.1",
-      "/lib/libthread_db.so.1",
-      "/lib64/ld-linux-x86-64.so.2",
-      "/lib64/ld64.so.2",
-      "/lib64/libBrokenLocale.so.1",
-      "/lib64/libSegFault.so",
-      "/lib64/libc.so.6",
-      "/lib64/libc_malloc_debug.so.0",
-      "/lib64/libm.so.6",
-      "/lib64/libmvec.so.1",
-      "/lib64/libnss_compat.so.2",
-      "/lib64/libresolv.so.2",
-      "/lib64/librt.so.1",
-      "/lib64/libthread_db.so.1",
-      "/sbin/ldconfig",
-      "/usr/lib/audit/sotruss-lib.so",
-      "/usr/lib/gconv/ANSI_X3.110.so",
-      "/usr/lib/gconv/CP1252.so",
-      "/usr/lib/gconv/ISO8859-1.so",
-      "/usr/lib/gconv/ISO8859-15.so",
-      "/usr/lib/gconv/UNICODE.so",
-      "/usr/lib/gconv/UTF-16.so",
-      "/usr/lib/gconv/UTF-32.so",
-      "/usr/lib/gconv/UTF-7.so",
-      "/usr/lib/ld-linux-aarch64.so.1",
-      "/usr/lib/libmemusage.so",
-      "/usr/lib/libpcprofile.so",
-      "/usr/lib64/audit/sotruss-lib.so",
-      "/usr/lib64/gconv/ANSI_X3.110.so",
-      "/usr/lib64/gconv/CP1252.so",
-      "/usr/lib64/gconv/ISO-8859-1_CP037_Z900.so",
-      "/usr/lib64/gconv/ISO8859-1.so",
-      "/usr/lib64/gconv/ISO8859-15.so",
-      "/usr/lib64/gconv/UNICODE.so",
-      "/usr/lib64/gconv/UTF-16.so",
-      "/usr/lib64/gconv/UTF-32.so",
-      "/usr/lib64/gconv/UTF-7.so",
-      "/usr/lib64/gconv/UTF16_UTF32_Z9.so",
-      "/usr/lib64/gconv/UTF8_UTF16_Z9.so",
-      "/usr/lib64/gconv/UTF8_UTF32_Z9.so",
-      "/usr/lib64/libmemusage.so",
-      "/usr/lib64/libpcprofile.so",
-      "/usr/libexec/getconf/POSIX_V6_ILP32_OFF32",
-      "/usr/libexec/getconf/POSIX_V6_ILP32_OFFBIG",
-      "/usr/libexec/getconf/POSIX_V6_LP64_OFF64",
-      "/usr/libexec/getconf/POSIX_V7_ILP32_OFF32",
-      "/usr/libexec/getconf/POSIX_V7_ILP32_OFFBIG",
-      "/usr/libexec/getconf/POSIX_V7_LP64_OFF64",
-      "/usr/libexec/getconf/XBS5_ILP32_OFF32",
-      "/usr/libexec/getconf/XBS5_ILP32_OFFBIG",
-      "/usr/libexec/getconf/XBS5_LP64_OFF64",
-      "/usr/sbin/iconvconfig",
-      "/usr/sbin/ldconfig"
+      "audit/sotruss-lib.so",
+      "gconv/ANSI_X3.110.so",
+      "gconv/CP1252.so",
+      "gconv/ISO-8859-1_CP037_Z900.so",
+      "gconv/ISO8859-1.so",
+      "gconv/ISO8859-15.so",
+      "gconv/UNICODE.so",
+      "gconv/UTF-16.so",
+      "gconv/UTF-32.so",
+      "gconv/UTF-7.so",
+      "gconv/UTF16_UTF32_Z9.so",
+      "gconv/UTF8_UTF16_Z9.so",
+      "gconv/UTF8_UTF32_Z9.so",
+      "getconf/POSIX_V6_ILP32_OFF32",
+      "getconf/POSIX_V6_ILP32_OFFBIG",
+      "getconf/POSIX_V6_LP64_OFF64",
+      "getconf/POSIX_V7_ILP32_OFF32",
+      "getconf/POSIX_V7_ILP32_OFFBIG",
+      "getconf/POSIX_V7_LP64_OFF64",
+      "getconf/XBS5_ILP32_OFF32",
+      "getconf/XBS5_ILP32_OFFBIG",
+      "getconf/XBS5_LP64_OFF64",
+      "iconvconfig",
+      "ld-2.33.so",
+      "ld-linux-aarch64.so.1",
+      "ld-linux-x86-64.so.1",
+      "ld-linux-x86-64.so.2",
+      "ld-linux.so.2",
+      "ld64.so.1",
+      "ld64.so.2",
+      "ldconfig",
+      "libBrokenLocale.so.1",
+      "libSegFault.so",
+      "libc.so.6",
+      "libc_malloc_debug.so.0",
+      "libm.so.6",
+      "libmemusage.so",
+      "libmvec.so.1",
+      "libnss_compat.so.2",
+      "libpcprofile.so",
+      "libresolv.so.2",
+      "librt.so.1",
+      "libthread_db.so.1"
     };
-  int i;
 
   for (i = ARRAY_SIZE (known_glibc_specials); i--;)
     {
@@ -1778,12 +1803,19 @@ skip_test_for_current_func (annocheck_data * data, enum test_index check)
 	}
     }
 
+  if (is_special_glibc_binary (data->full_filename))
+    {
+      sprintf (reason, "the %s binary is a special case, hand-crafted by the glibc build system", data->filename);
+      skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+  
   const char * component_name = per_file.component_name;
 
   if (component_name == NULL)
     return false;
 
-  if (const_strneq (component_name, "component: "))
+  if (startswith (component_name, "component: "))
     component_name += strlen ("component: ");
 
   if (streq (component_name, "elf_init.c")
@@ -1796,13 +1828,6 @@ function %s is part of the C library's startup code, which executes before a sec
       return true;
     }
 
-  if (is_special_glibc_binary (data->full_filename))
-    {
-      sprintf (reason, "the %s binary is a special case, hand-crafted by the glibc build system", data->filename);
-      skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
-      return true;
-    }
-  
   switch (check)
     {
     case TEST_STACK_PROT:
@@ -2427,7 +2452,7 @@ build_note_checker (annocheck_data *     data,
       break;
 
     case 'b':
-      if (const_strneq (attr, "branch_protection:"))
+      if (startswith (attr, "branch_protection:"))
 	{
 	  if (per_file.e_machine != EM_AARCH64)
 	    /* FIXME: A branch protection note for a non AArch64 binary is suspicious...  */
@@ -2446,14 +2471,14 @@ build_note_checker (annocheck_data *     data,
 	      pass (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "disabled");
 	    }
 	  else if (streq (attr, "bti+pac-ret")
-		   || (streq (attr, "standard"))
-		   || const_strneq (attr, "pac-ret+bti"))
+		   || streq (attr, "standard")
+		   || startswith (attr, "pac-ret+bti"))
 	    {
 	      pass (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection enabled");
 	      fail (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "protection enabled");
 	    }
 	  else if (streq (attr, "bti")
-		   || const_strneq (attr, "pac-ret"))
+		   || startswith (attr, "pac-ret"))
 	    {
 	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially enabled");
 	      fail (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "only partially disabled");
@@ -2708,7 +2733,7 @@ build_note_checker (annocheck_data *     data,
       break;
 
     case 'I':
-      if (const_strneq (attr, "INSTRUMENT:"))
+      if (startswith (attr, "INSTRUMENT:"))
 	{
 	  if (! per_file.warned_about_instrumentation)
 	    {
@@ -3117,7 +3142,7 @@ check_note_section (annocheck_data *    data,
 	     get_filename (data), sec->secname, (long) sec->shdr.sh_addralign);
     }
 
-  if (const_strneq (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
+  if (startswith (sec->secname, GNU_BUILD_ATTRS_SECTION_NAME))
     {
       bool res;
 
@@ -3181,7 +3206,7 @@ not_rooted_at_usr (const char * str)
 {
   while (str)
     {
-      if (! const_strneq (str, "/usr") && ! const_strneq (str, "$ORIGIN"))
+      if (! startswith (str, "/usr") && ! startswith (str, "$ORIGIN"))
 	return true;
       str = strchr (str, ':');
       if (str)
@@ -4227,11 +4252,11 @@ skip_gap_sym (annocheck_data * data, const char * sym)
   /* G++ will generate virtual and non-virtual thunk functions all on its own,
      without telling the annobin plugin about them.  Detect them here and do
      not complain about the gap in the coverage.  */
-  if (const_strneq (sym, "_ZThn") || const_strneq (sym, "_ZTv0"))
+  if (startswith (sym, "_ZThn") || startswith (sym, "_ZTv0"))
     return true;
 
   /* The GO infrastructure is not annotated.  */
-  if (const_strneq (sym, "internal/cpu.Initialize"))
+  if (startswith (sym, "internal/cpu.Initialize"))
     return true;
 
   /* If the symbol is for a function/file that we know has special
@@ -4248,36 +4273,41 @@ skip_gap_sym (annocheck_data * data, const char * sym)
   if (per_file.e_machine == EM_X86_64)
     {
       /* See BZ 2031133 for example of this happening with RHEL-7 builds.  */
-      if (const_strneq (sym, "deregister_tm_clones"))
+      if (startswith (sym, "deregister_tm_clones"))
+	return true;
+    }
+  else if (per_file.e_machine == EM_AARCH64)
+    {
+      if (startswith (sym, "_start"))
 	return true;
     }
   else if (per_file.e_machine == EM_386)
     {
-      if (const_strneq (sym, "__x86.get_pc_thunk")
-	  || const_strneq (sym, "_x86_indirect_thunk_"))
+      if (startswith (sym, "__x86.get_pc_thunk")
+	  || startswith (sym, "_x86_indirect_thunk_"))
 	return true;
     }
   else if (per_file.e_machine == EM_PPC64)
     {
-      if (const_strneq (sym, "_savegpr")
-	  || const_strneq (sym, "_restgpr")
-	  || const_strneq (sym, "_savefpr")
-	  || const_strneq (sym, "_restfpr")
-	  || const_strneq (sym, "_savevr")
-	  || const_strneq (sym, "_restvr"))
+      if (startswith (sym, "_savegpr")
+	  || startswith (sym, "_restgpr")
+	  || startswith (sym, "_savefpr")
+	  || startswith (sym, "_restfpr")
+	  || startswith (sym, "_savevr")
+	  || startswith (sym, "_restvr"))
 	return true;
 
       /* The linker can also generate long call stubs.  They have the form:
          NNNNNNNN.<stub_name>.<func_name>.  */
       const size_t len = strlen (sym);
-      if (   (len > 8 + 10 && const_strneq (sym + 8, ".plt_call."))
-	  || (len > 8 + 12 && const_strneq (sym + 8, ".plt_branch."))
-	  || (len > 8 + 13 && const_strneq (sym + 8, ".long_branch.")))
+      if (   (len > 8 + 10 && startswith (sym + 8, ".plt_call."))
+	  || (len > 8 + 12 && startswith (sym + 8, ".plt_branch."))
+	  || (len > 8 + 13 && startswith (sym + 8, ".long_branch.")))
 	return true;
 
       /* The gdb server program contains special assembler stubs that
 	 are unannotated.  See BZ 1630564 for more details.  */
-      if (const_strneq (sym, "start_bcax_"))
+      if (startswith (sym, "start_bcax_"))
 	return true;
     }
 
@@ -4724,11 +4754,12 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "no compiled code found");
 	      else if (per_file.lto_used)
 		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -fstack-protector-strong option");
-	      else if (C_compiler_seen ())
-		/* The skip is necessary because some glibc code is built this way.  */
-		skip (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this feature");
-	      else
+	      else if (! C_compiler_seen ())
 		skip (data, i, SOURCE_FINAL_SCAN, "not compiled C/C++ code");
+	      else if (is_special_glibc_binary (data->full_filename))
+		skip (data, i, SOURCE_FINAL_SCAN, "glibc binaries do not use stack protection");
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this feature");
 	      break;
 	      
 	    case TEST_OPTIMIZATION:
@@ -5028,7 +5059,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
   if (arg[0] == '-')
     ++ arg;
   
-  if (const_strneq (arg, "skip-"))
+  if (startswith (arg, "skip-"))
     {
       arg += strlen ("skip-");
 
@@ -5063,7 +5094,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return true;
     }
 
-  if (const_strneq (arg, "test-"))
+  if (startswith (arg, "test-"))
     {
       arg += strlen ("test-");
 
@@ -5181,7 +5212,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
     }
 
   /* Accept both --profile-<name> and --profile=<name>.  */
-  if (const_strneq (arg, "profile"))
+  if (startswith (arg, "profile"))
     {
       arg += strlen ("profile-");
 
