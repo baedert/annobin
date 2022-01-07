@@ -1157,6 +1157,7 @@ is_special_glibc_binary (const char * path)
 	  "/lib/",
 	  "/lib64/",
 	  "/sbin/",
+	  "/usr/bin/",
 	  "/usr/lib/",
 	  "/usr/lib64/",
 	  "/usr/libexec/",
@@ -1190,6 +1191,7 @@ is_special_glibc_binary (const char * path)
     {
       /* NB/ Keep this array alpha sorted.  */
       "audit/sotruss-lib.so",
+      "build-locale-archive",
       "gconv/ANSI_X3.110.so",
       "gconv/CP1252.so",
       "gconv/ISO-8859-1_CP037_Z900.so",
@@ -1202,6 +1204,8 @@ is_special_glibc_binary (const char * path)
       "gconv/UTF16_UTF32_Z9.so",
       "gconv/UTF8_UTF16_Z9.so",
       "gconv/UTF8_UTF32_Z9.so",
+      "gencat",
+      "getconf",
       "getconf/POSIX_V6_ILP32_OFF32",
       "getconf/POSIX_V6_ILP32_OFFBIG",
       "getconf/POSIX_V6_LP64_OFF64",
@@ -1211,6 +1215,8 @@ is_special_glibc_binary (const char * path)
       "getconf/XBS5_ILP32_OFF32",
       "getconf/XBS5_ILP32_OFFBIG",
       "getconf/XBS5_LP64_OFF64",
+      "getent",
+      "iconv",
       "iconvconfig",
       "ld-2.33.so",
       "ld-linux-aarch64.so.1",
@@ -1231,7 +1237,14 @@ is_special_glibc_binary (const char * path)
       "libpcprofile.so",
       "libresolv.so.2",
       "librt.so.1",
-      "libthread_db.so.1"
+      "libthread_db.so.1",
+      "locale",
+      "localedef",
+      "makedb",
+      "pldd",
+      "sprof",
+      "zdump",
+      "zic"
     };
 
   for (i = ARRAY_SIZE (known_glibc_specials); i--;)
@@ -1640,28 +1653,23 @@ static char reason[1280]; /* FIXME: Use a dynamic buffer ? */
 static bool
 skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
 {
+  /* Save time by checking for any function that starts with __.  */
+  if (component_name[0] == '_' && component_name[1] == '_')
+    return true;
+
   const static char * non_fortify_funcs[] =
     {
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
       "_Unwind_Resume",
-      "__assert_fail_base.cold",     /* Found in libc.a(assert.o).  */
-      "__b64_ntop",  	             /* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
-      "__b64_pton",	             /* Found in ppc64le, RHEL-9, /lib64/libresolv.so.2.  */
-      "__ctype_get_mb_cur_max",
-      "__errno_location",
-      "__libc_init_first",
-      "__libc_start_call_main",	     /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
-      "__libc_start_main",
-      "__librt_version_placeholder", /* Found in ppc64le, RHEL-9, /lib64/librt.so.1.  */
-      "__run_exit_handlers",
-      "__td_ta_rtld_global",         /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
-      "__tls_get_offset",
       "_dl_start_user", 	     /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
       "_dl_tunable_set_arena_max",   /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
+      "_nl_finddomain_subfreeres",
+      "_nl_unload_domain",
       "_start",
       "abort",
       "blacklist_store_name",
+      "buffer_free",
       "call_fini",
       "check_one_fd",		     /* Found in libc.a(check_fds.o).  */
       "dlmopen_doit",                /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
@@ -2607,6 +2615,8 @@ build_note_checker (annocheck_data *     data,
 	    case 0xff:
 	      if (per_file.current_tool == TOOL_GIMPLE)
 		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
+	      else if (is_special_glibc_binary (data->full_filename))
+		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "glibc binaries are built without fortification");		
 	      else if (! skip_test_for_current_func (data, TEST_FORTIFY))
 		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-D_FORTIFY_SOURCE=2 was not present on the command line");
 	      break;
@@ -3405,6 +3415,8 @@ check_dynamic_section (annocheck_data *    data,
       else if (per_file.seen_tools & TOOL_GO)
 	/* FIXME: Should be changed once GO supports PIE & BIND_NOW.  */
 	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "binary was built by GO");
+      else if (is_special_glibc_binary (data->full_filename))
+	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "glibc binaries do not use bind-now");	       
       else
 	fail (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "not linked with -Wl,-z,now");
     }
