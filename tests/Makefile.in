@@ -476,14 +476,12 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-TESTS = abi-test active-checks-test active-checks-test \
-	assembler-gap-test atexit-test compile-test fortify-test \
-	function-sections-test gaps-test glibc-notes-test \
-	hardening-fail-test hardening-fail-test hardening-test \
+TESTS = abi-test active-checks-test assembler-gap-test atexit-test \
+	compile-test fortify-test function-sections-test gaps-test \
+	glibc-notes-test hardening-fail-test hardening-test \
 	instrumentation-test ldconfig-test lto-test missing-notes-test \
-	missing-notes-test objcopy-test property-note-test \
-	section-size-test stat-test unicode-test $(am__append_1) \
-	$(am__append_2)
+	objcopy-test property-note-test section-size-test stat-test \
+	unicode-test $(am__append_1) $(am__append_2)
 all: all-am
 
 .SUFFIXES:

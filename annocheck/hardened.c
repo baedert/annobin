@@ -263,7 +263,7 @@ static enum profile current_profile = PROFILE_NONE;
    The result field is initialised in the start() function.  */
 static test tests [TEST_MAX] =
 {
-  TEST (notes,              NOTES,              "Annobin note coverage"),
+  TEST (notes,              NOTES,              "Annobin note coverage (not ARM)"),
   TEST (bind-now,           BIND_NOW,           "Linked with -Wl,-z,now"),
   TEST (branch-protection,  BRANCH_PROTECTION,  "Compiled with -mbranch-protection=bti (AArch64 only, gcc 9+ only, Fedora"),
   TEST (not-branch-protection,  NOT_BRANCH_PROTECTION,  "Compiled without -mbranch-protection=bti (AArch64 only, gcc 9+ only, RHEL-9"),
@@ -280,9 +280,9 @@ static test tests [TEST_MAX] =
   TEST (lto,                LTO,                "Compiled with -flto"),
   TEST (only-go,            ONLY_GO,            "GO is not mixed with other languages.  (go only, x86 only)"),
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
-  TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or fPIE"),
+  TEST (pic,                PIC,                "All binaries must be compiled with -fPIC or -fPIE"),
   TEST (pie,                PIE,                "Executables need to be compiled with -fPIE"),
-  TEST (production,         PRODUCTION,         "Built by a production compiler"),
+  TEST (production,         PRODUCTION,         "Built by a production compiler, not an experimental one"),
   TEST (property-note,      PROPERTY_NOTE,      "Correctly formatted GNU Property notes"),
   TEST (run-path,           RUN_PATH,           "All runpath entries are secure"),
   TEST (rwx-seg,            RWX_SEG,            "There are no segments that are both writable and executable"),
@@ -4612,7 +4612,9 @@ finish (annocheck_data * data)
       annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, get_filename (data), data->dwarf_fd);
     }
 
-  if (! per_file.build_notes_seen && is_C_compiler (per_file.seen_tools))
+  if (! per_file.build_notes_seen
+      && per_file.e_machine != EM_ARM
+      && is_C_compiler (per_file.seen_tools))
     fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "annobin notes were not found");
 
   if (! ignore_gaps)
@@ -4625,6 +4627,11 @@ finish (annocheck_data * data)
       else if (per_file.seen_tools & TOOL_GO)
 	einfo (VERBOSE, "%s: skip: Not checking for gaps (binary at least created by GO)",
 	       get_filename (data));
+      else if (per_file.e_machine == EM_ARM)
+	/* The annobin plugin for gcc is not used when building ARM binaries
+	   because there is an outstanding BZ agains annobin and glibc:
+	   https://bugzilla.redhat.com/show_bug.cgi?id=1951492  */
+	einfo (VERBOSE, "%s: skip: Not checking for gaps (ARM binary)", get_filename (data));
       else
 	check_for_gaps (data);
     }
@@ -4658,12 +4665,14 @@ finish (annocheck_data * data)
 	    case TEST_LTO:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "at least part of the binary is compield GO");
+	      else if (! C_compiler_seen ())
+		skip (data, i, SOURCE_FINAL_SCAN, "not compiled C/C++ code");
+	      else if (per_file.e_machine == EM_ARM)
+		skip (data, i, SOURCE_FINAL_SCAN, "ARM binaries are built without annobin annotation");
 	      else if (is_special_glibc_binary (data->full_filename))
 		skip (data, i, SOURCE_FINAL_SCAN, "glibc binaries not compiled with LTO");
-	      else if (C_compiler_seen ())
-		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      else
-		skip (data, i, SOURCE_FINAL_SCAN, "not compiled C/C++ code");
+		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      break;
 	      
 	    case TEST_PRODUCTION:
@@ -4757,10 +4766,12 @@ finish (annocheck_data * data)
 	    case TEST_PIC:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support a -fPIC option");
-	      else if (C_compiler_seen ())
-		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
-	      else
+	      else if (! C_compiler_seen ())
 		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
+	      else if (per_file.e_machine == EM_ARM)
+		skip (data, i, SOURCE_FINAL_SCAN, "ARM binaries are built without annobin annotation");
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      break;
 
 	    case TEST_STACK_PROT:
@@ -4775,6 +4786,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "not compiled C/C++ code");
 	      else if (is_special_glibc_binary (data->full_filename))
 		skip (data, i, SOURCE_FINAL_SCAN, "glibc binaries do not use stack protection");
+	      else if (per_file.e_machine == EM_ARM)
+		skip (data, i, SOURCE_FINAL_SCAN, "ARM binaries are built without annobin annotation");
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this feature");
 	      break;
@@ -4782,10 +4795,12 @@ finish (annocheck_data * data)
 	    case TEST_OPTIMIZATION:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO optimized by default");
-	      else if (C_compiler_seen ())
-		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
-	      else
+	      else if (per_file.e_machine == EM_ARM)
+		skip (data, i, SOURCE_FINAL_SCAN, "ARM binaries are built without annobin annotation");
+	      else if (! C_compiler_seen ())
 		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
+	      else
+		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      break;
 
 	    case TEST_STACK_CLASH:

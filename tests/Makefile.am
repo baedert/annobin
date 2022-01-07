@@ -9,7 +9,6 @@
 TESTS=\
       abi-test \
       active-checks-test \
-      active-checks-test \
       assembler-gap-test \
       atexit-test \
       compile-test \
@@ -18,12 +17,10 @@ TESTS=\
       gaps-test \
       glibc-notes-test \
       hardening-fail-test \
-      hardening-fail-test \
       hardening-test \
       instrumentation-test \
       ldconfig-test \
       lto-test \
-      missing-notes-test \
       missing-notes-test \
       objcopy-test \
       property-note-test \

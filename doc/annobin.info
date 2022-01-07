@@ -961,17 +961,16 @@ support CET then it must be disabled for the entire process.
 
    In order to enforce this the compiler inserts a special note into
 compiled object files (the .note.gnu.property section referred to
-above).  This note actually contains more information about the binary
-than just the presence (or absence) of CET support.  It also includes
-details of the minimum x86 architecture revision needed and so on.
+above).  The note indicates that CET is supported, as well as details of
+the minimum x86 architecture revision needed and so on.
 
    Then when the object files are linked together to create the
 executable the linker checks all of these notes, and if any object file
-or library is missing a note then it does not create a note in the
-output executable.  Or if all of the object files (and libraries of
+or library is missing one then it does not put a note in the output
+executable.  Alternatively if all of the object files (and libraries of
 course) do have notes, but one or more of them do not have the
-CET-is-enabled flag, then it copies the notes into the executable, but
-always clears the CET-is-enabled flag.
+CET-is-enabled flag, then the linker copies the notes into the
+executable, but always clears the CET-is-enabled flag.
 
    Finally when a program is executed the run-time loader checks this
 note and if the CET-is-enabled flag is present then it enables the CET
@@ -987,9 +986,9 @@ indirect branch or function call can land must now have either ENDBR64
 (for 64-bit assembler) or ENDBR32 (for 32-bit assembler) as the first
 instruction executed.
 
-   In addition the assembler needs a note to indicate that it supports
-now CET. This note can be added via including this code snippet in the
-sources:
+   In addition the assembler needs a note to indicate that it now
+supports CET. This note can be added via including this code snippet in
+the sources:
 
      	.section	.note.gnu.property,"a"
      	.align 8
@@ -3486,61 +3485,61 @@ Node: Hardened27238
 Node: Test bind now31017
 Node: Test branch protection32657
 Node: Test cf protection34911
-Node: Test dynamic segment39086
-Node: Test dynamic tags40217
-Node: Test entry42566
-Node: Test fortify43461
-Node: Test glibcxx assertions44974
-Node: Test gnu relro46012
-Node: Test gnu stack47746
-Node: Test go revision50143
-Node: Test instrumentation51191
-Node: Test lto51926
-Node: Test not branch protection52832
-Node: Test not dynamic tags54414
-Node: Test notes56102
-Node: Test only go58385
-Node: Test optimization59536
-Node: Test pic60911
-Node: Test pie62456
-Node: Test production63744
-Node: Test property note64557
-Node: Test run path67034
-Node: Test rwx seg69255
-Node: Test short enums70527
-Node: Test stack clash71544
-Node: Test stack prot73005
-Node: Test stack realign74337
-Node: Test textrel75607
-Node: Test threads76864
-Node: Test unicode77679
-Node: Test warnings79170
-Node: Test writable got80005
-Node: Hardened Command Line Options81291
-Node: Waiving Hardened Results86731
-Node: Notes88125
-Node: Size88761
-Node: Timing90904
-Node: Libannocheck91543
-Node: libannocheck_init93482
-Node: libannocheck_finish94404
-Node: libannocheck_get_version94952
-Node: libannocheck_get_error_message95361
-Node: libannocheck_get_known_tests96001
-Node: libannocheck_enable_all_tests97167
-Node: libannocheck_disable_all_tests97646
-Node: libannocheck_enable_test98202
-Node: libannocheck_disable_test98870
-Node: libannocheck_enable_profile99539
-Node: libannocheck_get_known_profiles100061
-Node: libannocheck_run_tests100764
-Node: Configure Options101609
-Node: Legacy Scripts103951
-Node: Who Built Me104726
-Node: ABI Checking107486
-Node: Hardening Checks109602
-Node: Checking Archives113688
-Node: GNU FDL116109
+Node: Test dynamic segment39020
+Node: Test dynamic tags40151
+Node: Test entry42500
+Node: Test fortify43395
+Node: Test glibcxx assertions44908
+Node: Test gnu relro45946
+Node: Test gnu stack47680
+Node: Test go revision50077
+Node: Test instrumentation51125
+Node: Test lto51860
+Node: Test not branch protection52766
+Node: Test not dynamic tags54348
+Node: Test notes56036
+Node: Test only go58319
+Node: Test optimization59470
+Node: Test pic60845
+Node: Test pie62390
+Node: Test production63678
+Node: Test property note64491
+Node: Test run path66968
+Node: Test rwx seg69189
+Node: Test short enums70461
+Node: Test stack clash71478
+Node: Test stack prot72939
+Node: Test stack realign74271
+Node: Test textrel75541
+Node: Test threads76798
+Node: Test unicode77613
+Node: Test warnings79104
+Node: Test writable got79939
+Node: Hardened Command Line Options81225
+Node: Waiving Hardened Results86665
+Node: Notes88059
+Node: Size88695
+Node: Timing90838
+Node: Libannocheck91477
+Node: libannocheck_init93416
+Node: libannocheck_finish94338
+Node: libannocheck_get_version94886
+Node: libannocheck_get_error_message95295
+Node: libannocheck_get_known_tests95935
+Node: libannocheck_enable_all_tests97101
+Node: libannocheck_disable_all_tests97580
+Node: libannocheck_enable_test98136
+Node: libannocheck_disable_test98804
+Node: libannocheck_enable_profile99473
+Node: libannocheck_get_known_profiles99995
+Node: libannocheck_run_tests100698
+Node: Configure Options101543
+Node: Legacy Scripts103885
+Node: Who Built Me104660
+Node: ABI Checking107420
+Node: Hardening Checks109536
+Node: Checking Archives113622
+Node: GNU FDL116043
 
 End Tag Table
 

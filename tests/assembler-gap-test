@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2018-2021 Red Hat.
+# Copyright (c) 2018-2022 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -46,10 +46,11 @@ $GCC -nostartfiles -e 0 hello.o hello2.o gap1.o hello3.o -o assembler-gap-test1.
 $ANNOCHECK -v assembler-gap-test1.exe > assembler-gap-test1.out
 
 # FAIL if a gap is NOT reported
-grep --silent -e "gaps were detected" -e "because not all of the .text section is covered by notes" assembler-gap-test1.out
+# The "Not check for gaps" match is for the ARM where annobin notes are not expected.
+grep --silent -e "gaps were detected" -e "because not all of the .text section is covered by notes" -e "Not checking for gaps" assembler-gap-test1.out
 if [ $? != 0 ];
 then
-    echo "assembler-gap-test: FAIL: GAP *not* found in notes:"
+    echo "  $TEST_NAME: FAIL: GAP *not* found in notes:"
     cat assembler-gap-test1.out
     $ANNOCHECK --disable-hardened --enable-notes assembler-gap-test1.exe
     exit 1
@@ -61,7 +62,7 @@ fi
 $GAS --generate-missing-build-notes=yes $srcdir/gap.S -o gap2.o
 if [ $? != 0 ];
 then
-    echo "Assembler does not support generating build notes.  Skipping test."
+    echo "  $TEST_NAME: Assembler does not support generating build notes.  Skipping test."
     exit 0
 fi
 
@@ -72,10 +73,10 @@ $GCC -nostartfiles -e 0 hello.o hello2.o gap2.o hello3.o -o assembler-gap-test2.
 $ANNOCHECK -v assembler-gap-test2.exe --skip-all --test-notes > assembler-gap-test2.out
 
 # FAIL if a gap is NOT reported
-grep --silent -e "no gaps found" assembler-gap-test2.out
+grep --silent -e "no gaps found" -e "Not checking for gaps" assembler-gap-test2.out
 if [ $? != 0 ];
 then
-    echo "assembler-gap-test: FAIL: GAP found in notes (with assembler auto-covered):"
+    echo "  $TEST_NAME: FAIL: GAP found in notes (with assembler auto-covered):"
     cat assembler-gap-test2.out
     $ANNOCHECK --disable-hardened --enable-notes assembler-gap-test2.exe
     objdump -d assembler-gap-test2.exe

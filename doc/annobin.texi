@@ -1072,17 +1072,16 @@ not support CET then it must be disabled for the entire process.
 
 In order to enforce this the compiler inserts a special note into
 compiled object files (the .note.gnu.property section referred to
-above).  This note actually contains more information about the binary
-than just the presence (or absence) of CET support.  It also includes
-details of the minimum x86 architecture revision needed and so on.
+above).  The note indicates that CET is supported, as well as details
+of the minimum x86 architecture revision needed and so on.
 
 Then when the object files are linked together to create the
 executable the linker checks all of these notes, and if any object
-file or library is missing a note then it does not create a note in
-the output executable.  Or if all of the object files (and libraries
-of course) do have notes, but one or more of them do not have the
-CET-is-enabled flag, then it copies the notes into the executable, but
-always clears the CET-is-enabled flag.
+file or library is missing one then it does not put a note in
+the output executable.  Alternatively if all of the object files (and
+libraries of course) do have notes, but one or more of them do not
+have the CET-is-enabled flag, then the linker copies the notes into
+the executable, but always clears the CET-is-enabled flag.
 
 Finally when a program is executed the run-time loader checks this note
 and if the CET-is-enabled flag is present then it enables the CET
@@ -1099,8 +1098,8 @@ indirect branch or function call can land must now have either
 @var{ENDBR64} (for 64-bit assembler) or @var{ENDBR32} (for 32-bit
 assembler) as the first instruction executed.
 
-In addition the assembler needs a note to indicate that it supports
-now CET.  This note can be added via including this code snippet in the
+In addition the assembler needs a note to indicate that it now supports
+CET.  This note can be added via including this code snippet in the
 sources: 
 
 @smallexample
