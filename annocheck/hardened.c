@@ -216,6 +216,7 @@ enum test_index
   TEST_GNU_RELRO,
   TEST_GNU_STACK,
   TEST_GO_REVISION,
+  TEST_INSTRUMENTATION,
   TEST_LTO,
   TEST_ONLY_GO,
   TEST_OPTIMIZATION,
@@ -277,6 +278,7 @@ static test tests [TEST_MAX] =
   TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writable"),
   TEST (gnu-stack,          GNU_STACK,          "The stack is not executable"),
   TEST (go-revision,        GO_REVISION,        MIN_GO_REV_STR ("GO compiler revision >= ", MIN_GO_REVISION, " (go only)")),
+  TEST (instrumentation,    INSTRUMENTATION,    "Compiled without code instrumentation"),
   TEST (lto,                LTO,                "Compiled with -flto"),
   TEST (only-go,            ONLY_GO,            "GO is not mixed with other languages.  (go only, x86 only)"),
   TEST (optimization,       OPTIMIZATION,       "Compiled with at least -O2"),
@@ -2762,6 +2764,9 @@ build_note_checker (annocheck_data *     data,
     case 'I':
       if (startswith (attr, "INSTRUMENT:"))
 	{
+	  if (skip_test (TEST_INSTRUMENTATION))
+	    break;
+
 	  if (! per_file.warned_about_instrumentation)
 	    {
 	      einfo (INFO, "%s: WARN: (%s): Instrumentation enabled - this is probably a mistake for production binaries",
@@ -4687,6 +4692,7 @@ finish (annocheck_data * data)
 		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      break;
 	      
+	    case TEST_INSTRUMENTATION:
 	    case TEST_PRODUCTION:
 	    case TEST_NOTES:
 	    case TEST_ENTRY:
@@ -4979,7 +4985,7 @@ static const struct profiles
   profiles [PROFILE_MAX] =
 {
   [ PROFILE_EL7 ] = { "el7",
-		      { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_PIE, TEST_BIND_NOW, TEST_FORTIFY, TEST_STACK_CLASH, TEST_LTO },
+		      { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_PIE, TEST_BIND_NOW, TEST_FORTIFY, TEST_STACK_CLASH, TEST_LTO, TEST_ENTRY, TEST_PROPERTY_NOTE, TEST_CF_PROTECTION },
 		      { TEST_NOT_BRANCH_PROTECTION, TEST_NOT_DYNAMIC_TAGS } },
   [ PROFILE_EL8 ] = { "el8",
 		      { TEST_BRANCH_PROTECTION, TEST_DYNAMIC_TAGS, TEST_LTO },

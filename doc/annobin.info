@@ -3,7 +3,7 @@ annobin.texi.
 
 This file documents the annobin plugin on the Fedora system.
 
-   Copyright (C) 2018 - 2021 Red Hat.
+   Copyright (C) 2018 - 2022 Red Hat.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -1290,7 +1290,9 @@ options have been used when the binary built.  These options are:
 '_fsanitize', '-finstrument-functions', '-p', '-pg', and
 '-fprofile-arcs'.
 
-   There is no way to disable this test.
+   If necessary the test can be disabled via the
+'--skip-instrumentation' option and re-enabled via the
+'--test-instrumentation' option.
 
 
 File: annobin.info,  Node: Test lto,  Next: Test not branch protection,  Prev: Test instrumentation,  Up: Hardened
@@ -3494,52 +3496,52 @@ Node: Test gnu relro45946
 Node: Test gnu stack47680
 Node: Test go revision50077
 Node: Test instrumentation51125
-Node: Test lto51860
-Node: Test not branch protection52766
-Node: Test not dynamic tags54348
-Node: Test notes56036
-Node: Test only go58319
-Node: Test optimization59470
-Node: Test pic60845
-Node: Test pie62390
-Node: Test production63678
-Node: Test property note64491
-Node: Test run path66968
-Node: Test rwx seg69189
-Node: Test short enums70461
-Node: Test stack clash71478
-Node: Test stack prot72939
-Node: Test stack realign74271
-Node: Test textrel75541
-Node: Test threads76798
-Node: Test unicode77613
-Node: Test warnings79104
-Node: Test writable got79939
-Node: Hardened Command Line Options81225
-Node: Waiving Hardened Results86665
-Node: Notes88059
-Node: Size88695
-Node: Timing90838
-Node: Libannocheck91477
-Node: libannocheck_init93416
-Node: libannocheck_finish94338
-Node: libannocheck_get_version94886
-Node: libannocheck_get_error_message95295
-Node: libannocheck_get_known_tests95935
-Node: libannocheck_enable_all_tests97101
-Node: libannocheck_disable_all_tests97580
-Node: libannocheck_enable_test98136
-Node: libannocheck_disable_test98804
-Node: libannocheck_enable_profile99473
-Node: libannocheck_get_known_profiles99995
-Node: libannocheck_run_tests100698
-Node: Configure Options101543
-Node: Legacy Scripts103885
-Node: Who Built Me104660
-Node: ABI Checking107420
-Node: Hardening Checks109536
-Node: Checking Archives113622
-Node: GNU FDL116043
+Node: Test lto51956
+Node: Test not branch protection52862
+Node: Test not dynamic tags54444
+Node: Test notes56132
+Node: Test only go58415
+Node: Test optimization59566
+Node: Test pic60941
+Node: Test pie62486
+Node: Test production63774
+Node: Test property note64587
+Node: Test run path67064
+Node: Test rwx seg69285
+Node: Test short enums70557
+Node: Test stack clash71574
+Node: Test stack prot73035
+Node: Test stack realign74367
+Node: Test textrel75637
+Node: Test threads76894
+Node: Test unicode77709
+Node: Test warnings79200
+Node: Test writable got80035
+Node: Hardened Command Line Options81321
+Node: Waiving Hardened Results86761
+Node: Notes88155
+Node: Size88791
+Node: Timing90934
+Node: Libannocheck91573
+Node: libannocheck_init93512
+Node: libannocheck_finish94434
+Node: libannocheck_get_version94982
+Node: libannocheck_get_error_message95391
+Node: libannocheck_get_known_tests96031
+Node: libannocheck_enable_all_tests97197
+Node: libannocheck_disable_all_tests97676
+Node: libannocheck_enable_test98232
+Node: libannocheck_disable_test98900
+Node: libannocheck_enable_profile99569
+Node: libannocheck_get_known_profiles100091
+Node: libannocheck_run_tests100794
+Node: Configure Options101639
+Node: Legacy Scripts103981
+Node: Who Built Me104756
+Node: ABI Checking107516
+Node: Hardening Checks109632
+Node: Checking Archives113718
+Node: GNU FDL116139
 
 End Tag Table
 

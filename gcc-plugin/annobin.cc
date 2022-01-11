@@ -1,5 +1,5 @@
 /* annobin - a gcc plugin for annotating binary files.
-   Copyright (c) 2017 - 2021 Red Hat.
+   Copyright (c) 2017 - 2022 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -716,7 +716,12 @@ annobin_get_int_option_by_index (int cl_option_index)
 #if GCCPLUGIN_VERSION_MAJOR >= 9
     case CLVC_SIZE:
 #endif
+#if GCCPLUGIN_VERSION_MAJOR >= 12
+    case CLVC_BIT_SET:
+    case CLVC_BIT_CLEAR:
+#else
     case CLVC_BOOLEAN:
+#endif
       if (flag == NULL)
 	return 0;
       if (option->cl_host_wide_int)
@@ -2489,6 +2494,7 @@ annobin_emit_end_symbol (const char * suffix)
      FIXME: As of GCC 10 we cannot do this with LTO compilation as we have
      had to place the end symbol into a different section.  */
   if (target_start_sym_bias
+      && ! enable_ppc64_nops
 #if GCCPLUGIN_VERSION_MAJOR >= 10
       && ! in_lto ()
 #endif
@@ -2771,6 +2777,9 @@ plugin_init (struct plugin_name_args *    plugin_info,
 #if GCCPLUGIN_VERSION_MAJOR >= 11
       if (target_start_sym_bias == 0)
 	annobin_attach_type = link_order;
+#endif
+#if GCCPLUGIN_VERSION_MAJOR >= 12
+      annobin_attach_type = link_order;
 #endif
     }
   annobin_inform (INFORM_VERBOSE, "Attach mode: %s", attach_mode_name (annobin_attach_type));

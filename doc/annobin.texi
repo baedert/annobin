@@ -1,13 +1,13 @@
 \input texinfo @c -*-texinfo-*-
 @setfilename annobin.info
-@c Copyright (C) 2018-2021 Red Hat.
+@c Copyright (C) 2018-2022 Red Hat.
 @settitle Annobin
 @setchapternewpage odd
 
 @c man begin INCLUDE
 @set VERSION 10.0
 @set VERSION_PACKAGE (Annobin) 
-@set UPDATED September 2021
+@set UPDATED January 2022
 @c man end
 
 @ifnottex
@@ -23,7 +23,7 @@
 This file documents the annobin plugin on the Fedora system.
 
 @c man begin COPYRIGHT
-Copyright @copyright{} 2018 - 2021 Red Hat.
+Copyright @copyright{} 2018 - 2022 Red Hat.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -54,7 +54,7 @@ This manual describes the @sc{annobin} plugin and the
 what security features were used when a program was built. 
 
 @vskip 0pt plus 1filll
-Copyright @copyright{} 2018 - 2021 Red Hat
+Copyright @copyright{} 2018 - 2022 Red Hat
 
       Permission is granted to copy, distribute and/or modify this document
       under the terms of the GNU Free Documentation License, Version 1.3
@@ -1413,7 +1413,9 @@ options have been used when the binary built.  These options are:
 @option{_fsanitize}, @option{-finstrument-functions}, @option{-p},
 @option{-pg}, and @option{-fprofile-arcs}.
 
-There is no way to disable this test.
+If necessary the test can be disabled via the
+@option{--skip-instrumentation} option and re-enabled via the
+@option{--test-instrumentation} option. 
 
 @c -----------------------------------------------------------------
 @node Test lto

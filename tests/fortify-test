@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (c) 2021 Red Hat.
+# Copyright (c) 2021-2022 Red Hat.
 #
 # This is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published
@@ -37,30 +37,43 @@ fi
 # Now add in our newly built plugin.
 OPTS+=" -fplugin=$PLUGIN"
 
+# For debugging purposes, generate a linker map as well.
+OPTS+=" -Wl,-Map,fortify-test.map"
+
+# Next, turn off fortification."
+OPTS+=" -Wp,-U_FORTIFY_SOURCE"
+
+# And because LTO obscures fortification, turn that off too.
+OPTS+=" -fno-lto"
+
 start_test
 
-$GCC $OPTS -Wp,-U_FORTIFY_SOURCE -fno-lto $srcdir/main.c -o main.exe
+# Use atexit.c rather than main.c as it is bigger.
+COMMAND="$GCC $OPTS $srcdir/atexit.c -o fortify-test.exe"
+$COMMAND
 if [ $? != 0 ];
 then
     echo " $TEST_NAME: FAIL: unable to compile test file"
-    echo " $TEST_NAME: compile command: $GCC $OPTS -Wp,-U_FORTIFY_SOURCE -fno-lto $srcdir/main.c -o main.exe"
+    echo " $TEST_NAME: command: $COMMAND"
     end_test
     exit 1
 fi
 
 # Run annocheck
 
-SKIPS="--skip-cf-protection --skip-property-note --skip-stack-realign --skip-entry --skip-dynamic-tags --skip-lto --skip-warnings --skip-dynamic-tags --skip-not-dynamic-tags --skip-branch-protection --skip-not-branch-protection"
-$ANNOCHECK main.exe $SKIPS > main.out
-grep -e "Overall: FAIL" main.out
+SKIPS="--skip-all --test-fortify"
+A_COMMAND="$ANNOCHECK fortify-test.exe $SKIPS"
+$A_COMMAND > fortify-test.out
+grep -e "Overall: FAIL" fortify-test.out
 if [ $? != 0 ];
 then
     echo " $TEST_NAME: FAIL: compiling with -D_FORTIFY_SOURCE=2 still produces an executable that passes annocheck"
-    echo " $TEST_NAME: compile command: $GCC $OPTS -Wp,-U_FORTIFY_SOURCE -fno-lto $srcdir/main.c -o main.exe"
-    echo " $TEST_NAME: annocheck command: $ANNOCHECK main.exe $SKIPS"
+    echo " $TEST_NAME: compile command: $COMMAND"
+    echo " $TEST_NAME: annocheck command: $A_COMMAND"
     echo " $TEST_NAME: annocheck output (with verbose enabled):"
-    $ANNOCHECK main.exe $SKIPS --verbose
-    uuencode main.exe main.exe
+    $A_COMMAND --verbose
+    uuencode fortify-test.exe fortify-test.exe
+    uuencode fortify-test.map fortify-test.map
     end_test
     exit 1
 fi
