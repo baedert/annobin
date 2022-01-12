@@ -159,6 +159,7 @@ static struct per_file
   bool	      has_program_interpreter;
   bool	      has_dt_debug;
   bool        has_cf_protection;
+  bool        has_property_note;
   bool        has_modinfo;
   bool        has_gnu_linkonce_this_module;
   bool        lto_used;
@@ -3144,8 +3145,7 @@ property_note_checker (annocheck_data *     data,
 
   /* Do not complain about a missing CET note yet - there may be a .note.go.buildid
      to follow, which would explain why the CET note is missing.  */
-    
-  pass (data, TEST_PROPERTY_NOTE, SOURCE_PROPERTY_NOTES, NULL);
+  per_file.has_property_note = true;
   return true;
 
  fail:
@@ -4848,13 +4848,29 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed in object files");
 	      else if (per_file.current_tool == TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed for GO binaries");
+	      else if (per_file.seen_tools & TOOL_RUST)
+		skip (data, i, SOURCE_FINAL_SCAN, "property notes are not currently supported by Rust binaries");
 	      else if (per_file.e_machine == EM_AARCH64)
 		{
 		  if (tests[TEST_BRANCH_PROTECTION].enabled)
 		    fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section not found (it is needed for branch protection support)");
 		  else
-		    skip (data, i, SOURCE_FINAL_SCAN, "test only useful if branch protection is being checked");
+		    pass (data, i, SOURCE_FINAL_SCAN, "the AArch64 property note is only useful if branch protection is being checked");
 		}
+	      else if (is_x86 ())
+		{
+		  if (per_file.has_cf_protection)
+		    pass (data, i, SOURCE_FINAL_SCAN, "CET enabled property note found");
+		  else if (per_file.has_property_note)
+		    {
+		      if (tests[TEST_CF_PROTECTION].enabled)
+			fail (data, i, SOURCE_FINAL_SCAN, "a property note was found but it shows that cf-protection is not enabled");
+		      else
+			pass (data, i, SOURCE_FINAL_SCAN, "a property note was found.  (Not CET enabled, but this is not being checked)");
+		    }
+		}
+	      else if (per_file.has_property_note)
+		pass (data, i, SOURCE_FINAL_SCAN, "propertu note found");
 	      else
 		fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section found");
 	      break;
@@ -4866,19 +4882,19 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "not an x86 executable");
 	      else if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "control flow protection is not needed for GO binaries");
+	      else if (per_file.seen_tools & TOOL_RUST)
+		skip (data, i, SOURCE_FINAL_SCAN, "control flow protection is not currently supported by Rust binaries");
+	      else if (! per_file.has_cf_protection)
+		fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the necessary flags");
 	      else if (tests[TEST_PROPERTY_NOTE].enabled)
 		{
 		  if (tests[TEST_PROPERTY_NOTE].state == STATE_UNTESTED)
 		    fail (data, i, SOURCE_FINAL_SCAN, "no .note.gnu.property section = no control flow information");
 		  else if (tests[TEST_PROPERTY_NOTE].state != STATE_PASSED)
 		    fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the expected notes");
-		  else if (! per_file.has_cf_protection)
-		    fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section did not contain the necessary flags");
 		  else
 		    pass (data, i, SOURCE_FINAL_SCAN, "control flow information is correct");
 		}
-	      else if (per_file.lto_used)
-		skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -fcf-protection option");
 	      else
 		fail (data, i, SOURCE_FINAL_SCAN, "control flow protection is not enabled");
 	      break;
