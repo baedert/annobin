@@ -2769,17 +2769,15 @@ plugin_init (struct plugin_name_args *    plugin_info,
     {
       /* Choose a default attachment type.  Link ordering is preferable
 	 as it is more resistant to changes in compiler section building.
-	 But it can only be used if the target assembler supports link_order sections.
-	 For now we use a test of the GCC version as an approximation to the GAS
-	 version that is needed.  See BZ 2016458 for an example of where this
-	 solution is needed.  */
-      annobin_attach_type = group;
-#if GCCPLUGIN_VERSION_MAJOR >= 11
-      if (target_start_sym_bias == 0)
-	annobin_attach_type = link_order;
-#endif
+	 But it can only be used if the target assembler supports link_order sections
+	 and the target linker is sufficiently new that it implements them correctly.
+	 For now we use a test of the GCC version as an approximation to the binutils
+	 versions that are needed.  (Note - 2.35.2, as used by RHEL-9, is insufficient).
+	 See BZ 2016458 for an example of where this solution is needed.  */
 #if GCCPLUGIN_VERSION_MAJOR >= 12
       annobin_attach_type = link_order;
+#else
+      annobin_attach_type = group;
 #endif
     }
   annobin_inform (INFORM_VERBOSE, "Attach mode: %s", attach_mode_name (annobin_attach_type));

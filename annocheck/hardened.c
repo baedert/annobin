@@ -116,7 +116,7 @@ static struct per_file
   Elf64_Half  e_machine;
   Elf64_Addr  e_entry;
 
-  ulong       text_section_name_index;  
+  ulong       text_section_name_index;
   ulong       text_section_alignment;
   note_range  text_section_range;
 
@@ -162,6 +162,9 @@ static struct per_file
   bool        has_property_note;
   bool        has_modinfo;
   bool        has_gnu_linkonce_this_module;
+  bool        has_dynamic_segment;
+  bool        has_module_license;
+  bool        has_modname;
   bool        lto_used;
 } per_file;
 
@@ -203,7 +206,7 @@ typedef struct test
 enum test_index
 {
   TEST_NOTES = 0,
-  
+
   TEST_BIND_NOW,
   TEST_BRANCH_PROTECTION,
   TEST_NOT_BRANCH_PROTECTION,
@@ -428,7 +431,7 @@ sanitize_filename (const char * name)
     *p++ = iscntrl (*n) ? ' ' : *n;
 
   *p = 0;
-  return new_name;  
+  return new_name;
 }
 
 static void
@@ -486,10 +489,10 @@ skip (annocheck_data * data, uint testnum, const char * source, const char * rea
 
   if (tests[testnum].state == STATE_UNTESTED)
     tests[testnum].state = STATE_MAYBE; /* FIXME - this is to stop final() from complaining that the test was not seen.  Maybe use a new state ?  */
-  
+
   if (tests[testnum].skipped)
     return;
-  
+
   tests[testnum].skipped = true;
 
   if (fixed_format_messages)
@@ -755,7 +758,7 @@ add_producer (annocheck_data *  data,
       else
 	pass (data, TEST_GO_REVISION, source, "GO compiler revision is sufficient");
     }
-  
+
   if (update_current_tool)
     {
       per_file.current_tool = tool;
@@ -776,7 +779,7 @@ add_producer (annocheck_data *  data,
 	}
 
       if (tool == TOOL_GCC) /* FIXME: Update this if glibc ever starts using clang.  */
-	per_file.gcc_from_comment = streq (source, COMMENT_SECTION);      
+	per_file.gcc_from_comment = streq (source, COMMENT_SECTION);
     }
   else if (per_file.seen_tools & tool)
     {
@@ -846,7 +849,7 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
       warn (data, "Unable to parse DW_AT_language attribute");
       return;
     }
-  
+
   switch (val)
     {
     case DW_LANG_C89:
@@ -882,7 +885,7 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
       /* Some of the GO runtime uses this value,  */
       set_lang (data, LANG_ASSEMBLER, SOURCE_DW_AT_LANGUAGE);
       break;
-      
+
     default:
       if (! per_file.other_language)
 	{
@@ -944,7 +947,16 @@ is_kernel_module (annocheck_data * data)
     && per_file.has_modinfo
     && per_file.has_gnu_linkonce_this_module;
 }
-  
+
+static bool
+is_grub_module (annocheck_data * data)
+{
+  return elf_kind (data->elf) == ELF_K_ELF
+    && per_file.e_type == ET_REL
+    && per_file.has_module_license
+    && per_file.has_modname;
+}
+
 static inline bool
 skip_test (enum test_index check)
 {
@@ -1129,7 +1141,7 @@ dwarf_attribute_checker (annocheck_data *  data,
 
   if (dwarf_attr (die, DW_AT_language, & attr) != NULL)
     parse_dw_at_language (data, & attr);
-  
+
   if (dwarf_attr (die, DW_AT_producer, & attr) != NULL)
     parse_dw_at_producer (data, & attr);
 
@@ -1375,7 +1387,7 @@ start (annocheck_data * data)
     fail (data, TEST_PIE, SOURCE_ELF_HEADER, "not built with '-Wl,-pie' (gcc/clang) or '-buildmode pie' (go)");
   else
     pass (data, TEST_PIE, SOURCE_ELF_HEADER, NULL);
-    
+
   /* Check to see which tool(s) produced this binary.  */
   (void) annocheck_walk_dwarf (data, dwarf_attribute_checker, NULL);
 
@@ -1411,7 +1423,7 @@ interesting_sec (annocheck_data *     data,
 
   if (tests[TEST_UNICODE].enabled
       && (sec->shdr.sh_type == SHT_SYMTAB
-	  || sec->shdr.sh_type == SHT_DYNSYM))	  
+	  || sec->shdr.sh_type == SHT_DYNSYM))
     return true;
 
   if (per_file.debuginfo_file)
@@ -1454,7 +1466,13 @@ interesting_sec (annocheck_data *     data,
 
   if (streq (sec->secname, ".gnu.linkonce.this_module"))
     per_file.has_gnu_linkonce_this_module = true;
-  
+
+  if (streq (sec->secname, ".module_license"))
+    per_file.has_module_license = true;
+
+  if (streq (sec->secname, ".modname"))
+    per_file.has_modname = true;
+
   if (is_object_file () && streq (sec->secname, ".note.GNU-stack"))
     {
       /* The permissions of the .note-GNU-stack section are used to set the permissions of the GNU_STACK segment,
@@ -1684,7 +1702,6 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
       "td_init",	             /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
       "unlink_blk" 	             /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
     };
-  
 
   if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
     {
@@ -1758,7 +1775,7 @@ skip_stack_checks_for_function (annocheck_data * data, enum test_index check, co
       "_start",
       "check_match", 	/* Found in AArch64, RHEL-8, /lib64/ld-2.28.so.  */
       "check_one_fd",
-      "dlmopen_doit", 
+      "dlmopen_doit",
       "get_common_indices.constprop.0",
       "is_dst",
       "notify_audit_modules_of_loaded_object",
@@ -1823,7 +1840,7 @@ skip_test_for_current_func (annocheck_data * data, enum test_index check)
 	case TEST_FORTIFY:
 	case TEST_STACK_CLASH:
 	case TEST_STACK_PROT:
-	  sprintf (reason, "code at %#lx is a part of an ifunc", per_file.note_data.start); 
+	  sprintf (reason, "code at %#lx is a part of an ifunc", per_file.note_data.start);
 	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
 	  return true;
 	default:
@@ -1837,7 +1854,7 @@ skip_test_for_current_func (annocheck_data * data, enum test_index check)
       skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
       return true;
     }
-  
+
   const char * component_name = per_file.component_name;
 
   if (component_name == NULL)
@@ -1866,7 +1883,7 @@ function %s is part of the C library's startup code, which executes before a sec
     case TEST_PIC:
     case TEST_PIE:
       return skip_pic_checks_for_function (data, check, component_name);
-      
+
     case TEST_FORTIFY:
       return skip_fortify_checks_for_function (data, check, component_name);
 
@@ -2004,7 +2021,7 @@ build_note_checker (annocheck_data *     data,
 
   if (name_offset >= sec->data->d_size)
     goto corrupt_note;
-  
+
   const char *  namedata = sec->data->d_buf + name_offset;
   uint          bytes_left = sec->data->d_size - name_offset;
 
@@ -2014,7 +2031,7 @@ build_note_checker (annocheck_data *     data,
   uint pos = (namedata[0] == 'G' ? 3 : 1);
   if (pos > bytes_left)
     goto corrupt_note;
-  
+
   char          attr_type = namedata[pos - 1];
   const char *  attr = namedata + pos;
 
@@ -2090,7 +2107,7 @@ build_note_checker (annocheck_data *     data,
 
   einfo (VERBOSE2, "process %s note for range at %#lx..%#lx",
 	 note_name (attr), note_data->start, note_data->end);
-  
+
   switch (* attr)
     {
     case GNU_BUILD_ATTRIBUTE_VERSION:
@@ -2530,7 +2547,7 @@ build_note_checker (annocheck_data *     data,
 
 	  if (skip_test (TEST_CF_PROTECTION))
 	    break;
-	  
+
 	  /* Note - the annobin plugin adds one to the value of gcc's flag_cf_protection,
 	     thus a setting of CF_FULL (3) is actually recorded as 4, and so on.  */
 	  switch (value)
@@ -2597,7 +2614,7 @@ build_note_checker (annocheck_data *     data,
 		 used, and this would annoy a lot of users.  (Especially since
 		 LTO and FORTIFY are now enabled by the rpm build macros).  So we
 		 SKIP this test instead.
-		 
+
 		 In theory we could search to see if un-fortified versions of specific
 		 functions are present in the executable's symbol table.  eg memcpy
 		 instead of memcpy_chk.  This would help catch some cases where the
@@ -2649,7 +2666,7 @@ build_note_checker (annocheck_data *     data,
 	    {
 	      maybe (data, TEST_OPTIMIZATION, SOURCE_ANNOBIN_NOTES, "unexpected note value");
 	      einfo (VERBOSE2, "debug: optimization note value: %x", value);
-	    }	  
+	    }
 	  else if (value & (1 << 13))
 	    {
 	      /* Compiled with -Og rather than -O2.
@@ -2671,7 +2688,6 @@ build_note_checker (annocheck_data *     data,
 		pass (data, TEST_OPTIMIZATION, SOURCE_ANNOBIN_NOTES, NULL);
 	    }
 
-	  
 	  if (skip_test (TEST_WARNINGS))
 	    ;
 	  else if (value & (1 << 14))
@@ -2962,7 +2978,7 @@ handle_aarch64_property_note (annocheck_data *      data,
 #define GNU_PROPERTY_AARCH64_FEATURE_1_BTI	(1U << 0)
 #define GNU_PROPERTY_AARCH64_FEATURE_1_PAC	(1U << 1)
 #endif
-  
+
   if (type != GNU_PROPERTY_AARCH64_FEATURE_1_AND)
     {
       einfo (VERBOSE2, "%s: debug: property note type %lx", get_filename (data), type);
@@ -3312,6 +3328,8 @@ check_dynamic_section (annocheck_data *    data,
       return true;
     }
 
+  per_file.has_dynamic_segment = true;
+
   if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_UNTESTED)
     pass (data, TEST_DYNAMIC_SEGMENT, SOURCE_DYNAMIC_SECTION, NULL);
   else if (tests[TEST_DYNAMIC_SEGMENT].state == STATE_PASSED)
@@ -3421,7 +3439,7 @@ check_dynamic_section (annocheck_data *    data,
 	/* FIXME: Should be changed once GO supports PIE & BIND_NOW.  */
 	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "binary was built by GO");
       else if (is_special_glibc_binary (data->full_filename))
-	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "glibc binaries do not use bind-now");	       
+	skip (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "glibc binaries do not use bind-now");
       else
 	fail (data, TEST_BIND_NOW, SOURCE_DYNAMIC_SECTION, "not linked with -Wl,-z,now");
     }
@@ -3616,7 +3634,6 @@ contains_suspicious_characters (const unsigned char * name)
 	return true;
 
       /* FIXME: Add more checks for valid UTF-8 encoding.  */
-      
       if (c != 0xe2)
 	continue;
 
@@ -3714,7 +3731,7 @@ static bool
 is_shared_lib (void)
 {
   /* If it does not have a dynamic section/segment, then it cannot be a shared library.  */
-  if (tests[TEST_DYNAMIC_SEGMENT].state != STATE_PASSED)
+  if (! per_file.has_dynamic_segment)
     return false;
 
 #ifdef DF_1_PIE
@@ -3790,6 +3807,7 @@ interesting_seg (annocheck_data *    data,
       break;
 
     case PT_DYNAMIC:
+      per_file.has_dynamic_segment = true;
       pass (data, TEST_DYNAMIC_SEGMENT, SOURCE_SEGMENT_HEADERS, NULL);
       /* FIXME: We do not check to see if there is a second dynamic segment.
 	 Checking is complicated by the fact that there can be both a dynamic
@@ -3915,7 +3933,7 @@ check_seg (annocheck_data *    data,
       /* Allow scan to continue.  */
       return true;
     }
-  
+
   if (note.n_type == NT_GNU_PROPERTY_TYPE_0)
     {
       if (seg->phdr->p_align != 8)
@@ -3955,7 +3973,7 @@ is_nop_byte (annocheck_data * data ATTRIBUTE_UNUSED,
     case EM_S390:
       /* NOP = 47000000 */
       return (((addr_bias + index) & 3) == 3) && byte == 0x47;
-      
+
     default:
       /* FIXME: Add support for other architectures.  */
       /* FIXME: Add support for alternative endianness.  */
@@ -4002,7 +4020,7 @@ ignore_gap (annocheck_data * data, note_range * gap)
     }
 
   gap->start = align (gap->start, per_file.text_section_alignment);
-  
+
   /* FIXME: The linker can create fill regions in the map that are larger
      than the text section alignment.  Not sure why, but it does happen.
      (cf lconvert in the qt5-qttools package which has a gap of 0x28 bytes
@@ -4169,7 +4187,7 @@ ignore_gap (annocheck_data * data, note_range * gap)
     {
       const char * secname;
 
-      secname = elf_strptr (data->elf, shstrndx, scn_name);	  
+      secname = elf_strptr (data->elf, shstrndx, scn_name);
       if (secname != NULL)
 	{
 	  if (streq (secname, ".plt"))
@@ -4184,7 +4202,7 @@ ignore_gap (annocheck_data * data, note_range * gap)
 	    }
 	}
     }
-  
+
   /* On the PowerPC64, the linker can insert PLT resolver stubs at the end of the .text section.
      These will be unannotated, but they can safely be ignored.
 
@@ -4367,7 +4385,7 @@ check_for_gaps (annocheck_data * data)
   const char * first_sym = NULL;
 
   for (i = 1; i < next_free_range; i++)
-    {      
+    {
       if (ranges[i].start <= current.end)
 	{
 	  if (ranges[i].start < current.start)
@@ -4512,7 +4530,7 @@ check_for_gaps (annocheck_data * data)
       pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
       return;
     }
-  
+
   /* Scan forward through the ranges array looking for overlaps with the start of the .text section.  */
   if (per_file.text_section_range.end != 0)
     {
@@ -4669,6 +4687,8 @@ finish (annocheck_data * data)
 	    case TEST_GNU_STACK:
 	      if (is_kernel_module (data))
 		skip (data, i, SOURCE_FINAL_SCAN, "kernel modules do not need a GNU type stack section");
+	      else if (is_grub_module (data))
+		skip (data, i, SOURCE_FINAL_SCAN, "grub modules do not need a GNU type stack section");		
 	      else if (is_object_file ())
 		{
 		  fail (data, i, SOURCE_FINAL_SCAN, "no .note.GNU-stack section found");
@@ -4691,7 +4711,7 @@ finish (annocheck_data * data)
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      break;
-	      
+
 	    case TEST_INSTRUMENTATION:
 	    case TEST_PRODUCTION:
 	    case TEST_NOTES:
@@ -4809,7 +4829,7 @@ finish (annocheck_data * data)
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no notes found regarding this feature");
 	      break;
-	      
+
 	    case TEST_OPTIMIZATION:
 	      if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "GO optimized by default");
@@ -4972,20 +4992,20 @@ finish (annocheck_data * data)
 	  einfo (INFO, "Rerun annocheck with --verbose to see more information on the tests");
 	  tell_rerun = false;
 	}
-      einfo (INFO, "%s: Overall: FAIL", data->filename);
+      einfo (INFO, "%s: Overall: FAIL", get_filename (data));
       return false;
     }
 
   if (per_file.num_maybes > 0)
     {
-      einfo (INFO, "%s: Overall: FAIL (due to MAYB results)", data->filename);
+      einfo (INFO, "%s: Overall: FAIL (due to MAYB results)", get_filename (data));
       return false; /* FIXME: Add an option to ignore MAYBE results ? */
     }
 
   if (BE_VERBOSE)
-    einfo (INFO, "%s: Overall: PASS", data->filename);
+    einfo (INFO, "%s: Overall: PASS", get_filename (data));
   else
-    einfo (INFO, "%s: PASS", data->filename);
+    einfo (INFO, "%s: PASS", get_filename (data));
 
   return true;
 }
@@ -5029,7 +5049,7 @@ set_profile (enum profile num)
 	break;
       tests[index].enabled = false;
     }
-	      
+
   for (j = 0; j < MAX_DISABLED; j++)
     {
       enum test_index index = profiles[num].enabled_tests[j];
@@ -5075,7 +5095,7 @@ usage (void)
   einfo (INFO, "  but this can be extended to trigger for any multibyte character with:");
   einfo (INFO, "    --test-unicode-all        Fail if any multibyte character is detected");
   einfo (INFO, "    --test-unicode-suspicious Fail if a suspicious multibyte character is detected");
-  
+
   einfo (INFO, "  Some tests report potential future problems that are not enforced at the moment");
   einfo (INFO, "    --skip-future             Disables these future fail tests (default)");
   einfo (INFO, "    --test-future             Enable the future fail tests");
@@ -5100,7 +5120,7 @@ usage (void)
   einfo (INFO, "  This can be changed with:");
   einfo (INFO, "    --full-filenames          Display the full path of input files");
   einfo (INFO, "    --base-filenames          Display only the filename of input files");
-  
+
   einfo (INFO, "  When the output is directed to a terminal colouring will be used to highlight significant messages");
   einfo (INFO, "  This can be controlled by:");
   einfo (INFO, "    --disable-colour          Disables coloured messages");
@@ -5124,7 +5144,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
     ++ arg;
   if (arg[0] == '-')
     ++ arg;
-  
+
   if (startswith (arg, "skip-"))
     {
       arg += strlen ("skip-");
@@ -5137,13 +5157,13 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	    tests[i].enabled = false;
 	  return true;
 	}
-      
+
       if (streq (arg, "future"))
 	{
 	  report_future_fail = false;
 	  return true;
 	}
-      
+
       for (i = 0; i < TEST_MAX; i++)
 	{
 	  if (streq (arg, tests[i].name))
@@ -5172,13 +5192,13 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	    tests[i].enabled = true;
 	  return true;
 	}
-      
+
       if (streq (arg, "future"))
 	{
 	  report_future_fail = true;
 	  return true;
 	}
-      
+
       for (i = 0; i < TEST_MAX; i++)
 	{
 	  if (streq (arg, tests[i].name))
@@ -5195,7 +5215,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	  tests[TEST_UNICODE].enabled = true;
 	  return true;
 	}
-      
+
       if (streq (arg, "unicode-suspicious"))
 	{
 	  fail_for_all_unicode.option_value = false;
@@ -5203,10 +5223,10 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	  tests[TEST_UNICODE].enabled = true;
 	  return true;
 	}
-      
+
       return false;
     }
-  
+
   if (streq (arg, "enable-hardened") || streq (arg, "enable"))
     {
       disabled = false;
@@ -5299,7 +5319,7 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       /* Consume the argument so that the annocheck framework does not mistake it for the -p option.  */
       return true;
     }
-    
+
   return false;
 }
 
@@ -5384,7 +5404,7 @@ libannocheck_init (unsigned int  version,
 
       checker_initialised = true;
     }
-  
+
   libannocheck_internals * handle  = calloc (1, sizeof * handle);
 
   if (handle == NULL)
@@ -5602,7 +5622,7 @@ libannocheck_get_known_profiles (libannocheck_internals *  handle,
 
   if (profiles_return == NULL || num_profiles_return == NULL)
     return set_error (libannocheck_error_bad_arguments, "NULL passed as argument");
-  
+
   * profiles_return = profiles;
   * num_profiles_return = 4;
 
