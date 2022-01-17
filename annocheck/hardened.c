@@ -128,7 +128,9 @@ static struct per_file
   uint        run_major;
   uint        run_minor;
   uint        run_rel;
-
+  uint        annobin_gcc_date;
+  uint        gcc_date;
+  
   uint          seen_tools_with_code;
   uint          seen_tools;
   uint          tool_version;
@@ -2246,6 +2248,11 @@ build_note_checker (annocheck_data *     data,
 	      continue;
 	    }
 
+	  /* Look for an (optional) date string after the version numbers.  */
+	  uint dummy, date;
+	  if (sscanf (attr + 1 + strlen (t->lead_in), "%u.%u.%u %u", & dummy, & dummy, & dummy, & date) == 4)
+	    per_file.gcc_date = date;
+
 	  einfo (VERBOSE2, "%s: info: detected information created by an annobin plugin running on %s version %u.%u.%u",
 		 get_filename (data), t->tool_name, major, minor, rel);
 
@@ -2327,6 +2334,11 @@ build_note_checker (annocheck_data *     data,
 	      einfo (VERBOSE2, "lead in '%s' matched, but conversion failed.  Full string: '%s'", t->lead_in, attr + 1);
 	      continue;
 	    }
+
+	  /* Look for an (optional) date string after the version numbers.  */
+	  uint dummy, date;
+	  if (sscanf (attr + 1 + strlen (t->lead_in), "%u.%u.%u %u", & dummy, & dummy, & dummy, & date) == 4)
+	    per_file.annobin_gcc_date = date;
 
 	  einfo (VERBOSE2, "%s: info: detected information stored by an annobin plugin built by %s version %u.%u.%u",
 		 get_filename (data), t->tool_name, major, minor, rel);
@@ -2581,7 +2593,13 @@ build_note_checker (annocheck_data *     data,
 
 	    case 1: /* CF_NONE: No protection. */
 	    case 5: /* CF_NONE | CF_SET */
-	      fail (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "no protection enabled");
+	      /* Sadly there was an annobin/gcc sync issue with the 20211019 gcc, which lead to
+		 corrupt data being recorded by the annobin plugin.  */
+	      if (per_file.annobin_gcc_date == per_file.gcc_date
+		  && per_file.gcc_date == 20211019)
+		skip (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "bad data recorded by annobin plugin");
+	      else
+		fail (data, TEST_CF_PROTECTION, SOURCE_ANNOBIN_NOTES, "no protection enabled");
 	      break;
 	    }
 	}
@@ -2835,7 +2853,15 @@ build_note_checker (annocheck_data *     data,
 	    {
 	    case 0:
 	      if (! skip_test_for_current_func (data, TEST_STACK_CLASH))
-		fail (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "-fstack-clash-protection not enabled");
+		{
+		  /* Sadly there was an annobin/gcc sync issue with the 20211019 gcc, which lead to
+		     corrupt data being recorded by the annobin plugin.  */
+		  if (per_file.annobin_gcc_date == per_file.gcc_date
+		      && per_file.gcc_date == 20211019)
+		    skip (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "bad data recorded by annobin plugin");
+		  else
+		    fail (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "-fstack-clash-protection not enabled");
+		}
 	      break;
 
 	    case 1:
@@ -4326,6 +4352,10 @@ skip_gap_sym (annocheck_data * data, const char * sym)
     {
       /* See BZ 2031133 for example of this happening with RHEL-7 builds.  */
       if (startswith (sym, "deregister_tm_clones"))
+	return true;
+
+      /* See BZ 2040688: RHEL-6 binaries can have this symvol in their glibc code regions.  */
+      if (startswith (sym, "call_gmon_start"))
 	return true;
     }
   else if (per_file.e_machine == EM_AARCH64)

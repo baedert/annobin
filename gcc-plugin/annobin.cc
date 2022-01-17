@@ -1678,7 +1678,7 @@ emit_queued_attachments (void)
 	  fprintf (asm_out_file, "\t.popsection\n");
 	}
       else
-	ice ("queued attachment to an empty group");
+	annobin_inform (INFORM_VERBOSE, "queued attachment to an empty group");
 
       // FIXME: BZ 1684148: These free()s are triggering "attempt to free unallocated
       // memory" errors from the address sanitizer.  I have no idea why, as they were
