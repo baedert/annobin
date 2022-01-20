@@ -2108,6 +2108,14 @@ passed to annocheck by the rpminspect framework, which is why the
 '--ignore-unknown' and '--verbose' options are also included in the
 example.
 
+   Note - for RHEL the above might not work, as the hardened checker is
+referred to by another name.  So if that appears to be the case, please
+try:
+
+      ---
+      annocheck:
+         - rhel-policy: --skip-property-note --ignore-unknown --verbose
+
    For more information on rpmdiff see:
 
    <https://docs.engineering.redhat.com/display/HTD/rpmdiff-elf-binarylibrary>
@@ -3519,29 +3527,29 @@ Node: Test warnings79200
 Node: Test writable got80035
 Node: Hardened Command Line Options81321
 Node: Waiving Hardened Results86761
-Node: Notes88155
-Node: Size88791
-Node: Timing90934
-Node: Libannocheck91573
-Node: libannocheck_init93512
-Node: libannocheck_finish94434
-Node: libannocheck_get_version94982
-Node: libannocheck_get_error_message95391
-Node: libannocheck_get_known_tests96031
-Node: libannocheck_enable_all_tests97197
-Node: libannocheck_disable_all_tests97676
-Node: libannocheck_enable_test98232
-Node: libannocheck_disable_test98900
-Node: libannocheck_enable_profile99569
-Node: libannocheck_get_known_profiles100091
-Node: libannocheck_run_tests100794
-Node: Configure Options101639
-Node: Legacy Scripts103981
-Node: Who Built Me104756
-Node: ABI Checking107516
-Node: Hardening Checks109632
-Node: Checking Archives113718
-Node: GNU FDL116139
+Node: Notes88405
+Node: Size89041
+Node: Timing91184
+Node: Libannocheck91823
+Node: libannocheck_init93762
+Node: libannocheck_finish94684
+Node: libannocheck_get_version95232
+Node: libannocheck_get_error_message95641
+Node: libannocheck_get_known_tests96281
+Node: libannocheck_enable_all_tests97447
+Node: libannocheck_disable_all_tests97926
+Node: libannocheck_enable_test98482
+Node: libannocheck_disable_test99150
+Node: libannocheck_enable_profile99819
+Node: libannocheck_get_known_profiles100341
+Node: libannocheck_run_tests101044
+Node: Configure Options101889
+Node: Legacy Scripts104231
+Node: Who Built Me105006
+Node: ABI Checking107766
+Node: Hardening Checks109882
+Node: Checking Archives113968
+Node: GNU FDL116389
 
 End Tag Table
 

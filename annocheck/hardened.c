@@ -4896,7 +4896,7 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not used");
 	      else if (is_object_file ())
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed in object files");
-	      else if (per_file.current_tool == TOOL_GO)
+	      else if (per_file.seen_tools & TOOL_GO)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes not needed for GO binaries");
 	      else if (per_file.seen_tools & TOOL_RUST)
 		skip (data, i, SOURCE_FINAL_SCAN, "property notes are not currently supported by Rust binaries");
