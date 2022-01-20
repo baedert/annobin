@@ -2268,6 +2268,16 @@ passed to annocheck by the rpminspect framework, which is why the
 @option{--ignore-unknown} and @option{--verbose} options are also
 included in the example.
 
+Note - for RHEL the above might not work, as the hardened checker is
+referred to by another name.  So if that appears to be the case,
+please try:
+
+@smallexample
+ ---
+ annocheck:
+    - rhel-policy: --skip-property-note --ignore-unknown --verbose
+@end smallexample
+
 For more information on rpmdiff see:
 
 @url{https://docs.engineering.redhat.com/display/HTD/rpmdiff-elf-binarylibrary}
