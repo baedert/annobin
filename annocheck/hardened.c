@@ -4391,6 +4391,10 @@ skip_gap_sym (annocheck_data * data, const char * sym)
 	 are unannotated.  See BZ 1630564 for more details.  */
       if (startswith (sym, "start_bcax_"))
 	return true;
+
+      /* Not sure where this one comes from, but it has been reported in BZ 2043047.  */
+      if (streq (sym, "log_stderr"))
+	return true;
     }
 
   return false;
@@ -5313,14 +5317,14 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
       return true;	
     }
 
-  if (streq (arg, "full-filenames"))
+  if (streq (arg, "full-filenames") || streq (arg, "full-filename"))
     {
       full_filename.option_value = true;
       full_filename.option_set = true;
       return true;
     }
 
-  if (streq (arg, "base-filenames"))
+  if (streq (arg, "base-filenames") || streq (arg, "base-filename"))
     {
       full_filename.option_value = false;
       full_filename.option_set = true;
