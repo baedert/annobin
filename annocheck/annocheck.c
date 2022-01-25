@@ -59,6 +59,10 @@ static const char *     debug_rpm_dir = NULL;
 static const char *     tmpdir = NULL;
 #endif
 
+#if HAVE_LIBDEBUGINFOD && ! defined LIBANNOCHECK
+static bool             use_debuginfod = true;
+#endif
+
 static checker *        first_checker = NULL;
 static checker *        first_sec_checker = NULL;
 static checker *        first_seg_checker = NULL;
@@ -740,22 +744,21 @@ follow_debuglink (annocheck_data * data)
 
 #ifndef LIBANNOCHECK
 #if HAVE_LIBDEBUGINFOD
-  if (build_id_len > 0)
+  if (! use_debuginfod)
+    ;
+  else if (build_id_len > 0)
     {
       debuginfod_client *client = debuginfod_begin ();
 
       if (client != NULL)
         {
-einfo (VERBOSE2, "C");
 	  TRY_DEBUG ("DEBUGINFOD_URLS=%s", getenv (DEBUGINFOD_URLS_ENV_VAR) ?: "" );
-einfo (VERBOSE2, "B");
 	  
           /* If the debug file is successfully downloaded, debugfile will be
              set to the path of the local copy.  */
           fd = debuginfod_find_debuginfo (client, build_id_ptr, build_id_len, & debugfile);
 
           debuginfod_end (client);
-einfo (VERBOSE2, "D");
 
           if (fd >= 0)
             {
@@ -774,7 +777,7 @@ einfo (VERBOSE2, "D");
   einfo (VERBOSE2, "%s: support for debuginfod not built into annocheck", data->filename);
 #endif /* HAVE_LIBDEBUGINFOD */
 #endif /* not LIBANNOCHECK */
-  
+
   /* Failed to find the file.  */
   einfo (VERBOSE2, "%s: warn: Could not find separate debug file: %s", data->filename, link);
   
@@ -1374,6 +1377,9 @@ process_rpm_file (const char * filename)
 		    /* Increment the recursion level.  */
 		    " --level ", itoa (level + 1),
 		    " --ignore-unknown",
+#if HAVE_LIBDEBUGINFOD && !defined LIBANNOCHECK 
+		    use_debuginfod ? "" : " --no-use-debuginfod",
+#endif
 		    /* Pass on the name of the temporary data directory, if created.  */
 		    tmpdir == NULL ? "" : " --tmpdir ",
 		    tmpdir == NULL ? "" : tmpdir,
@@ -1805,6 +1811,10 @@ usage (void)
   einfo (INFO, "   --quiet            [Do not print anything, just return an exit status]");
   einfo (INFO, "   --verbose          [Produce informational messages whilst working.  Repeat for more information]");
   einfo (INFO, "   --version          [Report the verion of the tool & exit]");
+#if HAVE_LIBDEBUGINFOD
+  einfo (INFO, "   --use-debuginfod   [Use debuginfod, even if it is available (default)]");
+  einfo (INFO, "   --no-use-debuginfod [Do not use debuginfod, even if it is available]");
+#endif
 
   einfo (INFO, "The following options are internal to the scanner and not expected to be supplied by the user:");
   einfo (INFO, "   --prefix=<TEXT>    [Include <TEXT> in the output description]");
@@ -2068,7 +2078,7 @@ process_command_line (uint argc, const char * argv[])
 		goto unknown_arg;
 	      break;
 	      
-	    case 'v': /* --verbose or --version */
+	    case 'v': /* --verbose or --version.  */
 	      if (const_strneq (arg, "version"))
 		{
 		  print_version ();
@@ -2080,6 +2090,32 @@ process_command_line (uint argc, const char * argv[])
 		{
 		  save_arg (orig_arg);
 		  verbosity ++;
+		}
+	      else
+		goto unknown_arg;
+	      break;
+
+	    case 'u':
+	      if (streq (arg, "use-debuginfod"))
+		{
+#if HAVE_LIBDEBUGINFOD
+		  use_debuginfod = true;
+#else
+		  einfo (WARN, "debuginfod is not supported by this build of annocheck");
+#endif
+		}
+	      else
+		goto unknown_arg;
+	      break;
+
+	    case 'n':
+	      if (streq (arg, "no-use-debuginfod"))
+		{
+#if HAVE_LIBDEBUGINFOD
+		  use_debuginfod = false;
+#else
+		  /* Do not warn, just silently accept.  */
+#endif
 		}
 	      else
 		goto unknown_arg;

@@ -600,6 +600,8 @@ File: annobin.info,  Node: Annocheck,  Next: Libannocheck,  Prev: Examining,  Up
        [-debug-rpm=FILE]
        [-dwarf-dir=DIR]
        [-prefix=TEXT]
+       [-use-debuginfod]
+       [-no-use-debuginfod]
        [-enable-TOOL]
        [-disable-TOOL]
        [-TOOL-OPTION]
@@ -679,6 +681,15 @@ that are used regardless of which tools are enabled.
 
 '--version'
      Report the version of the tool and then exit.
+
+'--use-debuginfod'
+     Enable the use of the debuginfod service to download debuginfo
+     rpms.  This feature is enabled by default, but it is only active if
+     support for the debuginfod server has been compiled in to
+     annocheck.
+
+'--no-use-debuginfod'
+     Do not use the debuginfod service, even if it is available.
 
 '--enable-TOOL'
      Enable TOOL.  Most tools are disabled by default and so need to be
@@ -3490,66 +3501,66 @@ Node: The CF Encoding19015
 Node: The ENUM Encoding20087
 Node: The INSTRUMENT Encoding20476
 Node: Annocheck21850
-Node: Built By25735
-Node: Hardened27238
-Node: Test bind now31017
-Node: Test branch protection32657
-Node: Test cf protection34911
-Node: Test dynamic segment39020
-Node: Test dynamic tags40151
-Node: Test entry42500
-Node: Test fortify43395
-Node: Test glibcxx assertions44908
-Node: Test gnu relro45946
-Node: Test gnu stack47680
-Node: Test go revision50077
-Node: Test instrumentation51125
-Node: Test lto51956
-Node: Test not branch protection52862
-Node: Test not dynamic tags54444
-Node: Test notes56132
-Node: Test only go58415
-Node: Test optimization59566
-Node: Test pic60941
-Node: Test pie62486
-Node: Test production63774
-Node: Test property note64587
-Node: Test run path67064
-Node: Test rwx seg69285
-Node: Test short enums70557
-Node: Test stack clash71574
-Node: Test stack prot73035
-Node: Test stack realign74367
-Node: Test textrel75637
-Node: Test threads76894
-Node: Test unicode77709
-Node: Test warnings79200
-Node: Test writable got80035
-Node: Hardened Command Line Options81321
-Node: Waiving Hardened Results86761
-Node: Notes88405
-Node: Size89041
-Node: Timing91184
-Node: Libannocheck91823
-Node: libannocheck_init93762
-Node: libannocheck_finish94684
-Node: libannocheck_get_version95232
-Node: libannocheck_get_error_message95641
-Node: libannocheck_get_known_tests96281
-Node: libannocheck_enable_all_tests97447
-Node: libannocheck_disable_all_tests97926
-Node: libannocheck_enable_test98482
-Node: libannocheck_disable_test99150
-Node: libannocheck_enable_profile99819
-Node: libannocheck_get_known_profiles100341
-Node: libannocheck_run_tests101044
-Node: Configure Options101889
-Node: Legacy Scripts104231
-Node: Who Built Me105006
-Node: ABI Checking107766
-Node: Hardening Checks109882
-Node: Checking Archives113968
-Node: GNU FDL116389
+Node: Built By26116
+Node: Hardened27619
+Node: Test bind now31398
+Node: Test branch protection33038
+Node: Test cf protection35292
+Node: Test dynamic segment39401
+Node: Test dynamic tags40532
+Node: Test entry42881
+Node: Test fortify43776
+Node: Test glibcxx assertions45289
+Node: Test gnu relro46327
+Node: Test gnu stack48061
+Node: Test go revision50458
+Node: Test instrumentation51506
+Node: Test lto52337
+Node: Test not branch protection53243
+Node: Test not dynamic tags54825
+Node: Test notes56513
+Node: Test only go58796
+Node: Test optimization59947
+Node: Test pic61322
+Node: Test pie62867
+Node: Test production64155
+Node: Test property note64968
+Node: Test run path67445
+Node: Test rwx seg69666
+Node: Test short enums70938
+Node: Test stack clash71955
+Node: Test stack prot73416
+Node: Test stack realign74748
+Node: Test textrel76018
+Node: Test threads77275
+Node: Test unicode78090
+Node: Test warnings79581
+Node: Test writable got80416
+Node: Hardened Command Line Options81702
+Node: Waiving Hardened Results87142
+Node: Notes88786
+Node: Size89422
+Node: Timing91565
+Node: Libannocheck92204
+Node: libannocheck_init94143
+Node: libannocheck_finish95065
+Node: libannocheck_get_version95613
+Node: libannocheck_get_error_message96022
+Node: libannocheck_get_known_tests96662
+Node: libannocheck_enable_all_tests97828
+Node: libannocheck_disable_all_tests98307
+Node: libannocheck_enable_test98863
+Node: libannocheck_disable_test99531
+Node: libannocheck_enable_profile100200
+Node: libannocheck_get_known_profiles100722
+Node: libannocheck_run_tests101425
+Node: Configure Options102270
+Node: Legacy Scripts104612
+Node: Who Built Me105387
+Node: ABI Checking108147
+Node: Hardening Checks110263
+Node: Checking Archives114349
+Node: GNU FDL116770
 
 End Tag Table
 
