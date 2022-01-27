@@ -23,7 +23,7 @@ extern "C" {
 
    NB/ Keep this value in sync with libannochck_version defined in
    annocheck/libannocheck.h.  */
-#define ANNOBIN_VERSION 1052
+#define ANNOBIN_VERSION 1053
 
 /* The version of the annotation specification supported.  */
 #define SPEC_VERSION  3
