@@ -1,5 +1,5 @@
 /* libannocheck.h - Header file for the libannocheck library.
-   Copyright (c) 2021 Red Hat.
+   Copyright (c) 2021-2022 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -18,7 +18,7 @@ extern "C" {
 
 /* NB/ Keep this value in sync with ANNOBIN_VERSION defined in
    annobin-global.h.  */
-const unsigned int libannocheck_version = 1051;
+const unsigned int libannocheck_version = 1052;
 
 typedef enum libannocheck_error
 {

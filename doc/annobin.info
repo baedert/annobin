@@ -2127,6 +2127,15 @@ try:
       annocheck:
          - rhel-policy: --skip-property-note --ignore-unknown --verbose
 
+   It is also possible to stop annocheck from testing specific files in
+an rpm by listing them in the 'rpminspect.yaml file', like this:
+
+     ---
+     annocheck:
+         ignore:
+             - /usr/libexec/installed-tests/glib/mem-overflow
+             - /usr/libexec/installed-tests/glib/resources
+
    For more information on rpmdiff see:
 
    <https://docs.engineering.redhat.com/display/HTD/rpmdiff-elf-binarylibrary>
@@ -3538,29 +3547,29 @@ Node: Test warnings79581
 Node: Test writable got80416
 Node: Hardened Command Line Options81702
 Node: Waiving Hardened Results87142
-Node: Notes88786
-Node: Size89422
-Node: Timing91565
-Node: Libannocheck92204
-Node: libannocheck_init94143
-Node: libannocheck_finish95065
-Node: libannocheck_get_version95613
-Node: libannocheck_get_error_message96022
-Node: libannocheck_get_known_tests96662
-Node: libannocheck_enable_all_tests97828
-Node: libannocheck_disable_all_tests98307
-Node: libannocheck_enable_test98863
-Node: libannocheck_disable_test99531
-Node: libannocheck_enable_profile100200
-Node: libannocheck_get_known_profiles100722
-Node: libannocheck_run_tests101425
-Node: Configure Options102270
-Node: Legacy Scripts104612
-Node: Who Built Me105387
-Node: ABI Checking108147
-Node: Hardening Checks110263
-Node: Checking Archives114349
-Node: GNU FDL116770
+Node: Notes89088
+Node: Size89724
+Node: Timing91867
+Node: Libannocheck92506
+Node: libannocheck_init94445
+Node: libannocheck_finish95367
+Node: libannocheck_get_version95915
+Node: libannocheck_get_error_message96324
+Node: libannocheck_get_known_tests96964
+Node: libannocheck_enable_all_tests98130
+Node: libannocheck_disable_all_tests98609
+Node: libannocheck_enable_test99165
+Node: libannocheck_disable_test99833
+Node: libannocheck_enable_profile100502
+Node: libannocheck_get_known_profiles101024
+Node: libannocheck_run_tests101727
+Node: Configure Options102572
+Node: Legacy Scripts104914
+Node: Who Built Me105689
+Node: ABI Checking108449
+Node: Hardening Checks110565
+Node: Checking Archives114651
+Node: GNU FDL117072
 
 End Tag Table
 

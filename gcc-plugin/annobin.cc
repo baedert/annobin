@@ -2054,11 +2054,13 @@ annobin_record_define (const char * arg)
 
   if (strncmp (arg, FORTIFY_OPTION, strlen (FORTIFY_OPTION)) == 0)
     {
-      int level = atoi (arg + strlen (FORTIFY_OPTION) + 1);
+      arg += strlen (FORTIFY_OPTION) + 1;
+
+      int level = atoi (arg);
 
       if (level < 0 || level > 3)
 	{
-	  annobin_inform (INFORM_ALWAYS, "Unexpected value in -D" FORTIFY_OPTION "%s", arg);
+	  annobin_inform (INFORM_ALWAYS, "Unexpected value -D" FORTIFY_OPTION " of %s", arg);
 	  level = 0;
 	}
 
@@ -2221,35 +2223,14 @@ annobin_create_global_notes (void * gcc_data, void * user_data)
 
       annobin_inform (INFORM_VERY_VERBOSE, "Examining saved option: %ld %s",
 		      (long) save_decoded_options[i].opt_index, arg ? arg : "<none>");
-      switch (save_decoded_options[i].opt_index)
-	{
-	case OPT_Wp_:
-	  /* Note - not sure if this option will ever appear here,
-	     but there is no harm in supporting it.  */
-	  if (arg != NULL)
-	    {
-	      switch (arg[0])
-		{
-		case 'D':
-		  annobin_record_define (arg + 1);
-		  break;
-		case 'U':
-		  annobin_record_undefine (arg + 1);
-		  break;
-		default:
-		  break;
-		}
-	    }
-	  break;
-	case OPT_U:
-	  annobin_record_undefine (arg);
-	  break;
-	case OPT_D:
-	  annobin_record_define (arg);
-	  break;
-	default:
-	  break;
-	}
+
+      /* Note: Looking for an opt_index of OPT_Wp_, OPT_U and/or OPT_D is problematic
+	 as these values change frquently between versions of GCC.  So instead scan
+	 the text of the option.  */
+      if (streq (save_decoded_options[i].canonical_option[0], "-U"))
+	annobin_record_undefine (save_decoded_options[i].canonical_option[1]);
+      else if (streq (save_decoded_options[i].canonical_option[0], "-D"))
+	annobin_record_define (save_decoded_options[i].canonical_option[1]);
     }
 
   if (global_fortify_level == -1 || global_glibcxx_assertions == -1)

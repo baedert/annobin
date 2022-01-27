@@ -2288,6 +2288,18 @@ please try:
     - rhel-policy: --skip-property-note --ignore-unknown --verbose
 @end smallexample
 
+It is also possible to stop annocheck from testing specific files
+in an rpm by listing them in the @file{rpminspect.yaml file}, like
+this:
+
+@smallexample
+---
+annocheck:
+    ignore:
+        - /usr/libexec/installed-tests/glib/mem-overflow
+        - /usr/libexec/installed-tests/glib/resources
+@end smallexample
+
 For more information on rpmdiff see:
 
 @url{https://docs.engineering.redhat.com/display/HTD/rpmdiff-elf-binarylibrary}

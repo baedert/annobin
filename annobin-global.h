@@ -1,5 +1,5 @@
 /* annobin - Header file for the annobin package.
-   Copyright (c) 2019 - 2021 Red Hat.
+   Copyright (c) 2019 - 2022 Red Hat.
    Created by Nick Clifton.
 
   This is free software; you can redistribute it and/or modify it
@@ -23,7 +23,7 @@ extern "C" {
 
    NB/ Keep this value in sync with libannochck_version defined in
    annocheck/libannocheck.h.  */
-#define ANNOBIN_VERSION 1051
+#define ANNOBIN_VERSION 1052
 
 /* The version of the annotation specification supported.  */
 #define SPEC_VERSION  3
