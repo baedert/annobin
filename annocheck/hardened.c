@@ -1638,7 +1638,10 @@ start (annocheck_data * data)
   if (is_special_glibc_binary (data->full_filename))
     skip (data, TEST_PIE, SOURCE_ELF_HEADER, "glibc binaries do not have to be built for PIE");
   else if (per_file.e_type == ET_EXEC)
-    fail (data, TEST_PIE, SOURCE_ELF_HEADER, "not built with '-Wl,-pie' (gcc/clang) or '-buildmode pie' (go)");
+    /* Delay generating a FAIL result as GO binaries can SKIP this test,
+       but we do not yet know if GO is a producer.  Instead check during
+       finish().  */
+    ;
   else
     pass (data, TEST_PIE, SOURCE_ELF_HEADER, NULL);
 
@@ -5005,6 +5008,16 @@ finish (annocheck_data * data)
 		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      break;
 
+	    case TEST_PIE:
+	      if (per_file.e_type == ET_EXEC)
+		{
+		  if (per_file.seen_tools & TOOL_GO)
+		    skip (data, TEST_PIE, SOURCE_ELF_HEADER, "GO binaries are safe without PIE");
+		  else
+		    fail (data, TEST_PIE, SOURCE_ELF_HEADER, "not built with '-Wl,-pie'");
+		}
+	      break;
+	      
 	    case TEST_INSTRUMENTATION:
 	    case TEST_PRODUCTION:
 	    case TEST_NOTES:
@@ -5100,7 +5113,7 @@ finish (annocheck_data * data)
 
 	    case TEST_PIC:
 	      if (per_file.seen_tools & TOOL_GO)
-		skip (data, i, SOURCE_FINAL_SCAN, "GO does not support a -fPIC option");
+		skip (data, i, SOURCE_FINAL_SCAN, "GO binaries are safe without PIC");
 	      else if (! C_compiler_seen ())
 		skip (data, i, SOURCE_FINAL_SCAN, "not C/C++ compiled code");
 	      else if (per_file.e_machine == EM_ARM)
