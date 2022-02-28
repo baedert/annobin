@@ -880,9 +880,14 @@ parse_dw_at_language (annocheck_data * data, Dwarf_Attribute * attr)
 
 #ifdef DW_LANG_Rust
     case DW_LANG_Rust:
+#else
+      /* BZ 2057737 - User's expect Rust binaries to be identified even
+	 if annocheck is built on a system that does not know about Rust.  */
+    case 0x1c:
+#endif
       set_lang (data, LANG_RUST, SOURCE_DW_AT_LANGUAGE);
       break;
-#endif
+
     case DW_LANG_lo_user + 1:
       /* Some of the GO runtime uses this value,  */
       set_lang (data, LANG_ASSEMBLER, SOURCE_DW_AT_LANGUAGE);
@@ -1940,6 +1945,7 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
       /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
       "_GLOBAL__sub_I_main",
       "_Unwind_Resume",
+      "_dl_relocate_static_pie",     /* Found in x86_64, RHEL-9, podman-catonit.  */
       "_dl_start_user", 	     /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
       "_dl_tunable_set_arena_max",   /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
       "_nl_finddomain_subfreeres",
@@ -5098,17 +5104,6 @@ finish (annocheck_data * data)
 		fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used (and a C compiler was detected)");
 	      else
 		skip (data, i, SOURCE_FINAL_SCAN, "no C/C++ compiled code found");
-	      break;
-
-	    default:
-	      /* Do not complain about compiler specific tests being missing
-		 if all that we have seen is assembler produced code.  */
-	      if (per_file.seen_tools == TOOL_GAS
-		  || (per_file.gcc_from_comment && per_file.seen_tools == (TOOL_GAS | TOOL_GCC)))
-		skip (data, i, SOURCE_FINAL_SCAN, "no C/C++ compiled code found");
-	      /* There may be notes on this test, but the are for a zero-length range.  */
-	      else
-		maybe (data, i, SOURCE_FINAL_SCAN, "no valid notes found regarding this test");
 	      break;
 
 	    case TEST_PIC:
