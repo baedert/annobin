@@ -1,5 +1,5 @@
 /* Computes the cumulative size of section(s) in binary files. 
-   Copyright (c) 2018 - 2021 Red Hat.
+   Copyright (c) 2018 - 2022 Red Hat.
 
   This is free software; you can redistribute it and/or modify it
   under the terms of the GNU General Public License as published
@@ -21,16 +21,18 @@
 static bool disabled = true;
 static bool human = false;
 
-static Elf64_Word sec_need_flags = 0;
-static Elf64_Word sec_not_flags = 0;
-static Elf64_Word sec_flag_size = 0;
-static uint       sec_flag_match = 0;
+static Elf64_Word  sec_need_flags = 0;
+static Elf64_Word  sec_not_flags = 0;
+static Elf64_Word  sec_flag_size = 0;
+static uint        sec_flag_match = 0;
 
-static Elf64_Word seg_need_flags = 0;
-static Elf64_Word seg_not_flags = 0;
-static Elf64_Word seg_flag_size = 0;
-static uint       seg_flag_match = 0;
+static Elf64_Word  seg_need_flags = 0;
+static Elf64_Word  seg_not_flags = 0;
+static Elf64_Word  seg_flag_size = 0;
+static uint        seg_flag_match = 0;
 
+static bool        track_total_size = false;
+static unsigned long long  total_sections_size;
 
 typedef struct sec_size
 {
@@ -57,7 +59,7 @@ static void
 print_size (unsigned long long size)
 {
   if (!human)
-    einfo (PARTIAL, "%#llx", size);
+    einfo (PARTIAL, "%#llx bytes", size);
   else if (size < 1024)
     einfo (PARTIAL, "%lld bytes", size);
   else if (size < (1024 * 1024))
@@ -68,6 +70,7 @@ print_size (unsigned long long size)
     einfo (PARTIAL, "%lldGb", size >> 30);
 }
 
+
 static bool
 size_interesting_sec (annocheck_data *     data,
 		      annocheck_section *  sec)
@@ -75,6 +78,9 @@ size_interesting_sec (annocheck_data *     data,
   if (disabled)
     return false;
 
+  if (track_total_size)
+    total_sections_size += sec->shdr.sh_size;
+  
   sec_size * sz;
 
   for (sz = sec_list; sz != NULL; sz = sz->next)
@@ -151,6 +157,14 @@ size_interesting_seg (annocheck_data *     data,
 static void
 size_start_scan (uint level, const char * datafile)
 {
+  if (level != 0)
+    return;
+
+  total_sections_size = 0;
+  sec_flag_size = 0;
+  sec_flag_match = 0;
+  seg_flag_size = 0;
+  seg_flag_match = 0;
 }
 
 static void
@@ -207,16 +221,27 @@ size_end_scan (uint level, const char * datafile)
 	  seg_flag_size += seg_size;
 	}
 
+      unsigned long long sections_size_so_far;
+      if (fscanf (f, "%llx", & sections_size_so_far) != 1)
+	{
+	  einfo (WARN, "Unable to locate total sections size");
+	}
+      else
+	total_sections_size += sections_size_so_far;
+
       fclose (f);
     }
 
   if (level == 0)
     {
+      Elf64_Word sec_match_total = 0;
+
       for (sec = sec_list; sec != NULL; sec = sec->next)
 	{
 	  einfo (INFO, "Section '%s' found in %u files, total size: ", sec->name, sec->num_found);
 	  print_size (sec->size);
 	  einfo (PARTIAL, "\n");
+	  sec_match_total += sec->size;
 	}
 
       if (sec_need_flags || sec_not_flags)
@@ -232,7 +257,20 @@ size_end_scan (uint level, const char * datafile)
 	  print_size (seg_flag_size);
 	  einfo (PARTIAL, "\n");
 	}
-	
+
+      if (track_total_size)
+	{
+	  einfo (INFO, "total size of all sections in all examined files: ");
+	  print_size (total_sections_size);
+	  einfo (PARTIAL, "\n");
+
+	  if (sec_match_total)
+	    {
+	      einfo (INFO, "Ratio of matched section sizes to total section sizess: %lld%%\n",
+		     (sec_match_total * 100) / total_sections_size);
+	    }
+	}
+
       einfo (VERBOSE2, "Deleting data file %s", datafile);
       unlink (datafile);
     }
@@ -255,6 +293,9 @@ size_end_scan (uint level, const char * datafile)
       fprintf (f, "%u %llx %u %llx\n",
 	       sec_flag_match, (unsigned long long) sec_flag_size,
 	       seg_flag_match, (unsigned long long) seg_flag_size);
+
+      fprintf (f, "%llx\n", (unsigned long long) total_sections_size);
+
       fclose (f);
     }
 }
@@ -266,8 +307,8 @@ size_process_arg (const char * arg, const char ** argv, const uint argc, uint * 
     ++ arg;
   if (arg[0] == '-')
     ++ arg;
-  
-  if (const_strneq (arg, "size-sec-flags="))
+
+  if (const_strneq (arg, "sec-flags="))
     {
       const char * flag = arg + strlen ("size-sec-flags=");
       Elf64_Word * addto = & sec_need_flags;
@@ -305,37 +346,7 @@ size_process_arg (const char * arg, const char ** argv, const uint argc, uint * 
       return true;
     }
   
-  if (const_strneq (arg, "section-size") /* Deprecated.  */
-      || const_strneq (arg, "size-sec"))
-    {
-      const char * parameter;
-      const char * sought;
-
-      if ((parameter = strchr (arg, '=')) == NULL)
-	{
-	  sought = argv[* next];
-	  * next = * next + 1;
-	}
-      else
-	sought = parameter + 1;
-
-      if (sought != NULL && * sought != 0)
-	{
-	  disabled = false;
-	  add_section (sought);
-	}
-
-      return true;
-    }
-
-  if (streq (arg, "human") /* Deprecated.  */
-      || streq (arg, "size-human"))
-    {
-      human = true;
-      return true;
-    }
-
-  if (const_strneq (arg, "size-seg-flags="))
+  if (const_strneq (arg, "seg-flags="))
     {
       const char * flag = arg + strlen ("size-seg-flags=");
       Elf64_Word * addto = & seg_need_flags;
@@ -373,6 +384,41 @@ size_process_arg (const char * arg, const char ** argv, const uint argc, uint * 
       return true;
     }
   
+  if (const_strneq (arg, "section-size") /* Deprecated.  */
+      || const_strneq (arg, "sec"))
+    {
+      const char * parameter;
+      const char * sought;
+
+      if ((parameter = strchr (arg, '=')) == NULL)
+	{
+	  sought = argv[* next];
+	  * next = * next + 1;
+	}
+      else
+	sought = parameter + 1;
+
+      if (sought != NULL && * sought != 0)
+	{
+	  disabled = false;
+	  add_section (sought);
+	}
+
+      return true;
+    }
+
+  if (streq (arg, "total"))
+    {
+      track_total_size = true;
+      return true;
+    }
+  
+  if (streq (arg, "human"))
+    {
+      human = true;
+      return true;
+    }
+
   return false;
 }
 
@@ -384,6 +430,7 @@ size_usage (void)
   einfo (INFO, " --size-sec=<NAME>   Records the size of section NAME.  Can be used more than once");
   einfo (INFO, " If --verbose has been enabled then the size of every encountered NAME section will be displayed");
   einfo (INFO, " Use --size-human to display the sizes in human readable amounts");
+  einfo (INFO, " Use --size-total to display the total size of all sections examined");
   einfo (INFO, " Use --size-sec-flags=[!WAX] to count the size of any section with/without the specified flags");
   einfo (INFO, " Use --size-seg-flags=[!WRX] to count the size of any segment with/without the specified flags");
 }
@@ -391,7 +438,7 @@ size_usage (void)
 static void
 size_version (void)
 {
-  einfo (INFO, "Version 1.1");
+  einfo (INFO, "Version 1.2");
 }
 
 struct checker size_checker = 

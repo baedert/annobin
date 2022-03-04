@@ -34,17 +34,19 @@
 ulong         verbosity = 0;
 
 enum ignore_enum
-  {
-    do_not_ignore = 0,
-    ignore_not_set,
-    do_ignore
-  };
+{
+  do_not_ignore = 0,
+  ignore_not_set,
+  do_ignore
+};
+
+static enum ignore_enum ignore_unknown = ignore_not_set;
+static enum ignore_enum ignore_links   = ignore_not_set;
 
 static ulong         	num_files = 0;
 static ulong            num_allocated_files = 0;
 static const char **    files;
 static const char *     progname;
-static enum ignore_enum ignore_unknown = ignore_not_set;
 #ifndef LIBANNOCHECK
 static char *           prefix = "";
 #endif
@@ -1372,11 +1374,12 @@ process_rpm_file (const char * filename)
 		    " | cpio -dium --quiet",
 		    /* Run annocheck on the files in the directory, skipping unknown file types,
 		       and prefixing the output with the rpm name.  */
-		    " && ", pname, " --ignore-unknown ",
+		    " && ", pname,
+		    ignore_unknown == do_not_ignore ? "--report-unknown" : " --ignore-unknown ",
+		    ignore_links == do_not_ignore ? "--follow-links" : " --ignore-links ",
 		    "--prefix \"", lbasename (filename), "\"",
 		    /* Increment the recursion level.  */
 		    " --level ", itoa (level + 1),
-		    " --ignore-unknown",
 #if HAVE_LIBDEBUGINFOD && !defined LIBANNOCHECK 
 		    use_debuginfod ? "" : " --no-use-debuginfod",
 #endif
@@ -1430,18 +1433,17 @@ process_file (const char * filename)
 
   if (res == 0 && S_ISLNK (statbuf.st_mode))
     {
-      switch (ignore_unknown)
+      switch (ignore_links)
 	{
-	case do_not_ignore:
-	  return einfo (WARN, "'%s' is a symbolic link.  Run %s with -i to follow the link", filename, progname);
+	case ignore_not_set:
+	  if (progname != NULL)
+	    return einfo (WARN, "'%s' is a symbolic link.  Run %s with -f to follow or -d to ignore", filename, progname);
+	  return einfo (WARN, "'%s' is a symbolic link", filename);
 
 	case do_ignore:
-	  /* If we are ignoring unknown files then ignore the link.
-	     This is because the ignore option is usually only set when parsing rpm files,
-	     and symbolic links in those files should be ignored.  */
 	  return true;
 
-	default:
+	case do_not_ignore:
 	  /* Default behaviour is to follow the link.  */
 	  res = stat (filename, & statbuf);
 	  break;
@@ -1526,7 +1528,12 @@ process_file (const char * filename)
   /* Otherwise open it and try to process it as an ELF file.  */
   int fd = open (filename, O_RDONLY);
   if (fd == -1)
-    return einfo (SYS_WARN, "Could not open %s", filename);
+    {
+      /* DO not complain about access permissions unless expressly asked to report unknown files.  */
+      if (ignore_unknown != do_not_ignore && errno == EACCES)
+	return false;
+      return einfo (SYS_WARN, "Could not open %s", filename);
+    }
 
   Elf * elf = elf_begin (fd, ELF_C_READ, NULL);
   if (elf == NULL)
@@ -1802,24 +1809,26 @@ usage (void)
   einfo (INFO, "Runs various scans on the given files");
   einfo (INFO, "Useage: %s [options] <file(s)>", CURRENT_COMPONENT_NAME);
   einfo (INFO, " Options are:");
-  einfo (INFO, "   --debug-rpm=<RPM>  [Find separate dwarf debug information in <RPM>]");
-  einfo (INFO, "   --debug-file=<FILE>[Find separate dwarf debug information in <FILE>]");
-  einfo (INFO, "   --debug-dir=<DIR>  [Look in <DIR> for separate dwarf debug information files]");
-  einfo (INFO, "   --help             [Display this message & exit]");
-  einfo (INFO, "   --ignore-unknown   [Do not complain about unknown file types]");
-  einfo (INFO, "   --report-unknown   [Do complain about unknown file types]");
-  einfo (INFO, "   --quiet            [Do not print anything, just return an exit status]");
-  einfo (INFO, "   --verbose          [Produce informational messages whilst working.  Repeat for more information]");
-  einfo (INFO, "   --version          [Report the verion of the tool & exit]");
+  einfo (INFO, "   --debug-rpm=<RPM>       [Find separate dwarf debug information in <RPM>]");
+  einfo (INFO, "   --debug-file=<FILE>     [Find separate dwarf debug information in <FILE>]");
+  einfo (INFO, "   --debug-dir=<DIR>       [Look in <DIR> for separate dwarf debug information files]");
+  einfo (INFO, "   -h | --help             [Display this message & exit]");
+  einfo (INFO, "   -i | --ignore-unknown   [Do not complain about unknown file types]");
+  einfo (INFO, "   -r | --report-unknown   [Complain about unknown file types]");
+  einfo (INFO, "   -f | --follow-links     [Follow symbolic links]");
+  einfo (INFO, "   -I | --ignore-links     [Do not follow symbolic links]");
+  einfo (INFO, "   -q | --quiet            [Do not print anything, just return an exit status]");
+  einfo (INFO, "   -v | --verbose          [Produce informational messages whilst working.  Repeat for more information]");
+  einfo (INFO, "   --version               [Report the verion of the tool & exit]");
 #if HAVE_LIBDEBUGINFOD
-  einfo (INFO, "   --use-debuginfod   [Use debuginfod, even if it is available (default)]");
-  einfo (INFO, "   --no-use-debuginfod [Do not use debuginfod, even if it is available]");
+  einfo (INFO, "   -u | --use-debuginfod   [Use debuginfod, even if it is available (default)]");
+  einfo (INFO, "   -n | --no-use-debuginfod [Do not use debuginfod, even if it is available]");
 #endif
 
   einfo (INFO, "The following options are internal to the scanner and not expected to be supplied by the user:");
-  einfo (INFO, "   --prefix=<TEXT>    [Include <TEXT> in the output description]");
-  einfo (INFO, "   --tmpdir=<NAME>    [Absolute pathname of a temporary directory used to pass data between iterations]");
-  einfo (INFO, "   --level=<N>        [Recursion level of the scanner]");
+  einfo (INFO, "   -p | --prefix=<TEXT>    [Include <TEXT> in the output description]");
+  einfo (INFO, "   -t | --tmpdir=<NAME>    [Absolute pathname of a temporary directory used to pass data between iterations]");
+  einfo (INFO, "   -l | --level=<N>        [Recursion level of the scanner]");
 
   einfo (INFO, "Tools have their own options:");
   einfo (INFO, "   --enable-<tool>    [Turn on <tool>][By default the hardened tool is enabled]");
@@ -1930,7 +1939,6 @@ process_command_line (uint argc, const char * argv[])
 	  switch (*arg)
 	    {
 	    case 'h': /* --help */
-	      /* As an assit to users treat --help-<tool> as --<tool>-help.  */
 	      if (const_strneq (arg, "help-"))
 		{
 		  for (tool = first_checker; tool != NULL; tool = ((checker_internal *)(tool->internal))->next)
@@ -1945,23 +1953,55 @@ process_command_line (uint argc, const char * argv[])
 			}
 		    }
 		}
-	      usage ();
-	      exit (EXIT_SUCCESS);
+	      else if (streq (arg, "h") || streq (arg, "help"))
+		{
+		  usage ();
+		  exit (EXIT_SUCCESS);
+		}
+	      else
+		goto unknown_arg;
 
-	    case 'i': /* --ignore-unknown  */
-	      ignore_unknown = do_ignore;
+	    case 'i':
+	      if (streq (arg, "i") || streq (arg, "ignore-unknown"))
+		ignore_unknown = do_ignore;
+	      else if (streq (arg, "ignore-links"))
+		ignore_links = do_ignore;
+	      else
+		goto unknown_arg;
 	      break;
 
-	    case 'r': /* --report-unknown  */
-	      ignore_unknown = do_not_ignore;
+	    case 'r':
+	      if (streq (arg, "r") || streq (arg, "report-unknown"))
+		ignore_unknown = do_not_ignore;
+	      else
+		goto unknown_arg;
 	      break;
 
+	    case 'f':
+	      if (streq (arg, "f") || streq (arg, "follow-links"))
+		ignore_links = do_not_ignore;
+	      else
+		goto unknown_arg;
+	      break;
+	      
+	    case 'I':
+	      if (streq (arg, "I"))
+		ignore_links = do_ignore;
+	      else
+		goto unknown_arg;
+	      break;
+	      
 	    case 'q': /* --quiet */
-	      save_arg (orig_arg);
-	      verbosity = -1UL;
+	      if (streq (arg, "q") || streq (arg, "quiet"))
+		{
+		  save_arg (orig_arg);
+		  verbosity = -1UL;
+		}
+	      else
+		goto unknown_arg;
 	      break;
 
-	    case 'd': /* --debug-rpm, --debug-file or --debug-dir.  */
+	    case 'd': /* --debug-rpm, --debug-file, --debug-dir  */
 	      parameter = strchr (arg, '=');
 	      if (parameter == NULL)
 		parameter = argv[a++];
@@ -2026,41 +2066,51 @@ process_command_line (uint argc, const char * argv[])
 		}
 	      break;
 
-	    case 'p': /* --prefix  */
-	      save_arg (orig_arg);
-	      parameter = strchr (arg, '=');
-	      if (parameter == NULL)
-		parameter = argv[a++];
-	      else
-		parameter ++;
-
-	      if (parameter == NULL)
-		goto arg_missing_argument;
-
-	      /* Prefix arguments accumulate.  */
-	      prefix = concat (prefix, parameter, NULL);
-	      break;
-
-	    case 'l': /* --level */
-	      parameter = strchr (arg, '=');
-	      if (parameter == NULL)
-		parameter = argv[a++];
-	      else
-		parameter ++;	      
-
-	      if (parameter == NULL)
-		goto arg_missing_argument;
-
-	      level = strtoul (parameter, NULL, 0);
-	      if (level < 1)
+	    case 'p':
+	      if (streq (arg, "p") || streq (arg, "prefix"))
 		{
-		  einfo (WARN, "improper --level option: %s", parameter);
-		  level = 1;
+		  save_arg (orig_arg);
+		  parameter = strchr (arg, '=');
+		  if (parameter == NULL)
+		    parameter = argv[a++];
+		  else
+		    parameter ++;
+
+		  if (parameter == NULL)
+		    goto arg_missing_argument;
+
+		  /* Prefix arguments accumulate.  */
+		  prefix = concat (prefix, parameter, NULL);
 		}
+	      else
+		goto unknown_arg;
 	      break;
 
-	    case 't': /* --tmpdir */
-	      if (const_strneq (arg, "tmpdir"))
+	    case 'l':
+	      if (streq (arg, "l") || streq (arg, "level"))
+		{
+		  parameter = strchr (arg, '=');
+		  if (parameter == NULL)
+		    parameter = argv[a++];
+		  else
+		    parameter ++;	      
+
+		  if (parameter == NULL)
+		    goto arg_missing_argument;
+
+		  level = strtoul (parameter, NULL, 0);
+		  if (level < 1)
+		    {
+		      einfo (WARN, "improper --level option: %s", parameter);
+		      level = 1;
+		    }
+		}
+	      else
+		goto unknown_arg;
+	      break;
+
+	    case 't':
+	      if (streq (arg, "t") || streq (arg, "tmpdir"))
 		{
 		  parameter = strchr (arg, '=');
 		  if (parameter == NULL)
@@ -2078,53 +2128,50 @@ process_command_line (uint argc, const char * argv[])
 		goto unknown_arg;
 	      break;
 	      
-	    case 'v': /* --verbose or --version.  */
-	      if (const_strneq (arg, "version"))
-		{
-		  print_version ();
-		  exit (EXIT_SUCCESS);
-		}
-	      else if (const_strneq (arg, "verbose")
-		       /* Allow -v as an alias for --verbose.  */
-		       || arg[1] == 0)
+	    case 'v':
+	      if (streq (arg, "v") || streq (arg, "verbose"))
 		{
 		  save_arg (orig_arg);
 		  verbosity ++;
+		}
+	      else if (streq (arg, "version"))
+		{
+		  print_version ();
+		  exit (EXIT_SUCCESS);
 		}
 	      else
 		goto unknown_arg;
 	      break;
 
 	    case 'u':
-	      if (streq (arg, "use-debuginfod"))
-		{
 #if HAVE_LIBDEBUGINFOD
+	      if (streq (arg, "u") || streq (arg, "use-debuginfod"))
+		{
 		  use_debuginfod = true;
-#else
-		  einfo (WARN, "debuginfod is not supported by this build of annocheck");
-#endif
 		}
 	      else
 		goto unknown_arg;
+#else
+	      einfo (WARN, "debuginfod is not supported by this build of annocheck");
+#endif
 	      break;
 
 	    case 'n':
-	      if (streq (arg, "no-use-debuginfod"))
-		{
 #if HAVE_LIBDEBUGINFOD
+	      if (streq (arg, "n") || streq (arg, "no-use-debuginfod"))
+		{
 		  use_debuginfod = false;
-#else
-		  /* Do not warn, just silently accept.  */
-#endif
 		}
 	      else
 		goto unknown_arg;
+#else
+	      /* Do not warn, just silently accept.  */
+#endif
 	      break;
 
 	    default:
 	    unknown_arg:
 	      einfo (WARN, "Unrecognised command line option: %s", orig_arg);
-	      usage ();
 	      return false;
 	    arg_missing_argument:
 	      einfo (ERROR, "Command line option '%s' needs an argument", orig_arg);

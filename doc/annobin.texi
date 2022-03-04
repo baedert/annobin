@@ -679,6 +679,8 @@ annocheck
   [@b{--quiet}]
   [@b{--ignore-unknown}]
   [@b{--report-unknown}]
+  [@b{--follow-links}]
+  [@b{--ignore-links}]
   [@b{--debug-rpm=}@var{file}]
   [@b{--dwarf-dir=}@var{dir}]
   [@b{--prefix=}@var{text}]
@@ -742,21 +744,24 @@ Display the usage information for @var{tool} and then exits.
 
 @item --report-unknown
 @itemx --ignore-unknown
-These options have two separate effects (and should really be
-separated into different options).  If enabled, unknown file types are
-reported when they are encountered.  This includes non-ELF format
-files, block devices and so on.  Directories are not considered to be
-unknown and are automatically descended.
-
-The second effect is how symbolic links are handled.  If reporting is
-enabled then they are treated as unknown and reported.  If reporting
-is disabled then they are followed, if possible.  Otherwise they are
-reported as being unresolveable.
+If enabled, unknown file types are reported when they are encountered.
+This includes non-ELF format files, block devices and so on.
+Directories are not considered to be unknown and are automatically
+descended.
 
 The default setting depends upon the file being processed.  For rpm
 files the default is to ignore unknowns, since these often contain
-non-executable files, and dangling symbolic links.  For other file
-types, including directories, the default is to report unknown files.
+non-executable files.  For other file types, including directories,
+the default is to report unknown files.
+
+@item --ignore-links
+@itemx --follow-links
+Specifies whether symbolic links should be followed or ignored.
+
+The default setting depends upon the file being processed.  For rpm
+files the default is to ignore symbolic links, since these often
+unresolveable.  For other file types, including directories,
+the default is to follow the links.
 
 @item --prefix=@var{text}
 Include @var{text} in the output description.
@@ -2354,6 +2359,7 @@ annocheck
   [@b{--size-sec-flags=@var{!WAX}}]
   [@b{--size-seg-flags=@var{!WRX}}]
   [@b{--size-human}]
+  [@b{--size-total}]
   @var{file}@dots{}
 @c man end
 @end smallexample
@@ -2392,9 +2398,14 @@ meaning of the flags that follow it.
 
 If the @option{--verbose} option is enabled, then the tool will also
 report the size of the named section(s) in each file it encounters.
+
 If the @option{--size-human} option is enabled then sizes will be
 rounded down to the nearest byte, kibibyte, mebibyte or gibibyte, as
 appropriate.
+
+If the @option{--size-total} option is enabled then the total size of
+all sections in all scanned files will also be reported, as well as
+the ratio of the reported section sizes to the total section size.
 
 @c man end
 

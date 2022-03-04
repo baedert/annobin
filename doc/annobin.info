@@ -2182,6 +2182,7 @@ File: annobin.info,  Node: Size,  Next: Timing,  Prev: Notes,  Up: Annocheck
        [-size-sec-flags=!WAX]
        [-size-seg-flags=!WRX]
        [-size-human]
+       [-size-total]
        FILE...
 
    The SECTION-SIZE tool records the size of named sections within a
@@ -2213,9 +2214,15 @@ readable and X for executable.  Again the ! character can be used to
 invert the meaning of the flags that follow it.
 
    If the '--verbose' option is enabled, then the tool will also report
-the size of the named section(s) in each file it encounters.  If the
-'--size-human' option is enabled then sizes will be rounded down to the
-nearest byte, kibibyte, mebibyte or gibibyte, as appropriate.
+the size of the named section(s) in each file it encounters.
+
+   If the '--size-human' option is enabled then sizes will be rounded
+down to the nearest byte, kibibyte, mebibyte or gibibyte, as
+appropriate.
+
+   If the '--size-total' option is enabled then the total size of all
+sections in all scanned files will also be reported, as well as the
+ratio of the reported section sizes to the total section size.
 
 
 File: annobin.info,  Node: Timing,  Prev: Size,  Up: Annocheck
@@ -3549,27 +3556,27 @@ Node: Hardened Command Line Options81702
 Node: Waiving Hardened Results87142
 Node: Notes89088
 Node: Size89724
-Node: Timing91867
-Node: Libannocheck92506
-Node: libannocheck_init94445
-Node: libannocheck_finish95367
-Node: libannocheck_get_version95915
-Node: libannocheck_get_error_message96324
-Node: libannocheck_get_known_tests96964
-Node: libannocheck_enable_all_tests98130
-Node: libannocheck_disable_all_tests98609
-Node: libannocheck_enable_test99165
-Node: libannocheck_disable_test99833
-Node: libannocheck_enable_profile100502
-Node: libannocheck_get_known_profiles101024
-Node: libannocheck_run_tests101727
-Node: Configure Options102572
-Node: Legacy Scripts104914
-Node: Who Built Me105689
-Node: ABI Checking108449
-Node: Hardening Checks110565
-Node: Checking Archives114651
-Node: GNU FDL117072
+Node: Timing92093
+Node: Libannocheck92732
+Node: libannocheck_init94671
+Node: libannocheck_finish95593
+Node: libannocheck_get_version96141
+Node: libannocheck_get_error_message96550
+Node: libannocheck_get_known_tests97190
+Node: libannocheck_enable_all_tests98356
+Node: libannocheck_disable_all_tests98835
+Node: libannocheck_enable_test99391
+Node: libannocheck_disable_test100059
+Node: libannocheck_enable_profile100728
+Node: libannocheck_get_known_profiles101250
+Node: libannocheck_run_tests101953
+Node: Configure Options102798
+Node: Legacy Scripts105140
+Node: Who Built Me105915
+Node: ABI Checking108675
+Node: Hardening Checks110791
+Node: Checking Archives114877
+Node: GNU FDL117298
 
 End Tag Table
 
