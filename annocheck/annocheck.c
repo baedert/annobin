@@ -1437,7 +1437,7 @@ process_file (const char * filename)
 	{
 	case ignore_not_set:
 	  if (progname != NULL)
-	    return einfo (WARN, "'%s' is a symbolic link.  Run %s with -f to follow or -d to ignore", filename, progname);
+	    return einfo (WARN, "'%s' is a symbolic link.  Run %s with -f to follow or -I to ignore", filename, progname);
 	  return einfo (WARN, "'%s' is a symbolic link", filename);
 
 	case do_ignore:

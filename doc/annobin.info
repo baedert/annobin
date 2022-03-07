@@ -590,18 +590,20 @@ File: annobin.info,  Node: Annocheck,  Next: Libannocheck,  Prev: Examining,  Up
 *************************
 
      annocheck
-       [-help]
+       [-h | -help]
        [-help-TOOL]
        [-version]
-       [-verbose]
-       [-quiet]
-       [-ignore-unknown]
-       [-report-unknown]
+       [-v | -verbose]
+       [-q | -quiet]
+       [-i | -ignore-unknown]
+       [-r | -report-unknown]
+       [-f | -follow-links]
+       [-I | -ignore-links]
        [-debug-rpm=FILE]
        [-dwarf-dir=DIR]
-       [-prefix=TEXT]
-       [-use-debuginfod]
-       [-no-use-debuginfod]
+       [-p TEXT | -prefix=TEXT]
+       [-u | -use-debuginfod]
+       [-n | -no-use-debuginfod]
        [-enable-TOOL]
        [-disable-TOOL]
        [-TOOL-OPTION]
@@ -645,6 +647,7 @@ that are used regardless of which tools are enabled.
      Look in DIR for separate dwarf debug information files.
 
 '--help'
+'-h'
      Displays the generic annobin usage information and then exits.
 
 '--help-TOOL'
@@ -652,30 +655,39 @@ that are used regardless of which tools are enabled.
 
 '--report-unknown'
 '--ignore-unknown'
-     These options have two separate effects (and should really be
-     separated into different options).  If enabled, unknown file types
-     are reported when they are encountered.  This includes non-ELF
-     format files, block devices and so on.  Directories are not
-     considered to be unknown and are automatically descended.
-
-     The second effect is how symbolic links are handled.  If reporting
-     is enabled then they are treated as unknown and reported.  If
-     reporting is disabled then they are followed, if possible.
-     Otherwise they are reported as being unresolveable.
+'-r'
+'-i'
+     If enabled, unknown file types are reported when they are
+     encountered.  This includes non-ELF format files, block devices and
+     so on.  Directories are not considered to be unknown and are
+     automatically descended.
 
      The default setting depends upon the file being processed.  For rpm
      files the default is to ignore unknowns, since these often contain
-     non-executable files, and dangling symbolic links.  For other file
-     types, including directories, the default is to report unknown
-     files.
+     non-executable files.  For other file types, including directories,
+     the default is to report unknown files.
+
+'--ignore-links'
+'--follow-links'
+'-I'
+'-f'
+     Specifies whether symbolic links should be followed or ignored.
+
+     The default setting depends upon the file being processed.  For rpm
+     files the default is to ignore symbolic links, since these often
+     unresolveable.  For other file types, including directories, the
+     default is to follow the links.
 
 '--prefix=TEXT'
+'-p'
      Include TEXT in the output description.
 
 '--quiet'
+'-q'
      Do not print anything, just return an exit status.
 
 '--verbose'
+'-v'
      Produce informational messages whilst working.  Repeat for more
      information.
 
@@ -683,12 +695,14 @@ that are used regardless of which tools are enabled.
      Report the version of the tool and then exit.
 
 '--use-debuginfod'
+'-u'
      Enable the use of the debuginfod service to download debuginfo
      rpms.  This feature is enabled by default, but it is only active if
      support for the debuginfod server has been compiled in to
      annocheck.
 
 '--no-use-debuginfod'
+'-n'
      Do not use the debuginfod service, even if it is available.
 
 '--enable-TOOL'
@@ -3517,66 +3531,66 @@ Node: The CF Encoding19015
 Node: The ENUM Encoding20087
 Node: The INSTRUMENT Encoding20476
 Node: Annocheck21850
-Node: Built By26116
-Node: Hardened27619
-Node: Test bind now31398
-Node: Test branch protection33038
-Node: Test cf protection35292
-Node: Test dynamic segment39401
-Node: Test dynamic tags40532
-Node: Test entry42881
-Node: Test fortify43776
-Node: Test glibcxx assertions45289
-Node: Test gnu relro46327
-Node: Test gnu stack48061
-Node: Test go revision50458
-Node: Test instrumentation51506
-Node: Test lto52337
-Node: Test not branch protection53243
-Node: Test not dynamic tags54825
-Node: Test notes56513
-Node: Test only go58796
-Node: Test optimization59947
-Node: Test pic61322
-Node: Test pie62867
-Node: Test production64155
-Node: Test property note64968
-Node: Test run path67445
-Node: Test rwx seg69666
-Node: Test short enums70938
-Node: Test stack clash71955
-Node: Test stack prot73416
-Node: Test stack realign74748
-Node: Test textrel76018
-Node: Test threads77275
-Node: Test unicode78090
-Node: Test warnings79581
-Node: Test writable got80416
-Node: Hardened Command Line Options81702
-Node: Waiving Hardened Results87142
-Node: Notes89088
-Node: Size89724
-Node: Timing92093
-Node: Libannocheck92732
-Node: libannocheck_init94671
-Node: libannocheck_finish95593
-Node: libannocheck_get_version96141
-Node: libannocheck_get_error_message96550
-Node: libannocheck_get_known_tests97190
-Node: libannocheck_enable_all_tests98356
-Node: libannocheck_disable_all_tests98835
-Node: libannocheck_enable_test99391
-Node: libannocheck_disable_test100059
-Node: libannocheck_enable_profile100728
-Node: libannocheck_get_known_profiles101250
-Node: libannocheck_run_tests101953
-Node: Configure Options102798
-Node: Legacy Scripts105140
-Node: Who Built Me105915
-Node: ABI Checking108675
-Node: Hardening Checks110791
-Node: Checking Archives114877
-Node: GNU FDL117298
+Node: Built By26224
+Node: Hardened27727
+Node: Test bind now31506
+Node: Test branch protection33146
+Node: Test cf protection35400
+Node: Test dynamic segment39509
+Node: Test dynamic tags40640
+Node: Test entry42989
+Node: Test fortify43884
+Node: Test glibcxx assertions45397
+Node: Test gnu relro46435
+Node: Test gnu stack48169
+Node: Test go revision50566
+Node: Test instrumentation51614
+Node: Test lto52445
+Node: Test not branch protection53351
+Node: Test not dynamic tags54933
+Node: Test notes56621
+Node: Test only go58904
+Node: Test optimization60055
+Node: Test pic61430
+Node: Test pie62975
+Node: Test production64263
+Node: Test property note65076
+Node: Test run path67553
+Node: Test rwx seg69774
+Node: Test short enums71046
+Node: Test stack clash72063
+Node: Test stack prot73524
+Node: Test stack realign74856
+Node: Test textrel76126
+Node: Test threads77383
+Node: Test unicode78198
+Node: Test warnings79689
+Node: Test writable got80524
+Node: Hardened Command Line Options81810
+Node: Waiving Hardened Results87250
+Node: Notes89196
+Node: Size89832
+Node: Timing92201
+Node: Libannocheck92840
+Node: libannocheck_init94779
+Node: libannocheck_finish95701
+Node: libannocheck_get_version96249
+Node: libannocheck_get_error_message96658
+Node: libannocheck_get_known_tests97298
+Node: libannocheck_enable_all_tests98464
+Node: libannocheck_disable_all_tests98943
+Node: libannocheck_enable_test99499
+Node: libannocheck_disable_test100167
+Node: libannocheck_enable_profile100836
+Node: libannocheck_get_known_profiles101358
+Node: libannocheck_run_tests102061
+Node: Configure Options102906
+Node: Legacy Scripts105248
+Node: Who Built Me106023
+Node: ABI Checking108783
+Node: Hardening Checks110899
+Node: Checking Archives114985
+Node: GNU FDL117406
 
 End Tag Table
 

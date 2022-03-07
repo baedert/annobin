@@ -672,20 +672,20 @@ number means that the feature has been enabled in some way.
 @smallexample
 @c man begin SYNOPSIS annocheck
 annocheck
-  [@b{--help}]
+  [@b{-h | --help}]
   [@b{--help-@var{tool}}]
   [@b{--version}]
-  [@b{--verbose}]
-  [@b{--quiet}]
-  [@b{--ignore-unknown}]
-  [@b{--report-unknown}]
-  [@b{--follow-links}]
-  [@b{--ignore-links}]
+  [@b{-v | --verbose}]
+  [@b{-q | --quiet}]
+  [@b{-i | --ignore-unknown}]
+  [@b{-r | --report-unknown}]
+  [@b{-f | --follow-links}]
+  [@b{-I | --ignore-links}]
   [@b{--debug-rpm=}@var{file}]
   [@b{--dwarf-dir=}@var{dir}]
-  [@b{--prefix=}@var{text}]
-  [@b{--use-debuginfod}]
-  [@b{--no-use-debuginfod}]
+  [@b{-p @var{text} | --prefix=}@var{text}]
+  [@b{-u | --use-debuginfod}]
+  [@b{-n | --no-use-debuginfod}]
   [@b{--enable-@var{tool}}]
   [@b{--disable-@var{tool}}]
   [@b{--@var{tool}-@var{option}}]
@@ -737,6 +737,7 @@ Look in @var{file} for separate dwarf debug information.
 Look in @var{dir} for separate dwarf debug information files.
 
 @item --help
+@itemx -h
 Displays the generic annobin usage information and then exits.
 
 @item --help-@var{tool}
@@ -744,6 +745,8 @@ Display the usage information for @var{tool} and then exits.
 
 @item --report-unknown
 @itemx --ignore-unknown
+@itemx -r
+@itemx -i
 If enabled, unknown file types are reported when they are encountered.
 This includes non-ELF format files, block devices and so on.
 Directories are not considered to be unknown and are automatically
@@ -756,6 +759,8 @@ the default is to report unknown files.
 
 @item --ignore-links
 @itemx --follow-links
+@itemx -I
+@itemx -f
 Specifies whether symbolic links should be followed or ignored.
 
 The default setting depends upon the file being processed.  For rpm
@@ -764,12 +769,15 @@ unresolveable.  For other file types, including directories,
 the default is to follow the links.
 
 @item --prefix=@var{text}
+@itemx -p
 Include @var{text} in the output description.
 
 @item --quiet
+@itemx -q
 Do not print anything, just return an exit status.
 
 @item --verbose
+@itemx -v
 Produce informational messages whilst working.  Repeat for more
 information.
 
@@ -777,11 +785,13 @@ information.
 Report the version of the tool and then exit.
 
 @item --use-debuginfod
+@itemx -u
 Enable the use of the debuginfod service to download debuginfo rpms.
 This feature is enabled by default, but it is only active if support
 for the debuginfod server has been compiled in to annocheck.
 
 @item --no-use-debuginfod
+@itemx -n
 Do not use the debuginfod service, even if it is available.
 
 @item --enable-@var{tool}
