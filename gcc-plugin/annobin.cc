@@ -2120,12 +2120,23 @@ annobin_active_check (const char * message)
   // does not match the implementation.  So we use our own prototype here.
   extern bool warning (int, const char *, ...);
 
+  if (annobin_active_checks < 1)
+    return;
+
+  // BZ 2009958: Do not produce warnings when compiling autoconf test files.
+  if (annobin_active_checks < 2  // But if errors are requested then we do produce these.
+      && annobin_input_filename != NULL
+      && strncmp (annobin_input_filename, "conftest.", strlen ("conftest.")) == 0)
+    return;
+
   if (annobin_active_checks == 1)
     // FIXME: We should find an OPT_ value to use here so
     // that users can disable these warnings if they need to.
     warning (0, "%s", message);
   else if (annobin_active_checks == 2)
     error ("%s", message);
+  else
+    ice ("unexpected value for annobin_active_checks");
 }
 
 static void
