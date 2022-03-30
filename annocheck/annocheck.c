@@ -1960,6 +1960,7 @@ process_command_line (uint argc, const char * argv[])
 		}
 	      else
 		goto unknown_arg;
+	      break;  // Pacify covscan.
 
 	    case 'i':
 	      if (streq (arg, "i") || streq (arg, "ignore-unknown"))

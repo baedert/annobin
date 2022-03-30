@@ -264,7 +264,7 @@ size_end_scan (uint level, const char * datafile)
 	  print_size (total_sections_size);
 	  einfo (PARTIAL, "\n");
 
-	  if (sec_match_total)
+	  if (sec_match_total && total_sections_size)
 	    {
 	      einfo (INFO, "Ratio of matched section sizes to total section sizess: %lld%%\n",
 		     (sec_match_total * 100) / total_sections_size);

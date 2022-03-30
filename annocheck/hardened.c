@@ -5182,7 +5182,12 @@ finish (annocheck_data * data)
 	      else if (per_file.e_machine == EM_AARCH64)
 		{
 		  if (tests[TEST_BRANCH_PROTECTION].enabled)
-		    fail (data, i, SOURCE_FINAL_SCAN, ".note.gnu.property section not found (it is needed for branch protection support)");
+		    {
+		      if (per_file.has_property_note)
+			pass (data, i, SOURCE_FINAL_SCAN, "properly formatted .note.gnu.property section found");
+		      else
+			fail (data, i, SOURCE_FINAL_SCAN, "properly formatted .note.gnu.property not found (it is needed for branch protection support)");
+		    }
 		  else
 		    pass (data, i, SOURCE_FINAL_SCAN, "the AArch64 property note is only useful if branch protection is being checked");
 		}
