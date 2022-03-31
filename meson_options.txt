@@ -1,0 +1,30 @@
+
+option('clang-plugin',
+  type: 'boolean',
+  value: true,
+  description: 'Whether the clang plugin should be built'
+)
+
+option('llvm-plugin',
+  type: 'boolean',
+  value: true,
+  description: 'Whether the llvm plugin should be built'
+)
+
+option('annocheck',
+  type: 'boolean',
+  value: true,
+  description: 'Whether annocheck should be built'
+)
+
+option('docs',
+  type: 'boolean',
+  value: true,
+  description: 'Whether the documentation should be built'
+)
+
+option('debuginfod',
+  type: 'feature',
+  value: 'auto',
+  description: 'Whether to enabled debuginfod support'
+)

@@ -23,7 +23,7 @@ INCDIR = @srcdir@/..
 
 CLANG_LIBS = -lLLVM
 
-PLUGIN_INSTALL_DIR = `clang --print-seach-dirs | gawk -e'BEGIN { FS = ":" } /libraries/ { print gensub(" =","",1,$2) } END { }'`
+PLUGIN_INSTALL_DIR = `clang --print-search-dirs | gawk -e'BEGIN { FS = ":" } /libraries/ { print gensub(" =","",1,$2) } END { }'`
 
 PLUGIN_NAME = annobin-for-clang.so
 
