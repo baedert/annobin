@@ -484,9 +484,14 @@ namespace
 
   struct AnnobinModulePass : llvm::PassInfoMixin<AnnobinModulePass>
   {
-    llvm::PassBuilder::OptimizationLevel OptLevel;
+#if __clang_major__ > 13
+    using OptimizationLevel = llvm::OptimizationLevel;
+#else
+    using OptimizationLevel = llvm::PassBuilder::OptimizationLevel;
+#endif
+    OptimizationLevel OptLevel;
 
-    AnnobinModulePass(llvm::PassBuilder::OptimizationLevel OptLevel) : OptLevel(OptLevel) {}
+    AnnobinModulePass(llvm::OptimizationLevel OptLevel) : OptLevel(OptLevel) {}
     llvm::PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM)
     {
       AnnobinModule Annobin;
@@ -505,7 +510,7 @@ llvm::PassPluginLibraryInfo getAnnobinLLVMPluginInfo ()
       {
 	PB.registerPipelineStartEPCallback
 	  ([](llvm::ModulePassManager &PM,
-	      llvm::PassBuilder::OptimizationLevel Level)
+	      AnnobinModulePass::OptimizationLevel Level)
 	  {
 	    PM.addPass(AnnobinModulePass(Level));
 	  });
