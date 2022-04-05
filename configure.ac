@@ -155,7 +155,7 @@ AM_CONDITIONAL([COND_LLVM],       [test "$with_llvm_plugin" == yes])
 
 AC_CONFIG_FILES(Makefile)
 
-if test "$with_annocheck" != no -o test "$with_gcc_plugin" != no; then
+if test "$with_annocheck" != no -o "$with_gcc_plugin" != no; then
   AC_CONFIG_HEADERS(gcc-plugin/config.h)
 fi
 if test "$with_docs" != no; then

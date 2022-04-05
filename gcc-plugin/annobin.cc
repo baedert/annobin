@@ -552,17 +552,17 @@ annobin_output_numeric_note (const char     numeric_type,
 
 /* Returns the real index into the global_options array of the gcc
    command line option that used to be indexed by CL_OPTION_INDEX.
-   
-   Returns -1 if the option could not be found.  */
 
-static int
+   Returns 0 if the option could not be found.  */
+
+static unsigned int
 annobin_remap (unsigned int cl_option_index)
 {
   if (cl_option_index >= cl_options_count)
     {
       annobin_inform (INFORM_VERBOSE, "Error: attempting to access an unknown gcc command line option");
       annobin_inform (INFORM_VERBOSE, "debug: index = %u max = %u", cl_option_index, cl_options_count);
-      return -1;
+      return 0;
     }
 
   /* Sometimes a discrepancy between the gcc used to build annobin
@@ -571,43 +571,39 @@ annobin_remap (unsigned int cl_option_index)
      the index. */
   static struct cl_index_remap
   {
-    bool                checked;
-    const char *        option_name;
-    const unsigned int  original_index;
-    unsigned int        real_index;
-    union
-    {
-      int               iflag;
-      void *            pflag;
-    };
-    bool                warned;
+    bool          checked;
+    const char *  option_name;
+    const size_t  original_index;
+    unsigned int  real_index;
+    bool          has_flag;
   }
   cl_remap [] =
   {
     /* This is an array of the options that we know annobin wants to
        access and for which there are entries in the cl_options array.  */
-#define MAKE_ENTRY(opt_name, opt_num, flag_name) \
-    { false, opt_name, opt_num, 0, annobin_global_options->x_##flag_name, false}
+#define MAKE_ENTRY(opt_name, opt_num) \
+    { false, opt_name, opt_num, 0, true }
    
 #ifdef flag_stack_clash_protection
-    MAKE_ENTRY ("-fstack-clash-protection", OPT_fstack_clash_protection, flag_stack_clash_protection),
+    MAKE_ENTRY ("-fstack-clash-protection", OPT_fstack_clash_protection),
 #endif
 #ifdef flag_cf_protection
-    MAKE_ENTRY ("-fcf-protection", OPT_fcf_protection_, flag_cf_protection),
+    MAKE_ENTRY ("-fcf-protection", OPT_fcf_protection_),
 #endif
-    MAKE_ENTRY ("-fverbose-asm", OPT_fverbose_asm, flag_verbose_asm),
-    MAKE_ENTRY ("-fpic", OPT_fpic, flag_pic),
-    MAKE_ENTRY ("-fpie", OPT_fpie, flag_pie),
-    MAKE_ENTRY ("-fstack-protector", OPT_fstack_protector, flag_stack_protect),
-    MAKE_ENTRY ("-fomit-frame-pointer", OPT_fomit_frame_pointer, flag_omit_frame_pointer),
-    MAKE_ENTRY ("-fshort-enums", OPT_fshort_enums, flag_short_enums),
-    MAKE_ENTRY ("-fstack-usage", OPT_fstack_usage, flag_stack_usage_info),
-    MAKE_ENTRY ("-ffunction-sections", OPT_ffunction_sections, flag_function_sections),
-    MAKE_ENTRY ("-freorder-functions", OPT_freorder_functions, flag_reorder_functions),
-    MAKE_ENTRY ("-fprofile-values", OPT_fprofile_values, flag_profile_values),
-    MAKE_ENTRY ("-finstrument-functions", OPT_finstrument_functions, flag_instrument_function_entry_exit),
-    MAKE_ENTRY ("-fprofile", OPT_fprofile, profile_flag),
-    MAKE_ENTRY ("-fprofile-arcs", OPT_fprofile_arcs, profile_arc_flag)
+    MAKE_ENTRY ("-fverbose-asm", OPT_fverbose_asm),
+    MAKE_ENTRY ("-fpic", OPT_fpic),
+    MAKE_ENTRY ("-fpie", OPT_fpie),
+    MAKE_ENTRY ("-fstack-protector", OPT_fstack_protector),
+    MAKE_ENTRY ("-fomit-frame-pointer", OPT_fomit_frame_pointer),
+    MAKE_ENTRY ("-fshort-enums", OPT_fshort_enums),
+    MAKE_ENTRY ("-fstack-usage", OPT_fstack_usage),
+    MAKE_ENTRY ("-ffunction-sections", OPT_ffunction_sections),
+    MAKE_ENTRY ("-freorder-functions", OPT_freorder_functions),
+    MAKE_ENTRY ("-fprofile-values", OPT_fprofile_values),
+    MAKE_ENTRY ("-finstrument-functions", OPT_finstrument_functions),
+    MAKE_ENTRY ("-fprofile", OPT_fprofile),
+    MAKE_ENTRY ("-fprofile-arcs", OPT_fprofile_arcs),
+    { false, "--all-warnings", OPT_Wall, 0, false }
   };
 
   int i;
@@ -618,9 +614,10 @@ annobin_remap (unsigned int cl_option_index)
 
       if (cl_remap[i].checked)
 	{
-	  cl_option_index = cl_remap[i].real_index;
+	  return cl_remap[i].real_index;
 	}
-      else if (strncmp (cl_options[cl_option_index].opt_text, cl_remap[i].option_name,
+      else if (strncmp (cl_options[cl_option_index].opt_text,
+			cl_remap[i].option_name,
 			strlen (cl_remap[i].option_name)) == 0)
 	{
 	  cl_remap[i].checked = true;
@@ -633,7 +630,8 @@ annobin_remap (unsigned int cl_option_index)
 
 	  for (j = 0; j < cl_options_count; j++)
 	    {
-	      if (strncmp (cl_options[j].opt_text, cl_remap[i].option_name,
+	      if (strncmp (cl_options[j].opt_text,
+			   cl_remap[i].option_name,
 			   strlen (cl_remap[i].option_name)) == 0)
 		{
 		  cl_remap[i].checked = true;
@@ -650,7 +648,8 @@ annobin_remap (unsigned int cl_option_index)
 	      /* The option is no longer in the array!  */
 	      annobin_inform (INFORM_VERBOSE, "option %s (index %u) not in cl_options", cl_remap[i].option_name, cl_option_index);
 	      cl_remap[i].checked = true;
-	      cl_remap[i].real_index = cl_option_index = 0;
+	      cl_remap[i].real_index = 0;
+	      return 0;
 	    }
 	}
       break;
@@ -663,26 +662,26 @@ annobin_remap (unsigned int cl_option_index)
 	 Assume that they have not moved.
 	 FIXME: Better would be to have the name passed in.  */
       annobin_inform (INFORM_VERBOSE, "unrecorded gcc option index = %u", cl_option_index);
+      return cl_option_index;
     }
-  else if (cl_option_index == 0)
-    return cl_remap[i].iflag;
 
-  void * flag = option_flag_var (cl_option_index, annobin_global_options);
+  if (! cl_remap[i].checked)  // This should never happen.
+    return 0;
 
-  if (flag == NULL)
+  if (cl_remap[i].has_flag)
     {
-      if (! cl_remap[i].warned)
+      void * flag = option_flag_var (cl_option_index, annobin_global_options);
+
+      if (flag == NULL)
 	{
-	  annobin_inform (INFORM_VERBOSE, "Error: Could not find option in cl_options, using flag instead");
+	  annobin_inform (INFORM_VERBOSE, "Error: Could not find option in cl_options");
 	  annobin_inform (INFORM_VERBOSE, "debug: index = %u (%s) max = %u",
 			  cl_option_index,
 			  cl_remap[i].option_name,
 			  cl_options_count);
-	  cl_remap[i].warned = true;
+	  cl_remap[i].real_index = 0;
+	  return 0;
 	}
-
-      /* Try using the flag directly.  */
-      return cl_remap[i].iflag;
     }
 
   return cl_option_index;
@@ -692,16 +691,16 @@ annobin_remap (unsigned int cl_option_index)
    Returns -1 if the option could not be found.  */
 
 int
-annobin_get_int_option_by_index (int cl_option_index)
+annobin_get_int_option_by_index (unsigned int cl_option_index)
 {
   cl_option_index = annobin_remap (cl_option_index);
-  if (cl_option_index == -1)
+  if (cl_option_index == 0)
     return -1;
 
   /* This is just paranoia....  */
-  if (cl_option_index >= (int) cl_options_count)
+  if (cl_option_index >= cl_options_count)
     {
-      annobin_inform (INFORM_VERBOSE, "Error: integer gcc command line option index (%d) too big",
+      annobin_inform (INFORM_VERBOSE, "Error: integer gcc command line option index (%u) too big",
 		      cl_option_index);
       return -1;
     }
@@ -738,7 +737,7 @@ annobin_get_int_option_by_index (int cl_option_index)
 
     default:
       annobin_inform (INFORM_VERBOSE, "Error: unsupported integer gcc command line option type");
-      annobin_inform (INFORM_VERBOSE, "debug: type = %d, index = %d", option->var_type, cl_option_index);
+      annobin_inform (INFORM_VERBOSE, "debug: type = %d, index = %u", option->var_type, cl_option_index);
       return -1;
     }
 }
@@ -747,16 +746,16 @@ annobin_get_int_option_by_index (int cl_option_index)
    Returns NULL if the option could not be found.  */
 
 const char *
-annobin_get_str_option_by_index (int cl_option_index)
+annobin_get_str_option_by_index (unsigned int cl_option_index)
 {
   cl_option_index = annobin_remap (cl_option_index);
-  if (cl_option_index == -1)
+  if (cl_option_index == 0)
     return NULL;
 
   /* This is just paranoia....  */
-  if (cl_option_index >= (int) cl_options_count)
+  if (cl_option_index >= cl_options_count)
     {
-      annobin_inform (INFORM_VERBOSE, "Error: string gcc command line option index (%d) too big",
+      annobin_inform (INFORM_VERBOSE, "Error: string gcc command line option index (%u) too big",
 		      cl_option_index);
       return NULL;
     }
@@ -774,7 +773,7 @@ annobin_get_str_option_by_index (int cl_option_index)
 
     default:
       annobin_inform (INFORM_VERBOSE, "Error: unsupported string gcc command line option type");
-      annobin_inform (INFORM_VERBOSE, "debug: type = %d, index = %d", var_type, cl_option_index);
+      annobin_inform (INFORM_VERBOSE, "debug: type = %d, index = %u", var_type, cl_option_index);
       return NULL;
     }
 }
@@ -925,9 +924,10 @@ compute_GOWall_options (void)
 
   /* Unfortunately -Wall is not recorded by gcc.  So we have to scan the
      command line...  */
+  size_t remaped_wall = annobin_remap (OPT_Wall);
   for (i = 0; i < save_decoded_options_count; i++)
     {
-      if (save_decoded_options[i].opt_index == OPT_Wall)
+      if (save_decoded_options[i].opt_index == remaped_wall)
 	{
 	  val |= (1 << 14);
 	  break;
@@ -950,9 +950,9 @@ compute_GOWall_options (void)
 }
 
 static void
-record_GOW_settings (unsigned int gow,
-		     bool         is_open,
-		     annobin_function_info * info)
+record_GOW_settings (unsigned int             gow,
+		     bool                     is_open,
+		     annobin_function_info *  info)
 {
   char buffer [128];
   unsigned i;
@@ -1850,8 +1850,12 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
       /* FIXME: A workaround for BZ 1880634.
 	 Ensure that we do not have empty special text sections so that the
 	 annobin start symbols are never beyond the end of the sections.  */
+#ifndef ANNOBIN_NOP_INSN
+#define ANNOBIN_NOP_INSN ".nop"
+#endif
       if (* suffix && enable_ppc64_nops)
-	annobin_emit_asm (".nop", "Inserted by the annobin plugin.  Disable with -fplugin-arg-annobin-no-ppc64-nops");
+	annobin_emit_asm (ANNOBIN_NOP_INSN,
+			  "Inserted by the annobin plugin.  Disable with -fplugin-arg-annobin-no-ppc64-nops");
     }
   else
     fprintf (asm_out_file, "\t.equiv %s%s, .\n", annobin_output_filesym, suffix);

@@ -491,7 +491,7 @@ namespace
 #endif
     OptimizationLevel OptLevel;
 
-    AnnobinModulePass(llvm::OptimizationLevel OptLevel) : OptLevel(OptLevel) {}
+    AnnobinModulePass(OptimizationLevel OptLevel) : OptLevel(OptLevel) {}
     llvm::PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM)
     {
       AnnobinModule Annobin;

@@ -180,8 +180,8 @@ extern bool           in_lto (void);
    minor revision.  So annobin provides the following two macros/functions to
    access these options via their OPT_<name> values:  */
 
-extern const char *   annobin_get_str_option_by_index (int);
-extern int            annobin_get_int_option_by_index (int);
+extern const char *   annobin_get_str_option_by_index (unsigned int);
+extern int            annobin_get_int_option_by_index (unsigned int);
 
 #define GET_STR_OPTION_BY_INDEX(INDX) annobin_get_str_option_by_index (INDX)
 #define GET_INT_OPTION_BY_INDEX(INDX) annobin_get_int_option_by_index (INDX)
