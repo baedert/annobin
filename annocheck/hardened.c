@@ -1494,6 +1494,7 @@ is_special_glibc_binary (const char * path)
       "ld64.so.1",
       "ld64.so.2",
       "ldconfig",
+      "libBrokenLocale-2.28.so",
       "libBrokenLocale.so.1",
       "libSegFault.so",
       "libc.so.6",
@@ -1506,6 +1507,8 @@ is_special_glibc_binary (const char * path)
       "libnsl.so.1",
       "libnss_compat.so.2",
       "libpcprofile.so",
+      "libpthread-2.28.so",
+      "libresolv-2.28.so",
       "libresolv.so.2",
       "librt.so.1",
       "libthread_db.so.1",
@@ -1946,23 +1949,47 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
       "_GLOBAL__sub_I_main",
       "_Unwind_Resume",
       "_dl_relocate_static_pie",     /* Found in x86_64, RHEL-9, podman-catonit.  */
+      "_dl_start",
       "_dl_start_user", 	     /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
       "_dl_tunable_set_arena_max",   /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
       "_nl_finddomain_subfreeres",
       "_nl_unload_domain",
+      "_nss_compat_initgroups_dyn",
+      "_nss_compat_setgrent",
+      "_nss_dns_getcanonname_r",
+      "_nss_dns_gethostbyname3_r",
+      "_nss_files_parse_protoent",
+      "_nss_files_sethostent",
       "_start",
       "abort",
       "blacklist_store_name",
       "buffer_free",
+      "cabsf128",
       "call_fini",
+      "check_match",		     /* Found in aarch64, RHEL-8, ld-2.28.so.  */
       "check_one_fd",		     /* Found in libc.a(check_fds.o).  */
       "dlmopen_doit",                /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
+      "feraiseexcept",
+      "fini",
       "free_derivation",
       "free_mem",
+      "free_res",
+      "gai_cancel",
+      "gai_suspend",
+      "getaddrinfo_a",
       "handle_zhaoxin",		     /* Found in libc.a(libc-start.o).  */
       "install_handler",
       "internal_setgrent",
+      "j0l",
+      "j1f64",
+      "login",
+      "logwtmp",
+      "matherr",
+      "rtld_lock_default_lock_recursive",  /* Found in aarch64, RHEL-8, ld-2.28.so.  */
       "td_init",	             /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
+      "td_log",
+      "td_ta_map_lwp2thr",
+      "td_thr_validate",
       "unlink_blk" 	             /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
     };
 
@@ -4626,6 +4653,8 @@ skip_gap_sym (annocheck_data * data, const char * sym)
     {
       if (startswith (sym, "_start"))
 	return true;
+      if (streq (sym, "_dl_start_user"))
+	return true;
     }
   else if (per_file.e_machine == EM_386)
     {
@@ -5100,6 +5129,8 @@ finish (annocheck_data * data)
 		   because of the problems reported in https://bugzilla.redhat.com/show_bug.cgi?id=1951492
 		   So until that issue is resolved (if it ever is), we can expect missing notes for ARM32.  */
 		skip (data, i, SOURCE_FINAL_SCAN, "ARM32 code is usually compiled without annobin plugin support");
+	      else if (is_special_glibc_binary (data->full_filename))
+		skip (data, i, SOURCE_FINAL_SCAN, "glibc binaries are not compiled with this feature");		
 	      else if (C_compiler_seen ())
 		fail (data, i, SOURCE_FINAL_SCAN, "no indication that the necessary option was used (and a C compiler was detected)");
 	      else

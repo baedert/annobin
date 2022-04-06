@@ -967,18 +967,16 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
       return false;
     }
 
-  uint          best_type = 0;
-  const char *  best_name = NULL;
-  uint          second_best_type = 0;
-  const char *  second_best_name = NULL;
-  ulong         best_distance_so_far = ULONG_MAX;
-  ulong         second_best_distance = ULONG_MAX;
+  find_symbol_return best_so_far = { NULL, 0, ULONG_MAX };
+  find_symbol_return second_best = { NULL, 0, ULONG_MAX };
+  find_symbol_return before_start = { NULL, 0, ULONG_MAX };
+
   GElf_Sym      sym;
   uint          symndx;
 
   for (symndx = 1; gelf_getsym (sym_data, symndx, & sym) != NULL; symndx++)
     {
-      if (sym.st_value < start || sym.st_value >= end)
+      if (sym.st_value >= end)
 	continue;
 
       /* Skip annobin symbols.  */
@@ -998,24 +996,39 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
       if (ends_with (name, ".end", strlen (".end")))
 	continue;
 
-      ulong  distance_from_start = sym.st_value - start;
+      ulong  distance_from_start;
       uint   type = GELF_ST_TYPE (sym.st_info);
+
+      if (sym.st_value < start)
+	{
+	  distance_from_start = start - sym.st_value;
+
+	  if (distance_from_start < before_start.distance)
+	    {
+	      before_start.name = name;
+	      before_start.type = type;
+	      before_start.distance = distance_from_start;
+	    }
+	  continue;
+	}
+
+      distance_from_start = sym.st_value - start;
 
       if (prefer_func && type != STT_FUNC && type != STT_GNU_IFUNC)
 	{
-	  if (distance_from_start > second_best_distance)
+	  if (distance_from_start > second_best.distance)
 	    continue;
-	  second_best_name = name;
-	  second_best_type = type;
-	  second_best_distance = distance_from_start;
+	  second_best.name = name;
+	  second_best.type = type;
+	  second_best.distance = distance_from_start;
 	}
       else
 	{
-	  if (distance_from_start > best_distance_so_far)
+	  if (distance_from_start > best_so_far.distance)
 	    continue;
-	  best_name = name;
-	  best_type = type;
-	  best_distance_so_far = distance_from_start;
+	  best_so_far.name = name;
+	  best_so_far.type = type;
+	  best_so_far.distance = distance_from_start;
 	}
     }
 
@@ -1023,20 +1036,29 @@ find_symbol_in (Elf * elf, Elf_Scn * sym_sec, ulong start, ulong end, Elf64_Shdr
     /* Something went wrong with the loop.  */
     return false;
 
-  if (best_name != NULL)
+  if (best_so_far.name != NULL)
     {
-      data_return->name = best_name;
-      data_return->type = best_type;
-      data_return->distance = best_distance_so_far;
+      data_return->name = best_so_far.name;
+      data_return->type = best_so_far.type;
+      data_return->distance = best_so_far.distance;
       return true;
     }
 
-  if (second_best_name != NULL)
+  if (second_best.name != NULL)
     {
-      data_return->name = second_best_name;
-      data_return->type = second_best_type;
-      data_return->distance = second_best_distance;
+      data_return->name = second_best.name;
+      data_return->type = second_best.type;
+      data_return->distance = second_best.distance;
       return true;
+    }
+
+  if (before_start.name != NULL)
+    {
+      // FIXME: Should we enforce a maximum distance before start ?
+      data_return->name = before_start.name;
+      data_return->type = before_start.type;
+      data_return->distance = before_start.distance;
+      return true;      
     }
 
   return false;
