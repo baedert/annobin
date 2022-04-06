@@ -1486,6 +1486,7 @@ is_special_glibc_binary (const char * path)
       "grcrt1.o",
       "iconv",
       "iconvconfig",
+      "ld-2.28.so",
       "ld-2.33.so",
       "ld-linux-aarch64.so.1",
       "ld-linux-x86-64.so.1",
@@ -1504,6 +1505,8 @@ is_special_glibc_binary (const char * path)
       "libmcheck.a",      
       "libmemusage.so",
       "libmvec.so.1",
+      "libnsl-2.28.so",
+      "libnsl-2.33.so",
       "libnsl.so.1",
       "libnss_compat.so.2",
       "libpcprofile.so",
@@ -2943,7 +2946,7 @@ build_note_checker (annocheck_data *     data,
 	      if (per_file.current_tool == TOOL_GIMPLE)
 		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
 	      else if (is_special_glibc_binary (data->full_filename))
-		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "glibc binaries are built without fortification");		
+		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "glibc binaries are built without fortification");
 	      else if (! skip_test_for_current_func (data, TEST_FORTIFY))
 		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-D_FORTIFY_SOURCE=2 was not present on the command line");
 	      break;
