@@ -4,7 +4,7 @@ clang = find_program('clang++')
 search_dirs = run_command(clang , '--print-search-dirs', check: true).stdout().strip()
 install_dir = search_dirs.split('\n')[1].split(':')[1].replace('=', '').strip()
 
-clang_plugin = custom_target(
+llvm_plugin = custom_target(
   'annobin-for-llvm.so',
   input: 'annobin.cpp',
   output: 'annobin-for-llvm.so',
@@ -34,6 +34,3 @@ clang_plugin = custom_target(
     '-D__STDC_LIMIT_MACROS',
   ]
 )
-# TODO: The tests here are missing, but I think they should just go in a
-#       shell script in tests/, like the rest.
-#

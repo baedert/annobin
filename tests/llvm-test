@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# Copyright (c) 2017-2021 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+TEST_NAME=llvm
+. $srcdir/common.sh
+
+PLUGIN_OPTS="-fplugin-arg-annobin-no-attach"
+CLANG=clang
+PLUGIN=${LLVM_PLUGIN:-$TOP_BUILDDIR/llvm-plugin/annobin-for-llvm.so}
+
+start_test
+
+set -e
+
+PLUGIN_TEST_OPTIONS="\
+   -D_FORTIFY_SOURCE=2 \
+   -D_GLIBCXX_ASSERTIONS \
+   -O2 \
+   -g -grecord-gcc-switches \
+   -fPIE \
+   -Wall \
+   -fstack-protector-strong \
+   -fsanitize=safe-stack"
+
+
+run_test() {
+    load_plugin_arg=$1
+
+    $CLANG $load_plugin_arg $PLUGIN_TEST_OPTIONS -c $srcdir/hello-llvm-clang.c
+    $READELF --wide --notes hello-llvm-clang.o > llvm-plugin-test.out
+    grep --silent -e "annobin built by llvm version" llvm-plugin-test.out
+    grep --silent -e "running on LLVM version" llvm-plugin-test.out
+    grep --silent -e "stack_clash" llvm-plugin-test.out
+    echo "Pass LLVM plugin test [$load_plugin_arg]"
+}
+
+if [ `echo | clang -dM -E - | grep __clang_major__ | cut -f 3 -d ' '` -gt 12 ] ;
+then
+    run_test "-flegacy-pass-manager -fplugin=$PLUGIN"
+    run_test "-fpass-plugin=$PLUGIN"
+else
+    run_test "-Xclang -load -Xclang $PLUGIN"
+fi
+
+end_test

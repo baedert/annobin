@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Copyright (c) 2017-2021 Red Hat.
+#
+# This is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3, or (at your
+# option) any later version.
+#
+# It is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+TEST_NAME=clang
+. $srcdir/common.sh
+
+CLANG=clang
+PLUGIN=${CLANG_PLUGIN:-$TOP_BUILDDIR/clang-plugin/annobin-for-clang.so}
+
+start_test
+set -e
+
+PLUGIN_TEST_OPTIONS="\
+   -D_FORTIFY_SOURCE=2 \
+   -O2 \
+   -g -grecord-gcc-switches \
+   -fPIE \
+    -Wall \
+   -fsanitize=safe-stack \
+   -fstack-protector-strong \
+   -fsanitize=cfi-cast-strict"
+
+$CLANG -fplugin=$PLUGIN $PLUGIN_TEST_OPTIONS -c $srcdir/hello-llvm-clang.c
+$READELF --wide --notes hello-llvm-clang.o > clang-plugin-test.out
+grep --silent -e "annobin built by clang version" clang-plugin-test.out
+grep --silent -e "running on clang version" clang-plugin-test.out
+grep --silent -e "sanitize_cfi" clang-plugin-test.out
+grep --silent -e "SpecLoadHarden" clang-plugin-test.out
+echo "PASS Clang plugin test"

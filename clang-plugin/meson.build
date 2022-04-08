@@ -36,6 +36,3 @@ clang_plugin = custom_target(
     '-D__STDC_LIMIT_MACROS',
   ]
 )
-# TODO: The tests here are missing, but I think they should just go in a
-#       shell script in tests/, like the rest.
-#

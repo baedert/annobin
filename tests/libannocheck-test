@@ -17,9 +17,8 @@ TEST_NAME=libannocheck
 
 start_test
 
-LIBANNOCHECKDIR=${LIBANNOCHECKDIR:-../../annocheck/.libs}
-INCDIR=${INCDIR:-$srcdir/../annocheck}
-
+LIBANNOCHECKDIR=${LIBANNOCHECKDIR:-$TOP_BUILDDIR/annocheck/.libs}
+INCDIR=${INCDIR:-$TOP_BUILDDIR/annocheck}
 OPTS="-O2 -I $INCDIR"
 
 COMMAND="$GCC $OPTS -c $srcdir/use-libannocheck.c"

@@ -6,6 +6,7 @@
 
 ## Process this file with automake to produce Makefile.in.
 
+TESTS_ENVIRONMENT = TOP_BUILDDIR=$(abs_top_builddir)
 TESTS=\
       abi-test \
       active-checks-test \
@@ -34,6 +35,14 @@ endif
 
 if COND_ANNOCHECK
 TESTS += libannocheck-test
+endif
+
+if COND_LLVM
+TESTS += llvm-test
+endif
+
+if COND_CLANG
+TESTS += clang-test
 endif
 
 # FIXME: Add a test for merging notes...

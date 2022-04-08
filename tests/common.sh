@@ -8,9 +8,11 @@ PLUGIN=${PLUGIN:-../../gcc-plugin/.libs/annobin.so}
 READELF=${READELF:-readelf}
 SS=${SS:-/usr/sbin/ss}
 STRIP=${STRIP:-strip}
+TOP_BUILDDIR=${TOP_BUILDDIR:-$(pwd)}
 
 # TEST_NAME must be set before including this
 # In theory we should use ${builddir} instead of "." in the path below, but builddir is not exported.
+# TODO: We have access to $top_builddir now, so we could do this.
 testdir="./tmp_$TEST_NAME"
 
 stashed_srcdir=
