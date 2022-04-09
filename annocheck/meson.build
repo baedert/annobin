@@ -1,6 +1,14 @@
 # copyright : Copyright (c) 2017-2021 Red Hat
 # license   : GNU GPL v3; see accompanying LICENSE file
 
+configure_file(
+  input: 'libannocheck.h.in',
+  output: 'libannocheck.h',
+  configuration: version_cdata,
+  install: true,
+  install_dir: '/' # FIXME 
+)
+
 elf_lib = cxx.find_library('elf')
 iberty_lib = cxx.find_library('iberty')
 dw_lib = cxx.find_library('dw')
@@ -32,7 +40,7 @@ annocheck = executable(
   ],
 )
 
-libannocheck = static_library(
+libannocheck = shared_library(
   'annocheck',
   files([
     'annocheck.c',

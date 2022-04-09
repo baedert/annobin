@@ -20,10 +20,8 @@ extern "C" {
 
    NB/ This number is expected to be in the form "NNnn" where
    "NN" is major version number and "nn" is the minor version number.
-
-   NB/ Keep this value in sync with libannochck_version defined in
-   annocheck/libannocheck.h.  */
-#define ANNOBIN_VERSION 1076
+*/
+#define ANNOBIN_VERSION @ANNOBIN_VERSION@
 
 /* The version of the annotation specification supported.  */
 #define SPEC_VERSION  3

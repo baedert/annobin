@@ -1,7 +1,7 @@
 project(
   'annobin',
   ['c', 'cpp'],
-  version: '9.0',
+  version: '10.77',
   meson_version: '>=0.59'
 )
 
@@ -14,6 +14,17 @@ have_debuginfod = debuginfod_lib.found()
 # directory variables
 toplevel_incdir = include_directories('.')
 gcc_plugin_incdir = include_directories('gcc-plugin/')
+
+# Coniguration data for project version information
+major_version = meson.project_version().split('.')[0].to_int()
+minor_version = meson.project_version().split('.')[1].to_int()
+version_cdata = configuration_data()
+version_cdata.set('ANNOBIN_VERSION', major_version * 100 + minor_version)
+configure_file(
+  input: 'annobin-global.h.in',
+  output: 'annobin-global.h',
+  configuration: version_cdata,
+)
 
 
 

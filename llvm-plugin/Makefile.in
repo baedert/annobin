@@ -19,7 +19,7 @@ PLUGIN_OPTIONS = \
   -Wl,--build-id=md5 \
   -Wl,-z,now
 
-INCDIR = @srcdir@/..
+INCDIR = @builddir@/..
 
 PLUGIN_INSTALL_DIR = `clang --print-search-dirs | gawk -e'BEGIN { FS = ":" } /libraries/ { print gensub(" =","",1,$2) } END { }'`
 

@@ -19,7 +19,7 @@ PLUGIN_OPTIONS = \
   -Wl,--build-id=md5 \
   -Wl,-z,now
 
-INCDIR = @srcdir@/..
+INCDIR = @builddir@/..
 
 CLANG_LIBS = -lLLVM
 

@@ -2,10 +2,24 @@
 # copyright : Copyright (c) 2017-2022 Red Hat
 # license   : GNU GPL v3; see accompanying LICENSE file.
 
+m4_define([annobin_version_major], [10])
+m4_define([annobin_version_minor], [77])
+m4_define([annobin_version],
+          [annobin_version_major.annobin_version_minor])
+
 AC_PREREQ(2.64)
-AC_INIT([Binary Annotations], 10.0,,[annobin-plugin])
+AC_INIT([Binary Annotations], [annobin_version],,[annobin-plugin])
 AC_CONFIG_AUX_DIR([config])
-AC_CONFIG_SRCDIR([annobin-global.h])
+AC_CONFIG_SRCDIR([annobin-global.h.in])
+
+
+# configure annobin-global.h and libannocheck.h with the project version
+m4_define([version_concat], annobin_version_major)
+m4_append([version_concat], [annobin_version_minor])
+sed 's/@ANNOBIN_VERSION@/version_concat/g' $srcdir/annobin-global.h.in > annobin-global.h
+mkdir -p annocheck/
+sed 's/@ANNOBIN_VERSION@/version_concat/g' $srcdir/annocheck/libannocheck.h.in > annocheck/libannocheck.h
+
 
 AC_CANONICAL_SYSTEM
 AC_USE_SYSTEM_EXTENSIONS

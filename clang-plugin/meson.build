@@ -14,7 +14,7 @@ clang_plugin = custom_target(
   command: [
     clang,
     '@INPUT@',
-    '-I' + join_paths(meson.current_source_dir(), '..'),
+    '-I' + join_paths(meson.current_build_dir(), '..'),
     '-lLLVM',
     '-lclang-cpp', # TODO: Is this correct?
     '-o', '@OUTPUT@',

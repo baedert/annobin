@@ -58,7 +58,7 @@ gcc_plugin = custom_target(
     '@INPUT@',
     '-g', '-fPIC', '-DPIC', '-shared', '-nostdlib',
     '-DHAVE_CONFIG_H',
-    '-I' + join_paths(meson.current_source_dir(), '..'),
+    '-I' + join_paths(meson.current_build_dir(), '..'),
     '-I' + join_paths(plugin_dev_path, 'include'),
     '-o', '@OUTPUT@',
   ]
