@@ -716,6 +716,7 @@ annobin_get_int_option_by_index (unsigned int cl_option_index)
     case CLVC_SIZE:
 #endif
 #if GCCPLUGIN_VERSION_MAJOR >= 12
+    case CLVC_INTEGER:
     case CLVC_BIT_SET:
     case CLVC_BIT_CLEAR:
 #else

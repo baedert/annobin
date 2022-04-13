@@ -353,6 +353,18 @@ get_filename (annocheck_data * data)
     return data->filename;
 }
 
+static inline const char *
+get_formatted_component_name (const char * format)
+{
+  static char buffer[256];
+
+  if (per_file.component_name == NULL)
+    return "";
+
+  snprintf (buffer, sizeof buffer, format, per_file.component_name);
+  return buffer;
+}
+
 static inline void
 go_red (void)
 {
@@ -2696,8 +2708,9 @@ build_note_checker (annocheck_data *     data,
 	  /* FIXME: This assumes that the tool string looks like: "gcc 7.x.x......"  */
 	  uint version = (uint) strtoul (gcc + 4, NULL, 10);
 
-	  einfo (VERBOSE2, "%s: (%s) built-by gcc version %u",
-		 get_filename (data), per_file.component_name, version);
+	  einfo (VERBOSE2, "%s: %sbuilt-by gcc version %u",
+		 get_filename (data),
+		 get_formatted_component_name ("(%s) "), version);
 	}
       else if (strstr (attr + 1, "plugin name"))
 	{
@@ -3098,8 +3111,9 @@ build_note_checker (annocheck_data *     data,
 
 	  if (! per_file.warned_about_instrumentation)
 	    {
-	      einfo (INFO, "%s: WARN: (%s): Instrumentation enabled - this is probably a mistake for production binaries",
-		     get_filename (data), per_file.component_name);
+	      einfo (INFO, "%s: WARN: %sInstrumentation enabled - this is probably a mistake for production binaries",
+		     get_filename (data),
+		     get_formatted_component_name ("(%s): "));
 
 	      per_file.warned_about_instrumentation = true;
 
@@ -3110,24 +3124,33 @@ build_note_checker (annocheck_data *     data,
 		  attr += strlen ("INSTRUMENT:");
 		  if (sscanf (attr, "%u/%u/%u/%u", & sanitize, & instrument, & profile, & arcs) != 4)
 		    {
-		      einfo (VERBOSE2, "%s: ICE:  (%s): Unable to extract details from instrumentation note",
-			     get_filename (data), per_file.component_name);
+		      einfo (VERBOSE2, "%s: ICE: %sUnable to extract details from instrumentation note",
+			     get_filename (data),
+			     get_formatted_component_name ("(%s): "));
 		    }
 		  else
 		    {
-		      einfo (VERBOSE, "%s: info: (%s):  Details: -fsanitize=...: %s",
-			     get_filename (data), per_file.component_name, sanitize ? "enabled" : "disabled");
-		      einfo (VERBOSE, "%s: info: (%s):  Details: -finstrument-functions: %s",
-			     get_filename (data), per_file.component_name, instrument ? "enabled" : "disabled");
-		      einfo (VERBOSE, "%s: info: (%s):  Details: -p and/or -pg: %s",
-			     get_filename (data), per_file.component_name, profile ? "enabled" : "disabled");
-		      einfo (VERBOSE, "%s: info: (%s):  Details: -fprofile-arcs: %s",
-			     get_filename (data), per_file.component_name, arcs ? "enabled" : "disabled");
+		      einfo (VERBOSE, "%s: info: %sDetails: -fsanitize=...: %s",
+			     get_filename (data),
+			     get_formatted_component_name ("(%s): "),
+			     sanitize ? "enabled" : "disabled");
+		      einfo (VERBOSE, "%s: info: %sDetails: -finstrument-functions: %s",
+			     get_filename (data),
+			     get_formatted_component_name ("(%s): "),
+			     instrument ? "enabled" : "disabled");
+		      einfo (VERBOSE, "%s: info: %sDetails: -p and/or -pg: %s",
+			     get_filename (data),
+			     get_formatted_component_name ("(%s): "),
+			     profile ? "enabled" : "disabled");
+		      einfo (VERBOSE, "%s: info: %sDetails: -fprofile-arcs: %s",
+			     get_filename (data),
+			     get_formatted_component_name ("(%s): "),
+			     arcs ? "enabled" : "disabled");
 		    }
 		}
 	      else
-		einfo (INFO, "%s: info: (%s):  Run with -v for more information",
-		       get_filename (data), per_file.component_name);
+		einfo (INFO, "%s: info: %s Run with -v for more information",
+		       get_filename (data),get_formatted_component_name ("(%s): "));
 	    }
 	}
       else
@@ -5291,18 +5314,17 @@ finish (annocheck_data * data)
 	      else if (! includes_gcc (per_file.seen_tools_with_code)
 		       && ! includes_gimple (per_file.seen_tools_with_code))
 		skip (data, i, SOURCE_FINAL_SCAN, "not built by GCC");
-	      else
+	      else if (i == TEST_BRANCH_PROTECTION)
 		{
-		  if (i == TEST_BRANCH_PROTECTION)
-		    {
-		      if (per_file.tool_version < 9 && per_file.tool_version > 3)
-			skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
-		      else
-			fail (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
-		    }
+		  if (per_file.tool_version < 9 && per_file.tool_version > 3)
+		    skip (data, i, SOURCE_FINAL_SCAN, "needs gcc 9+");
+		  else if (per_file.lto_used)
+		    skip (data, i, SOURCE_FINAL_SCAN, "compiling in LTO mode hides the -mbranch-protection option");
 		  else
-		    pass (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
+		    fail (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
 		}
+	      else
+		pass (data, i, SOURCE_FINAL_SCAN, "the -mbranch-protection option was not used");
 	      break;
 
 	    case TEST_GO_REVISION:
