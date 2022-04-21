@@ -3802,7 +3802,10 @@ check_dynamic_section (annocheck_data *    data,
 	  switch (res)
 	  {
 	  case 0:
-	    fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is missing from the dynamic tags");
+	    if (per_file.current_tool == TOOL_GO)
+	      skip (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "GO built binaries do not set the BTI_PLT flag in the dynamic tags");
+	    else
+	      fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is missing from the dynamic tags");
 	    pass (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT and PAC_PLT flags not in the dynamic tags");
 	    break;
 	  case 1:
@@ -3814,7 +3817,10 @@ check_dynamic_section (annocheck_data *    data,
 	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is present in the dynamic tags");
 	    break;
 	  case 2:
-	    fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is missing from the dynamic tags");
+	    if (per_file.current_tool == TOOL_GO)
+	      skip (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "GO built binaries do not set the BTI_PLT flag in the dynamic tags");
+	    else
+	      fail (data, TEST_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "BTI_PLT flag is missing from the dynamic tags");
 	    fail (data, TEST_NOT_DYNAMIC_TAGS, SOURCE_DYNAMIC_SECTION, "PAC_PLT flag is present in the dynamic tags");
 	    break;
 	  case 3:
@@ -5124,6 +5130,8 @@ finish (annocheck_data * data)
 		skip (data, i, SOURCE_FINAL_SCAN, "AArch64 specific");
 	      else if (is_object_file ())
 		skip (data, i, SOURCE_FINAL_SCAN, "not used in object files");
+	      else if (i == TEST_DYNAMIC_TAGS && per_file.seen_tools & TOOL_GO)
+		skip (data, i, SOURCE_FINAL_SCAN, "GO compilation does not support branch protection");
 	      else
 		{
 		  fail (data, TEST_DYNAMIC_TAGS, SOURCE_FINAL_SCAN, "no dynamic tags found");
