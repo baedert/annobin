@@ -1712,8 +1712,10 @@ interesting_sec (annocheck_data *     data,
   /* If the file has a stack section then check its permissions.  */
   if (streq (sec->secname, ".stack"))
     {
-      if ((sec->shdr.sh_flags & (SHF_WRITE | SHF_EXECINSTR)) != SHF_WRITE)
-	fail (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "the .stack section has incorrect permissions");
+      if (sec->shdr.sh_flags & SHF_EXECINSTR)
+	fail (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "the .stack section is executable");
+      if ((sec->shdr.sh_flags & SHF_WRITE ) != SHF_WRITE)
+	fail (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "the .stack section is not writeable");
       else if (tests[TEST_GNU_STACK].state == STATE_PASSED)
 	maybe (data, TEST_GNU_STACK, SOURCE_SECTION_HEADERS, "multiple stack sections detected");
       else
@@ -4130,7 +4132,6 @@ interesting_seg (annocheck_data *    data,
 	  assert (! is_object_file ());
 	  fail (data, TEST_RWX_SEG, SOURCE_SEGMENT_HEADERS, "segment has Read, Write and eXecute flags set");
 	  einfo (VERBOSE2, "RWX segment number: %d", seg->number);
-	  fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "the GNU stack segment has execute permission");
 	}
     }
 
@@ -4149,7 +4150,8 @@ interesting_seg (annocheck_data *    data,
 	{
 	  if ((seg->phdr->p_flags & (PF_W | PF_R)) != (PF_W | PF_R))
 	    fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "the GNU stack segment does not have both read & write permissions");
-	  /* If the segment has the PF_X flag set it will have been reported as a failure above.  */
+	  else if (seg->phdr->p_flags & PF_X)
+	    fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "the GNU stack segment has execute permission");
 	  else if ((seg->phdr->p_flags & PF_X) == 0)
 	    pass (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "stack segment exists with the correct permissions");
 	}
