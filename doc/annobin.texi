@@ -1836,14 +1836,24 @@ option and re-enabled via the @option{--test-run-path} option.
   Example:  FAIL: rwx-seg test because segment has Read, Write and eXecute flags set
 @end smallexample
 
-This test checks that the file does not have any segments that have
-all three of the @var{read}, @var{write} and @var{execute}
-permissions.  Code segments should have read and execute permissions,
-but they should not be writable as otherwise an attacker can
-overwrite the code.  Data segments should have read permission, and
-possibly write permission as well, but never execute permission 
-as otherwise an attacker might be able to create their own code in a
-data area. 
+This test checks that the file does not have any segments that are
+@enumerate
+@item
+have all three of the @var{read}, @var{write} and @var{execute}
+permissions.
+@item
+have a non-zero size
+@item
+are resident in memory when the program runs
+@item
+do not have an architecture/OS specific type
+@end enumerate
+
+Code segments should have read and execute permissions, but they
+should not be writable as otherwise an attacker can overwrite the
+code.  Data segments should have read permission, and possibly write
+permission as well, but never execute permission as otherwise an
+attacker might be able to create their own code in a data area. 
 
 The linker will normally never create a binary file with a segment
 with all three permissions, but it is possible to force it to do so by

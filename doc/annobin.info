@@ -1701,13 +1701,17 @@ File: annobin.info,  Node: Test rwx seg,  Next: Test short enums,  Prev: Test ru
 
        Example:  FAIL: rwx-seg test because segment has Read, Write and eXecute flags set
 
-   This test checks that the file does not have any segments that have
-all three of the READ, WRITE and EXECUTE permissions.  Code segments
-should have read and execute permissions, but they should not be
-writable as otherwise an attacker can overwrite the code.  Data segments
-should have read permission, and possibly write permission as well, but
-never execute permission as otherwise an attacker might be able to
-create their own code in a data area.
+   This test checks that the file does not have any segments that are
+  1. have all three of the READ, WRITE and EXECUTE permissions.
+  2. have a non-zero size
+  3. are resident in memory when the program runs
+  4. do not have an architecture/OS specific type
+
+   Code segments should have read and execute permissions, but they
+should not be writable as otherwise an attacker can overwrite the code.
+Data segments should have read permission, and possibly write permission
+as well, but never execute permission as otherwise an attacker might be
+able to create their own code in a data area.
 
    The linker will normally never create a binary file with a segment
 with all three permissions, but it is possible to force it to do so by
@@ -3565,40 +3569,40 @@ Node: Test production64729
 Node: Test property note65542
 Node: Test run path68019
 Node: Test rwx seg70240
-Node: Test short enums71512
-Node: Test stack clash72529
-Node: Test stack prot73990
-Node: Test stack realign75322
-Node: Test textrel76592
-Node: Test threads77849
-Node: Test unicode78664
-Node: Test warnings80155
-Node: Test writable got80990
-Node: Hardened Command Line Options82276
-Node: Waiving Hardened Results87716
-Node: Notes89662
-Node: Size90298
-Node: Timing92667
-Node: Libannocheck93306
-Node: libannocheck_init95245
-Node: libannocheck_finish96167
-Node: libannocheck_get_version96715
-Node: libannocheck_get_error_message97124
-Node: libannocheck_get_known_tests97764
-Node: libannocheck_enable_all_tests98930
-Node: libannocheck_disable_all_tests99409
-Node: libannocheck_enable_test99965
-Node: libannocheck_disable_test100633
-Node: libannocheck_enable_profile101302
-Node: libannocheck_get_known_profiles101824
-Node: libannocheck_run_tests102527
-Node: Configure Options103372
-Node: Legacy Scripts105714
-Node: Who Built Me106489
-Node: ABI Checking109249
-Node: Hardening Checks111365
-Node: Checking Archives115451
-Node: GNU FDL117872
+Node: Test short enums71649
+Node: Test stack clash72666
+Node: Test stack prot74127
+Node: Test stack realign75459
+Node: Test textrel76729
+Node: Test threads77986
+Node: Test unicode78801
+Node: Test warnings80292
+Node: Test writable got81127
+Node: Hardened Command Line Options82413
+Node: Waiving Hardened Results87853
+Node: Notes89799
+Node: Size90435
+Node: Timing92804
+Node: Libannocheck93443
+Node: libannocheck_init95382
+Node: libannocheck_finish96304
+Node: libannocheck_get_version96852
+Node: libannocheck_get_error_message97261
+Node: libannocheck_get_known_tests97901
+Node: libannocheck_enable_all_tests99067
+Node: libannocheck_disable_all_tests99546
+Node: libannocheck_enable_test100102
+Node: libannocheck_disable_test100770
+Node: libannocheck_enable_profile101439
+Node: libannocheck_get_known_profiles101961
+Node: libannocheck_run_tests102664
+Node: Configure Options103509
+Node: Legacy Scripts105851
+Node: Who Built Me106626
+Node: ABI Checking109386
+Node: Hardening Checks111502
+Node: Checking Archives115588
+Node: GNU FDL118009
 
 End Tag Table
 

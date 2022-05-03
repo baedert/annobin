@@ -1176,6 +1176,24 @@ is_special_glibc_binary (const char * path)
 {
   int i;
 
+  /* The contents of static glibc libraries should be ignored.  */
+  if (strchr (path, ':'))
+    {
+      static const char * known_glibc_libraries [] =
+	{
+	  "libBrokenLocale.a",
+	  "libc.a:",
+	  "libc_nonshared.a:",
+	  "libm-2.34.a:",
+	  "libmvec.a:",
+	  "libresolv.a:"
+	};
+
+      for (i = ARRAY_SIZE (known_glibc_libraries); i--;)
+	if (strstr (path, known_glibc_libraries[i]) != NULL)
+	  return true;
+    }
+  
   /* If we are testing an uninstalled rpm then the paths will start with "."
      so skip this.  */
   if (path[0] == '.')
@@ -1213,7 +1231,7 @@ is_special_glibc_binary (const char * path)
 	      path += len;
 	      break;
 	    }
-	  /* Do not abort this loop if res > 0/
+	  /* Do not abort this loop if res > 0
 	     We can have a file like /usr/lib64/libmcheck.a which will
 	     not match /usr/lib64/gconv but which should match /usr/lib64.  */
 	}
@@ -1510,8 +1528,10 @@ is_special_glibc_binary (const char * path)
       "libBrokenLocale-2.28.so",
       "libBrokenLocale.so.1",
       "libSegFault.so",
+      "libanl.so.1",
       "libc.so.6",
       "libc_malloc_debug.so.0",
+      "libdl.so.2",
       "libg.a:dummy.o",
       "libm.so.6",
       "libmcheck.a",      
@@ -1523,10 +1543,12 @@ is_special_glibc_binary (const char * path)
       "libnss_compat.so.2",
       "libpcprofile.so",
       "libpthread-2.28.so",
+      "libpthread.so.0",
       "libresolv-2.28.so",
       "libresolv.so.2",
       "librt.so.1",
       "libthread_db.so.1",
+      "libutil.so.1",
       "locale",
       "localedef",
       "makedb",
@@ -1979,6 +2001,7 @@ skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, 
       "_nss_files_sethostent",
       "_start",
       "abort",
+      "atexit",
       "blacklist_store_name",
       "buffer_free",
       "cabsf128",
@@ -4124,19 +4147,18 @@ interesting_seg (annocheck_data *    data,
   if (disabled)
     return false;
 
-  if (! skip_test (TEST_RWX_SEG))
-    {
-      if ((seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R))
-	{
-	  /* Object files should not have segments.  */
-	  assert (! is_object_file ());
-	  fail (data, TEST_RWX_SEG, SOURCE_SEGMENT_HEADERS, "segment has Read, Write and eXecute flags set");
-	  einfo (VERBOSE2, "RWX segment number: %d", seg->number);
-	}
-    }
-
   switch (seg->phdr->p_type)
     {
+    case PT_TLS:
+      if (! skip_test (TEST_RWX_SEG)
+	  && seg->phdr->p_memsz > 0
+	  && (seg->phdr->p_flags & PF_X))
+	{
+	  fail (data, TEST_RWX_SEG, SOURCE_SEGMENT_HEADERS, "TLS segment has eXecute flag set");
+	  einfo (VERBOSE2, "TLS segment number: %d", seg->number);
+	}
+      break;
+      
     case PT_INTERP:
       per_file.has_program_interpreter = true;
       break;
@@ -4154,6 +4176,7 @@ interesting_seg (annocheck_data *    data,
 	    fail (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "the GNU stack segment has execute permission");
 	  else if ((seg->phdr->p_flags & PF_X) == 0)
 	    pass (data, TEST_GNU_STACK, SOURCE_SEGMENT_HEADERS, "stack segment exists with the correct permissions");
+	  /* FIXME: Check for multiple PT_GNU_STACK segments ?  */
 	}
       break;
 
@@ -4172,6 +4195,18 @@ interesting_seg (annocheck_data *    data,
       return supports_property_notes (per_file.e_machine);
 
     case PT_LOAD:
+      if (! skip_test (TEST_RWX_SEG))
+	{
+	  if (seg->phdr->p_memsz > 0
+	      && (seg->phdr->p_flags & (PF_X | PF_W | PF_R)) == (PF_X | PF_W | PF_R))
+	    {
+	      /* Object files should not have segments.  */
+	      assert (! is_object_file ());
+	      fail (data, TEST_RWX_SEG, SOURCE_SEGMENT_HEADERS, "segment has Read, Write and eXecute flags set");
+	      einfo (VERBOSE2, "RWX segment number: %d", seg->number);
+	    }
+	}
+
       /* If we are checking the entry point instruction then we need to load
 	 the segment.  We check segments rather than sections because executables
 	 do not have to have sections.  */
@@ -5074,7 +5109,7 @@ finish (annocheck_data * data)
 	      else if (is_special_glibc_binary (data->full_filename))
 		skip (data, i, SOURCE_FINAL_SCAN, "glibc binaries not compiled with LTO");
 	      else
-		maybe (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
+		info (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      break;
 
 	    case TEST_PIE:
