@@ -640,7 +640,7 @@ maybe (annocheck_data * data,
 }
 
 static void
-info (annocheck_data * data, uint testnum, const char * source, const char * extra)
+vvinfo (annocheck_data * data, uint testnum, const char * source, const char * extra)
 {
   assert (testnum < TEST_MAX);
 
@@ -650,7 +650,7 @@ info (annocheck_data * data, uint testnum, const char * source, const char * ext
   if (fixed_format_messages)
     return;
 
-  einfo (VERBOSE2, "%s: info: %s %s (source %s)", get_filename (data),
+  einfo (VERBOSE2, "%s: info: %s: %s (source %s)", get_filename (data),
 	 tests[testnum].name, extra, source);
 }
 
@@ -1078,7 +1078,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 	   other compilers may not.  */
 	fail (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "optimization level too low");
       else
-	info (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "not found in string");
+	vvinfo (data, TEST_OPTIMIZATION, SOURCE_DW_AT_PRODUCER, "not found in string");
 
       if (strstr (string, "-flto"))
 	{
@@ -1094,7 +1094,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 	  || strstr (string, " -fpie") || strstr (string, " -fPIE"))
 	pass (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, NULL);
       else
-	info (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, "-fpic/-fpie not found in string");
+	vvinfo (data, TEST_PIC, SOURCE_DW_AT_PRODUCER, "-fpic/-fpie not found in string");
 
       if (skip_test (TEST_STACK_PROT))
 	;
@@ -1104,7 +1104,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
       else if (strstr (string, "-fstack-protector"))
 	fail (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "insufficient protection enabled");
       else
-	info (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "not found in string");
+	vvinfo (data, TEST_STACK_PROT, SOURCE_DW_AT_PRODUCER, "not found in string");
 
       if (skip_test (TEST_WARNINGS))
 	;
@@ -1113,7 +1113,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 	  || strstr (string, "-Werror=format-security"))
 	pass (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, NULL);
       else
-	info (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, "not found in string");
+	vvinfo (data, TEST_WARNINGS, SOURCE_DW_AT_PRODUCER, "not found in string");
 
       if (skip_test (TEST_GLIBCXX_ASSERTIONS))
 	;
@@ -1121,7 +1121,7 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 	       || strstr (string, "-D _GLIBCXX_ASSERTIONS"))
 	pass (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_DW_AT_PRODUCER, NULL);
       else
-	info (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_DW_AT_PRODUCER, "not found in string");
+	vvinfo (data, TEST_GLIBCXX_ASSERTIONS, SOURCE_DW_AT_PRODUCER, "not found in string");
 
       if (skip_test (TEST_FORTIFY))
 	;
@@ -1131,14 +1131,14 @@ parse_dw_at_producer (annocheck_data * data, Dwarf_Attribute * attr)
 	       || strstr (string, "-D _FORTIFY_SOURCE=3"))
 	pass (data, TEST_FORTIFY, SOURCE_DW_AT_PRODUCER, "found in DW_AT_producer string");
       else
-	info (data, TEST_FORTIFY, SOURCE_DW_AT_PRODUCER, "not found in string");
+	vvinfo (data, TEST_FORTIFY, SOURCE_DW_AT_PRODUCER, "not found in string");
 
       if (is_x86 ())
 	{
 	  if (skip_test (TEST_CF_PROTECTION))
 	    ;
 	  else if (! strstr (string, "-fcf-protection"))
-	    info (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, "-fcf-protection option not found in string");
+	    vvinfo (data, TEST_CF_PROTECTION, SOURCE_DW_AT_PRODUCER, "-fcf-protection option not found in string");
 	}
     }
   else if (BE_VERBOSE && ! per_file.warned_command_line)
@@ -3095,11 +3095,11 @@ build_note_checker (annocheck_data *     data,
 	      /* Compiled without -flto.
 		 Not a failure because we are still bringing up universal LTO enabledment.  */
 	      if (report_future_fail)
-		info (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, "compiled without -flto");
+		vvinfo (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, "compiled without -flto");
 	    }
 	  else
 	    {
-	      info (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, " -flto status not recorded in notes");
+	      vvinfo (data, TEST_LTO, SOURCE_ANNOBIN_NOTES, " -flto status not recorded in notes");
 	    }
 
 	  break;
@@ -5097,7 +5097,7 @@ finish (annocheck_data * data)
 		{
 		  fail (data, i, SOURCE_FINAL_SCAN, "no .note.GNU-stack section found");
 		  if (includes_assembler (per_file.seen_tools))
-		    info (data, i, SOURCE_FINAL_SCAN, "possibly need to add '.section .note.GNU-stack,\"\",%progbits' to the assembler sources");
+		    vvinfo (data, i, SOURCE_FINAL_SCAN, "possibly need to add '.section .note.GNU-stack,\"\",%progbits' to the assembler sources");
 		}
 	      else
 		maybe (data, i, SOURCE_FINAL_SCAN, "no GNU-stack found");
@@ -5113,7 +5113,7 @@ finish (annocheck_data * data)
 	      else if (is_special_glibc_binary (data->full_filename))
 		skip (data, i, SOURCE_FINAL_SCAN, "glibc binaries not compiled with LTO");
 	      else
-		info (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
+		vvinfo (data, i, SOURCE_FINAL_SCAN, "no indication that LTO was used");
 	      break;
 
 	    case TEST_PIE:
