@@ -1181,6 +1181,7 @@ is_special_glibc_binary (const char * path)
     {
       static const char * known_glibc_libraries [] =
 	{
+	  "libnldbl_nonshared.a",
 	  "libBrokenLocale.a",
 	  "libc.a:",
 	  "libc_nonshared.a:",
@@ -2854,7 +2855,10 @@ build_note_checker (annocheck_data *     data,
 	      || streq (attr, "default")
 	      || streq (attr, "none"))
 	    {
-	      fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
+	      if (per_file.lto_used)
+		skip (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled - but LTO obscures enablement");
+	      else
+		fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
 	      pass (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "disabled");
 	    }
 	  else if (streq (attr, "bti+pac-ret")

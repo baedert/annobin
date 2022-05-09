@@ -110,7 +110,8 @@ annobin_target_specific_function_notes (annobin_function_info * info, bool force
 #ifdef aarch64_branch_protection_string
   const char * abps = GET_STR_OPTION_BY_INDEX (OPT_mbranch_protection_);
   
-  if (force || saved_branch_protection_string != abps)
+  if (saved_branch_protection_string != abps
+      || (force && ! in_lto())) /* In LTO mode, ignore a forced save of the same value as the global.  */
     {
       record_branch_protection_note (false /* local */, info);
       /* We no longer need to include the start/end symbols in any
