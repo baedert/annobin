@@ -69,7 +69,7 @@ case ${target} in
   powerpc*-*-*)
     target_plugin="powerpc.annobin.lo"
     ;;
-  risvc*-*-*)
+  riscv*-*-*)
     target_plugin="riscv.annobin.lo"
     ;;
   s390*-*-*)
