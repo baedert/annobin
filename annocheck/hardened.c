@@ -2855,10 +2855,7 @@ build_note_checker (annocheck_data *     data,
 	      || streq (attr, "default")
 	      || streq (attr, "none"))
 	    {
-	      if (per_file.lto_used)
-		skip (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled - but LTO obscures enablement");
-	      else
-		fail (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled");
+	      skip (data, TEST_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "not enabled - (aarch64 plugin broken - records incorrect value)");
 	      pass (data, TEST_NOT_BRANCH_PROTECTION, SOURCE_ANNOBIN_NOTES, "disabled");
 	    }
 	  else if (streq (attr, "bti+pac-ret")
