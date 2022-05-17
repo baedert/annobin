@@ -1848,9 +1848,9 @@ usage (void)
 #endif
 
   einfo (INFO, "The following options are internal to the scanner and not expected to be supplied by the user:");
-  einfo (INFO, "   -p | --prefix=<TEXT>    [Include <TEXT> in the output description]");
-  einfo (INFO, "   -t | --tmpdir=<NAME>    [Absolute pathname of a temporary directory used to pass data between iterations]");
-  einfo (INFO, "   -l | --level=<N>        [Recursion level of the scanner]");
+  einfo (INFO, "   -p <TEXT> | --prefix=<TEXT>    [Include <TEXT> in the output description]");
+  einfo (INFO, "   -t <NAME> | --tmpdir=<NAME>    [Absolute pathname of a temporary directory used to pass data between iterations]");
+  einfo (INFO, "   -l <N> | --level=<N>           [Recursion level of the scanner]");
 
   einfo (INFO, "Tools have their own options:");
   einfo (INFO, "   --enable-<tool>    [Turn on <tool>][By default the hardened tool is enabled]");
@@ -2090,7 +2090,7 @@ process_command_line (uint argc, const char * argv[])
 	      break;
 
 	    case 'p':
-	      if (streq (arg, "p") || streq (arg, "prefix"))
+	      if (streq (arg, "p") || const_strneq (arg, "prefix"))
 		{
 		  save_arg (orig_arg);
 		  parameter = strchr (arg, '=');
@@ -2110,7 +2110,7 @@ process_command_line (uint argc, const char * argv[])
 	      break;
 
 	    case 'l':
-	      if (streq (arg, "l") || streq (arg, "level"))
+	      if (streq (arg, "l") || const_strneq (arg, "level"))
 		{
 		  parameter = strchr (arg, '=');
 		  if (parameter == NULL)
@@ -2133,7 +2133,7 @@ process_command_line (uint argc, const char * argv[])
 	      break;
 
 	    case 't':
-	      if (streq (arg, "t") || streq (arg, "tmpdir"))
+	      if (streq (arg, "t") || const_strneq (arg, "tmpdir"))
 		{
 		  parameter = strchr (arg, '=');
 		  if (parameter == NULL)
