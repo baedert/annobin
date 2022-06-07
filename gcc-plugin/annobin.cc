@@ -107,6 +107,8 @@ static uint           annobin_active_checks = 1;
    method needs a linker from binutils 2.36 or later.  */
 attach_type annobin_attach_type = not_set;
 
+static const char *   annobin_section_type = "%note";
+
 #ifdef flag_stack_clash_protection
 static int            global_stack_clash_option = -1;
 #endif
@@ -143,6 +145,7 @@ static const char *   help_string =  N_("Supported options:\n\
    [no-]link-order        Do [do not] attempt to join note sections to code sections using link_order attributes\n\
    [no-]ppc64-nops        Do [do not] insert NOP instructions into some PPC64 sections.  (Default: do not)\n\
    [no-]stack-size-notes  Do [do not] create stack size notes (default: do not)\n\
+   section-type=<string>  Use <string> as the type for annobin created sections (default: %note)\n\
    rename                 Add a prefix to the filename symbols so that two annobin plugins can be active at the same time\n\
    stack-threshold=N      Only create function specific stack size notes when the size is > N.");
 
@@ -1488,7 +1491,8 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 
 	  /* Include a group name in our attribute section name.  */
 	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
-							  ", \"G\", %note, ",
+							  ", \"G\", ",
+							  annobin_section_type, ", ",
 							  current_func.group_name,
 							  ", comdat",
 							  NULL);
@@ -1502,14 +1506,16 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	  current_func.note_section_declaration = concat (LINKONCE_SEC_PREFIX,
 							  GNU_BUILD_ATTRS_SECTION_NAME,
 							  current_func.section_name,
-							  ", \"\", %note", NULL);
+							  ", \"\", ",
+							  annobin_section_type, NULL);
 	}
       else if (annobin_attach_type == group)
 	{
 	  current_func.group_name = concat (current_func.section_name, ANNOBIN_GROUP_NAME, NULL);
 	  /* Include a group name in our attribute section name.  */
 	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
-							  ", \"G\", %note, ",
+							  ", \"G\", ",
+							  annobin_section_type, ", ",
 							  current_func.group_name,
 							  NULL);
 	}
@@ -1519,7 +1525,8 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
 							  LINK_ORDER_EXTENSION,
 							  current_func.section_name,
-							  ", \"o\", %note, ",
+							  ", \"o\", ",
+							  annobin_section_type, ", ",
 							  current_func.section_name,
 							  NULL);
 	}
@@ -1527,7 +1534,7 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	{
 	  current_func.group_name = NULL;
 	  current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, current_func.section_name,
-							  ", \"\", %note", NULL);
+							  ", \"\", ", annobin_section_type, NULL);
 	}
     }
  else
@@ -1542,20 +1549,23 @@ annobin_create_function_notes (void * gcc_data, void * user_data)
 	   default:
 	   case none:
 	     current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
-							     ", \"\", %note",
+							     ", \"\", ",
+							     annobin_section_type,
 							     NULL);
 	     break;
 	   case group:
 	     current_func.group_name = concat (CODE_SECTION, ANNOBIN_GROUP_NAME, NULL);
 	     current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
-						     ", \"G\", %note, ",
-						     current_func.group_name,
-						     NULL);
+							     ", \"G\", ",
+							     annobin_section_type, ", ",
+							     current_func.group_name,
+							     NULL);
 	     break;
 	   case link_order:
 	     current_func.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
 							     LINK_ORDER_EXTENSION,
-							     ", \"o\", %note, "
+							     ", \"o\", ",
+							     annobin_section_type, ", ",
 							     CODE_SECTION,	
 							     NULL);
 	     break;
@@ -1878,14 +1888,16 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
     default:
     case none:
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
-					      ", \"\", %note",
+					      ", \"\", "
+					      annnobin_section_type,
 					      NULL);
       break;
     case group:
       info.group_name = concat (CODE_SECTION, suffix, ANNOBIN_GROUP_NAME, NULL);
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
 					      * suffix ? suffix : "",
-					      ", \"G\", %note, ",
+					      ", \"G\", ",
+					      annobin_section_type, ", ",
 					      info.group_name,
 					      NULL);
       break;
@@ -1893,7 +1905,8 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
 					      LINK_ORDER_EXTENSION,
 					      * suffix ? suffix : "",
-					      ", \"o\", %note, "
+					      ", \"o\", ",
+					      annobin_section_type, ", "
 					      CODE_SECTION,	
 					      suffix,
 					      NULL);
@@ -1924,14 +1937,16 @@ emit_global_notes (const char * suffix)
     default:
     case none:
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
-					      ", \"\", %note",
+					      ", \"\", ",
+					      annobin_section_type,
 					      NULL);
       break;
     case group:
       info.group_name = concat (CODE_SECTION, suffix, ANNOBIN_GROUP_NAME, NULL);
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
 					      * suffix ? suffix : "",
-					      ", \"G\", %note, ",
+					      ", \"G\", ",
+					      annobin_section_name, ", ",
 					      info.group_name,
 					      NULL);
       break;
@@ -1939,7 +1954,8 @@ emit_global_notes (const char * suffix)
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
 					      LINK_ORDER_EXTENSION,
 					      * suffix ? suffix : "",
-					      ", \"o\", %note, "
+					      ", \"o\", ",
+					      annobin_section_name, ", ",
 					      CODE_SECTION,	
 					      suffix,
 					      NULL);

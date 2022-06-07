@@ -1,4 +1,4 @@
-This is annobin.info, produced by makeinfo version 6.7 from
+This is annobin.info, produced by makeinfo version 6.8 from
 annobin.texi.
 
 This file documents the annobin plugin on the Fedora system.
@@ -610,6 +610,7 @@ File: annobin.info,  Node: Annocheck,  Next: Libannocheck,  Prev: Examining,  Up
        [-debug-rpm=FILE]
        [-dwarf-dir=DIR]
        [-p TEXT | -prefix=TEXT]
+       [-t DIR | -tmpdir=DIR]
        [-u | -use-debuginfod]
        [-n | -no-use-debuginfod]
        [-enable-TOOL]
@@ -687,12 +688,16 @@ that are used regardless of which tools are enabled.
      default is to follow the links.
 
 '--prefix=TEXT'
-'-p'
+'-p TEXT'
      Include TEXT in the output description.
 
 '--quiet'
 '-q'
      Do not print anything, just return an exit status.
+
+'--tmpdir=DIR'
+'-t DIR'
+     Use DIR as a directory for holding temporary files.
 
 '--verbose'
 '-v'
@@ -779,12 +784,14 @@ File: annobin.info,  Node: Hardened,  Next: Notes,  Prev: Built By,  Up: Annoche
 
 
      annocheck
-       [-skip-all]
-       [-skip-NAME]
-       [-test-all]
+       [-skip-NAME[=FUNCNAME]]
        [-test-NAME]
+       [-skip-all]
+       [-test-all]
+       [-skip-future]
        [-test-future]
        [-test-unicode-all]
+       [-test-unicode-suspicious]
        [-profile=RELEASE]
        [-ignore-gaps]
        [-report-gaps]
@@ -1983,6 +1990,13 @@ File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardene
 4.2.34 Command line options specific to the hardened tool
 ---------------------------------------------------------
 
+'--skip-TEST[=FUNCNAME]'
+     Disable the test called TEST.  If the optional FUNCNAME argument is
+     supplied then the test is only disabled for the named function (and
+     by implication it is enabled for other functions).  This extended
+     version of the option can be used multiple times to allow the test
+     to be skipped for multiple functions.
+
 '--skip-all'
      Disable all tests.  Not really useful unless followed by...
 
@@ -1993,6 +2007,7 @@ File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardene
      Enable all the tests.
 
 '--test-future'
+'--skip-future'
      Report _future fail_ tests.  These are tests for security features
      which are not yet implemented, but are planned for the future.  The
      '--skip-future' option can be used to restore the default behaviour
@@ -2715,7 +2730,7 @@ version of a tool that was built between a range of dates.
      range.
 
 '--tmpdir='dir''
-'-t='dir''
+'-t 'dir''
      Directory to use to store temporary files.
 
 '--readelf='path''
@@ -2800,7 +2815,7 @@ used uniformly throughout the binary.
           Disable checks of the '-fstack-protect' option.
 
 '--tmpdir=dir'
-'-t=dir'
+'-t dir'
      Directory to use to store temporary files.
 
 '--readelf=path'
@@ -2866,7 +2881,7 @@ compiled with '-O2' or higher and the '-fstack-protector-strong',
      Do not report file types that are not supported or recognised.
 
 '--tmpdir=dir'
-'-t=dir'
+'-t dir'
      Directory to use to store temporary files.
 
 '--silent'
@@ -3022,12 +3037,12 @@ by the 'find' command, like this:
      that do not need to be scanned.
 
 '--prefix='text''
-'-p='text''
+'-p 'text''
      Add this text to the output from the script when it runs the
      program on a normal executable.
 
 '--tmpdir=dir'
-'-t=dir'
+'-t dir'
      Directory to use to store temporary files.
 
 '--files-from=file'
@@ -3543,66 +3558,66 @@ Node: The CF Encoding19481
 Node: The ENUM Encoding20553
 Node: The INSTRUMENT Encoding20942
 Node: Annocheck22316
-Node: Built By26690
-Node: Hardened28193
-Node: Test bind now31972
-Node: Test branch protection33612
-Node: Test cf protection35866
-Node: Test dynamic segment39975
-Node: Test dynamic tags41106
-Node: Test entry43455
-Node: Test fortify44350
-Node: Test glibcxx assertions45863
-Node: Test gnu relro46901
-Node: Test gnu stack48635
-Node: Test go revision51032
-Node: Test instrumentation52080
-Node: Test lto52911
-Node: Test not branch protection53817
-Node: Test not dynamic tags55399
-Node: Test notes57087
-Node: Test only go59370
-Node: Test optimization60521
-Node: Test pic61896
-Node: Test pie63441
-Node: Test production64729
-Node: Test property note65542
-Node: Test run path68019
-Node: Test rwx seg70240
-Node: Test short enums71649
-Node: Test stack clash72666
-Node: Test stack prot74127
-Node: Test stack realign75459
-Node: Test textrel76729
-Node: Test threads77986
-Node: Test unicode78801
-Node: Test warnings80292
-Node: Test writable got81127
-Node: Hardened Command Line Options82413
-Node: Waiving Hardened Results87853
-Node: Notes89799
-Node: Size90435
-Node: Timing92804
-Node: Libannocheck93443
-Node: libannocheck_init95382
-Node: libannocheck_finish96304
-Node: libannocheck_get_version96852
-Node: libannocheck_get_error_message97261
-Node: libannocheck_get_known_tests97901
-Node: libannocheck_enable_all_tests99067
-Node: libannocheck_disable_all_tests99546
-Node: libannocheck_enable_test100102
-Node: libannocheck_disable_test100770
-Node: libannocheck_enable_profile101439
-Node: libannocheck_get_known_profiles101961
-Node: libannocheck_run_tests102664
-Node: Configure Options103509
-Node: Legacy Scripts105851
-Node: Who Built Me106626
-Node: ABI Checking109386
-Node: Hardening Checks111502
-Node: Checking Archives115588
-Node: GNU FDL118009
+Node: Built By26807
+Node: Hardened28310
+Node: Test bind now32156
+Node: Test branch protection33796
+Node: Test cf protection36050
+Node: Test dynamic segment40159
+Node: Test dynamic tags41290
+Node: Test entry43639
+Node: Test fortify44534
+Node: Test glibcxx assertions46047
+Node: Test gnu relro47085
+Node: Test gnu stack48819
+Node: Test go revision51216
+Node: Test instrumentation52264
+Node: Test lto53095
+Node: Test not branch protection54001
+Node: Test not dynamic tags55583
+Node: Test notes57271
+Node: Test only go59554
+Node: Test optimization60705
+Node: Test pic62080
+Node: Test pie63625
+Node: Test production64913
+Node: Test property note65726
+Node: Test run path68203
+Node: Test rwx seg70424
+Node: Test short enums71833
+Node: Test stack clash72850
+Node: Test stack prot74311
+Node: Test stack realign75643
+Node: Test textrel76913
+Node: Test threads78170
+Node: Test unicode78985
+Node: Test warnings80476
+Node: Test writable got81311
+Node: Hardened Command Line Options82597
+Node: Waiving Hardened Results88411
+Node: Notes90357
+Node: Size90993
+Node: Timing93362
+Node: Libannocheck94001
+Node: libannocheck_init95940
+Node: libannocheck_finish96862
+Node: libannocheck_get_version97410
+Node: libannocheck_get_error_message97819
+Node: libannocheck_get_known_tests98459
+Node: libannocheck_enable_all_tests99625
+Node: libannocheck_disable_all_tests100104
+Node: libannocheck_enable_test100660
+Node: libannocheck_disable_test101328
+Node: libannocheck_enable_profile101997
+Node: libannocheck_get_known_profiles102519
+Node: libannocheck_run_tests103222
+Node: Configure Options104067
+Node: Legacy Scripts106409
+Node: Who Built Me107184
+Node: ABI Checking109944
+Node: Hardening Checks112060
+Node: Checking Archives116146
+Node: GNU FDL118567
 
 End Tag Table
 

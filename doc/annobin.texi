@@ -888,12 +888,14 @@ built by a particular compiler.
 @c man begin SYNOPSIS annocheck-hardened
 
 annocheck
-  [@b{--skip-all}]
-  [@b{--skip-@var{name}}]
-  [@b{--test-all}]
+  [@b{--skip-@var{name}[=@var{funcname}]}]
   [@b{--test-@var{name}}]
+  [@b{--skip-all}]
+  [@b{--test-all}]
+  [@b{--skip-future}]
   [@b{--test-future}]
   [@b{--test-unicode-all}]
+  [@b{--test-unicode-suspicious}]
   [@b{--profile=@var{release}}]
   [@b{--ignore-gaps}]
   [@b{--report-gaps}]
@@ -2144,6 +2146,13 @@ If necessary the test can be disabled via the
 
 @table @code
 
+@item --skip-@var{test}[=@var{funcname}]
+Disable the test called @var{test}.  If the optional @var{funcname}
+argument is supplied then the test is only disabled for the named
+function (and by implication it is enabled for other functions).  This
+extended version of the option can be used multiple times to allow the
+test to be skipped for multiple functions.
+
 @item --skip-all
 Disable all tests.  Not really useful unless followed by...
 
@@ -2154,6 +2163,7 @@ Enable test @var{name}.
 Enable all the tests.
 
 @item --test-future
+@itemx --skip-future
 Report @emph{future fail} tests.  These are tests for security
 features which are not yet implemented, but are planned for the
 future.  The @option{--skip-future} option can be used to restore

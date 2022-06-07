@@ -533,6 +533,721 @@ show_url (uint testnum, const char * filename)
 	   HARDENED_CHECKER_NAME, filename, tests[testnum].doc_url);
 }
 
+/* Returns true iff COMPONENT_NAME is in FUNC_NAMES[NUM_NAMES].  */
+
+static bool
+skip_this_func (const char ** func_names, unsigned int num_names, const char * component_name)
+{
+  unsigned int i;
+
+  for (i = num_names; i--;)
+    {
+      int res = strcmp (component_name, func_names[i]);
+
+      if (res == 0)
+	return true;
+
+      if (res > 0)
+	/* The array is alpha-sorted, and we are scanning in reverse... */
+	break;
+    }
+
+  return false;
+}
+
+static char reason[1280]; /* FIXME: Use a dynamic buffer ? */
+
+static bool
+skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
+{
+  /* Save time by checking for any function that starts with __.  */
+  if (component_name[0] == '_' && component_name[1] == '_')
+    return true;
+
+  const static char * non_fortify_funcs[] =
+    {
+      /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "_GLOBAL__sub_I_main",
+      "_Unwind_Resume",
+      "_dl_relocate_static_pie",     /* Found in x86_64, RHEL-9, podman-catonit.  */
+      "_dl_start",
+      "_dl_start_user", 	     /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
+      "_dl_tunable_set_arena_max",   /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
+      "_nl_finddomain_subfreeres",
+      "_nl_unload_domain",
+      "_nss_compat_initgroups_dyn",
+      "_nss_compat_setgrent",
+      "_nss_dns_getcanonname_r",
+      "_nss_dns_gethostbyname3_r",
+      "_nss_files_parse_protoent",
+      "_nss_files_sethostent",
+      "_start",
+      "abort",
+      "atexit",
+      "blacklist_store_name",
+      "buffer_free",
+      "cabsf128",
+      "call_fini",
+      "check_match",		     /* Found in aarch64, RHEL-8, ld-2.28.so.  */
+      "check_one_fd",		     /* Found in libc.a(check_fds.o).  */
+      "dlmopen_doit",                /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
+      "feraiseexcept",
+      "fini",
+      "free_derivation",
+      "free_mem",
+      "free_res",
+      "gai_cancel",
+      "gai_suspend",
+      "getaddrinfo_a",
+      "handle_zhaoxin",		     /* Found in libc.a(libc-start.o).  */
+      "install_handler",
+      "internal_setgrent",
+      "j0l",
+      "j1f64",
+      "login",
+      "logwtmp",
+      "matherr",
+      "rtld_lock_default_lock_recursive",  /* Found in aarch64, RHEL-8, ld-2.28.so.  */
+      "td_init",	             /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
+      "td_log",
+      "td_ta_map_lwp2thr",
+      "td_thr_validate",
+      "unlink_blk" 	             /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
+    };
+
+  if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is part of the C library, and as such it does not need fortification",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  return false;
+}
+
+static bool
+skip_pic_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
+{
+  const static char * non_pie_funcs[] =
+    {
+      /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "_GLOBAL__sub_I_main",
+      "_Unwind_Resume",
+      "__errno_location",
+      "__libc_start_call_main",
+      "__tls_get_offset",
+      "_nl_finddomain_subfreeres",
+      "_start",
+      "abort",
+      "atexit",                  /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
+      "check_one_fd",
+      "free_mem"
+    };
+
+  if (skip_this_func (non_pie_funcs, ARRAY_SIZE (non_pie_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is used to start/end program execution and as such does not need to compiled with PIE support",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  return false;
+}
+
+static bool
+skip_stack_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
+{
+  /* Note - this list has been developed over time in response to bug reports.
+     It does not have a well defined set of criteria for name inclusion.  */
+  const static char * startup_funcs[] =
+    { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "../sysdeps/x86_64/crti.S",
+      "../sysdeps/x86_64/start.S",
+      "_GLOBAL__sub_I_main",
+      "_ZN12_GLOBAL__N_122thread_cleanup_handlerEPv", /* Found in Clang's compile-rt library.  */
+      "__libc_csu_fini",
+      "__libc_csu_init",
+      "__libc_init_first",
+      "__libc_setup_tls",
+      "__libc_start_call_main",    /* Found in ppc64le, RHEL-9, /lib64/libc.so.6.  */
+      "__libc_start_main",
+      "__libgcc_s_init",   /* Found in i686 RHEL-8 /lib/libc-2.28.so.  */
+      "__syscall_error",  /* Found in i686 RHEL-8 /lib/libc-2.28.so.  */
+      "_dl_cache_libcmp", /* Found in s390x, RHEL-8, /lib64/ld-2.28.so.  */
+      "_dl_relocate_static_pie",
+      "_dl_start",
+      "_dl_start_user", /* Found in ppc64le, RHEL-9 /lib64/ld64.so.2.  */
+      "_dl_sysinfo_int80", /* In /lib/ld-linux.so.2.  */
+      "_dl_tls_static_surplus_init",
+      "_fini",
+      "_init",
+      "_start",
+      "check_match", 	/* Found in AArch64, RHEL-8, /lib64/ld-2.28.so.  */
+      "check_one_fd",
+      "dlmopen_doit",
+      "get_common_indices.constprop.0",
+      "is_dst",
+      "notify_audit_modules_of_loaded_object",
+      "static_reloc.c"
+    };
+
+  if (skip_this_func (startup_funcs, ARRAY_SIZE (startup_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is part of the C library's startup code, which executes before stack protection is established",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  /* The function used to check for stack checking do not pass these tests either.  */
+  const static char * stack_check_funcs[] =
+    { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "__stack_chk_fail_local",
+      "stack_chk_fail_local.c"
+    };
+
+  if (skip_this_func (stack_check_funcs, ARRAY_SIZE (stack_check_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is part of the stack checking code and as such does not need stack protection itself",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  /* Functions generated by the linker do not use stack protection.  */
+  const static char * linker_funcs[] =
+    { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
+      "__tls_get_offset"
+    };
+
+  if (skip_this_func (linker_funcs, ARRAY_SIZE (linker_funcs), component_name))
+    {
+      sprintf (reason, "\
+function %s is generated by the linker and as such does not use stack protection",
+	       component_name);
+      skip (data, check, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  return false;
+}
+
+typedef struct func_skip
+{
+  const char *        funcname;
+  enum test_index     test;
+  struct func_skip *  next;
+} func_skip;
+
+static func_skip * skip_list = NULL;
+
+static void
+add_skip_for_func (enum test_index test, const char * funcname)
+{
+  func_skip * new_skip = xmalloc (sizeof * new_skip);
+
+  new_skip->funcname = strdup (funcname);
+  new_skip->test = test;
+  new_skip->next = skip_list;
+  skip_list = new_skip;
+}
+
+static bool
+skip_test_for_func (enum test_index test, const char * funcname)
+{
+  func_skip * skip;
+  
+  for (skip = skip_list; skip != NULL; skip = skip->next)
+    if (streq (skip->funcname, funcname))
+      return true;
+  return false;
+}
+
+/* Many glibc binaries are hand built without many of the normal security features.
+   This is known and expected however, so detect them here.  */
+
+static bool
+is_special_glibc_binary (const char * path)
+{
+  int i;
+
+  /* The contents of static glibc libraries should be ignored.  */
+  if (strchr (path, ':'))
+    {
+      static const char * known_glibc_libraries [] =
+	{
+	  "libnldbl_nonshared.a",
+	  "libBrokenLocale.a",
+	  "libc.a:",
+	  "libc_nonshared.a:",
+	  "libm-2.34.a:",
+	  "libmvec.a:",
+	  "libresolv.a:"
+	};
+
+      for (i = ARRAY_SIZE (known_glibc_libraries); i--;)
+	if (strstr (path, known_glibc_libraries[i]) != NULL)
+	  return true;
+    }
+  
+  /* If we are testing an uninstalled rpm then the paths will start with "."
+     so skip this.  */
+  if (path[0] == '.')
+    ++path;
+
+  if (path[0] == '/')
+    {
+      /* If the path is absolute, then strip the prefix.
+	 This allows us to cope with symbolic links and 32-bit/64-bit multilibs.  */
+      static const char * known_prefixes [] =
+	{
+	  /* NB/ Keep this array alpha-sorted.  */
+	  /* NB/ The terminating forward slash is important.  */
+	  "/lib/",
+	  "/lib64/",
+	  "/sbin/",
+	  "/usr/bin/",
+	  "/usr/lib/",
+	  "/usr/lib/gconv/",
+	  "/usr/lib64/",
+	  "/usr/lib64/gconv/",
+	  "/usr/libexec/",
+	  "/usr/libexec/getconf/",
+	  "/usr/sbin/"
+	};
+
+      for (i = ARRAY_SIZE (known_prefixes); i--;)
+	{
+	  /* FIXME: To save time we could store the string lengths in the known_prefixes array.  */
+	  size_t len = strlen (known_prefixes[i]);
+	  int res = strncmp (path, known_prefixes[i], len);
+
+	  if (res == 0)
+	    {
+	      path += len;
+	      break;
+	    }
+	  /* Do not abort this loop if res > 0
+	     We can have a file like /usr/lib64/libmcheck.a which will
+	     not match /usr/lib64/gconv but which should match /usr/lib64.  */
+	}
+
+      if (i < 0)
+	/* All (absolute) glibc binaries should have a known prefix.  */
+	return false;
+    }
+
+  const char * known_glibc_specials[] =
+    {
+      /* NB/ Keep this array alpha sorted.  */
+      "ANSI_X3.110.so",
+      "ARMSCII-8.so",
+      "ASMO_449.so",
+      "BIG5.so",
+      "BIG5HKSCS.so",
+      "BRF.so",
+      "CP10007.so",
+      "CP1125.so",
+      "CP1250.so",
+      "CP1251.so",
+      "CP1252.so",
+      "CP1253.so",
+      "CP1254.so",
+      "CP1255.so",
+      "CP1256.so",
+      "CP1257.so",
+      "CP1258.so",
+      "CP737.so",
+      "CP770.so",
+      "CP771.so",
+      "CP772.so",
+      "CP773.so",
+      "CP774.so",
+      "CP775.so",
+      "CP932.so",
+      "CSN_369103.so",
+      "CWI.so",
+      "DEC-MCS.so",
+      "EBCDIC-AT-DE-A.so",
+      "EBCDIC-AT-DE.so",
+      "EBCDIC-CA-FR.so",
+      "EBCDIC-DK-NO-A.so",
+      "EBCDIC-DK-NO.so",
+      "EBCDIC-ES-A.so",
+      "EBCDIC-ES-S.so",
+      "EBCDIC-ES.so",
+      "EBCDIC-FI-SE-A.so",
+      "EBCDIC-FI-SE.so",
+      "EBCDIC-FR.so",
+      "EBCDIC-IS-FRISS.so",
+      "EBCDIC-IT.so",
+      "EBCDIC-PT.so",
+      "EBCDIC-UK.so",
+      "EBCDIC-US.so",
+      "ECMA-CYRILLIC.so",
+      "EUC-CN.so",
+      "EUC-JISX0213.so",
+      "EUC-JP-MS.so",
+      "EUC-JP.so",
+      "EUC-KR.so",
+      "EUC-TW.so",
+      "GB18030.so",
+      "GBBIG5.so",
+      "GBGBK.so",
+      "GBK.so",
+      "GEORGIAN-ACADEMY.so",
+      "GEORGIAN-PS.so",
+      "GOST_19768-74.so",
+      "GREEK-CCITT.so",
+      "GREEK7-OLD.so",
+      "GREEK7.so",
+      "HP-GREEK8.so",
+      "HP-ROMAN8.so",
+      "HP-ROMAN9.so",
+      "HP-THAI8.so",
+      "HP-TURKISH8.so",
+      "IBM037.so",
+      "IBM038.so",
+      "IBM1004.so",
+      "IBM1008.so",
+      "IBM1008_420.so",
+      "IBM1025.so",
+      "IBM1026.so",
+      "IBM1046.so",
+      "IBM1047.so",
+      "IBM1097.so",
+      "IBM1112.so",
+      "IBM1122.so",
+      "IBM1123.so",
+      "IBM1124.so",
+      "IBM1129.so",
+      "IBM1130.so",
+      "IBM1132.so",
+      "IBM1133.so",
+      "IBM1137.so",
+      "IBM1140.so",
+      "IBM1141.so",
+      "IBM1142.so",
+      "IBM1143.so",
+      "IBM1144.so",
+      "IBM1145.so",
+      "IBM1146.so",
+      "IBM1147.so",
+      "IBM1148.so",
+      "IBM1149.so",
+      "IBM1153.so",
+      "IBM1154.so",
+      "IBM1155.so",
+      "IBM1156.so",
+      "IBM1157.so",
+      "IBM1158.so",
+      "IBM1160.so",
+      "IBM1161.so",
+      "IBM1162.so",
+      "IBM1163.so",
+      "IBM1164.so",
+      "IBM1166.so",
+      "IBM1167.so",
+      "IBM12712.so",
+      "IBM1364.so",
+      "IBM1371.so",
+      "IBM1388.so",
+      "IBM1390.so",
+      "IBM1399.so",
+      "IBM16804.so",
+      "IBM256.so",
+      "IBM273.so",
+      "IBM274.so",
+      "IBM275.so",
+      "IBM277.so",
+      "IBM278.so",
+      "IBM280.so",
+      "IBM281.so",
+      "IBM284.so",
+      "IBM285.so",
+      "IBM290.so",
+      "IBM297.so",
+      "IBM420.so",
+      "IBM423.so",
+      "IBM424.so",
+      "IBM437.so",
+      "IBM4517.so",
+      "IBM4899.so",
+      "IBM4909.so",
+      "IBM4971.so",
+      "IBM500.so",
+      "IBM5347.so",
+      "IBM803.so",
+      "IBM850.so",
+      "IBM851.so",
+      "IBM852.so",
+      "IBM855.so",
+      "IBM856.so",
+      "IBM857.so",
+      "IBM858.so",
+      "IBM860.so",
+      "IBM861.so",
+      "IBM862.so",
+      "IBM863.so",
+      "IBM864.so",
+      "IBM865.so",
+      "IBM866.so",
+      "IBM866NAV.so",
+      "IBM868.so",
+      "IBM869.so",
+      "IBM870.so",
+      "IBM871.so",
+      "IBM874.so",
+      "IBM875.so",
+      "IBM880.so",
+      "IBM891.so",
+      "IBM901.so",
+      "IBM902.so",
+      "IBM903.so",
+      "IBM9030.so",
+      "IBM904.so",
+      "IBM905.so",
+      "IBM9066.so",
+      "IBM918.so",
+      "IBM921.so",
+      "IBM922.so",
+      "IBM930.so",
+      "IBM932.so",
+      "IBM933.so",
+      "IBM935.so",
+      "IBM937.so",
+      "IBM939.so",
+      "IBM943.so",
+      "IBM9448.so",
+      "IEC_P27-1.so",
+      "INIS-8.so",
+      "INIS-CYRILLIC.so",
+      "INIS.so",
+      "ISIRI-3342.so",
+      "ISO-2022-CN-EXT.so",
+      "ISO-2022-CN.so",
+      "ISO-2022-JP-3.so",
+      "ISO-2022-JP.so",
+      "ISO-2022-KR.so",
+      "ISO-8859-1_CP037_Z900.so",
+      "ISO-IR-197.so",
+      "ISO-IR-209.so",
+      "ISO646.so",
+      "ISO8859-1.so",
+      "ISO8859-10.so",
+      "ISO8859-11.so",
+      "ISO8859-13.so",
+      "ISO8859-14.so",
+      "ISO8859-15.so",
+      "ISO8859-16.so",
+      "ISO8859-2.so",
+      "ISO8859-3.so",
+      "ISO8859-4.so",
+      "ISO8859-5.so",
+      "ISO8859-6.so",
+      "ISO8859-7.so",
+      "ISO8859-8.so",
+      "ISO8859-9.so",
+      "ISO8859-9E.so",
+      "ISO_10367-BOX.so",
+      "ISO_11548-1.so",
+      "ISO_2033.so",
+      "ISO_5427-EXT.so",
+      "ISO_5427.so",
+      "ISO_5428.so",
+      "ISO_6937-2.so",
+      "ISO_6937.so",
+      "JOHAB.so",
+      "KOI-8.so",
+      "KOI8-R.so",
+      "KOI8-RU.so",
+      "KOI8-T.so",
+      "KOI8-U.so",
+      "LATIN-GREEK-1.so",
+      "LATIN-GREEK.so",
+      "MAC-CENTRALEUROPE.so",
+      "MAC-IS.so",
+      "MAC-SAMI.so",
+      "MAC-UK.so",
+      "MACINTOSH.so",
+      "MIK.so",
+      "Mcrt1.o",
+      "NATS-DANO.so",
+      "NATS-SEFI.so",
+      "POSIX_V6_ILP32_OFF32",
+      "POSIX_V6_ILP32_OFFBIG",
+      "POSIX_V6_LP64_OFF64",
+      "POSIX_V7_ILP32_OFF32",
+      "POSIX_V7_ILP32_OFFBIG",
+      "POSIX_V7_LP64_OFF64",
+      "PT154.so",
+      "RK1048.so",
+      "SAMI-WS2.so",
+      "SHIFT_JISX0213.so",
+      "SJIS.so",
+      "Scrt1.o",
+      "T.61.so",
+      "TCVN5712-1.so",
+      "TIS-620.so",
+      "TSCII.so",
+      "UHC.so",
+      "UNICODE.so",
+      "UTF-16.so",
+      "UTF-32.so",
+      "UTF-7.so",
+      "UTF16_UTF32_Z9.so",
+      "UTF8_UTF16_Z9.so",
+      "UTF8_UTF32_Z9.so",
+      "VISCII.so",    
+      "XBS5_ILP32_OFF32",
+      "XBS5_ILP32_OFFBIG",
+      "XBS5_LP64_OFF64",
+      "audit/sotruss-lib.so",
+      "build-locale-archive",
+      "crt1.o",
+      "gcrt1.o",
+      "gencat",
+      "getconf",
+      "getent",
+      "grcrt1.o",
+      "iconv",
+      "iconvconfig",
+      "ld-2.28.so",
+      "ld-2.33.so",
+      "ld-linux-aarch64.so.1",
+      "ld-linux-x86-64.so.1",
+      "ld-linux-x86-64.so.2",
+      "ld-linux.so.2",
+      "ld64.so.1",
+      "ld64.so.2",
+      "ldconfig",
+      "libBrokenLocale-2.28.so",
+      "libBrokenLocale.so.1",
+      "libSegFault.so",
+      "libanl.so.1",
+      "libc.so.6",
+      "libc_malloc_debug.so.0",
+      "libdl.so.2",
+      "libg.a:dummy.o",
+      "libm.so.6",
+      "libmcheck.a",      
+      "libmemusage.so",
+      "libmvec.so.1",
+      "libnsl-2.28.so",
+      "libnsl-2.33.so",
+      "libnsl.so.1",
+      "libnss_compat.so.2",
+      "libpcprofile.so",
+      "libpthread-2.28.so",
+      "libpthread.so.0",
+      "libresolv-2.28.so",
+      "libresolv.so.2",
+      "librt.so.1",
+      "libthread_db.so.1",
+      "libutil.so.1",
+      "locale",
+      "localedef",
+      "makedb",
+      "memusagestat",
+      "pcprofiledump",
+      "pldd",
+      "rcrt1.o",
+      "sprof",
+      "zdump",
+      "zic"
+    };
+
+  for (i = ARRAY_SIZE (known_glibc_specials); i--;)
+    {
+      int res = strcmp (path, known_glibc_specials[i]);
+
+      if (res == 0)
+	return true;
+      /* Since the array is alpha-sorted and we are searching in reverse order,
+	 a positive result means that path > special and hence we can stop the search.  */
+      if (res > 0)
+	return false;
+    }
+  return false;
+}
+
+/* Decides if a given test should be skipped for a the current component.
+   If it should be skipped then a SKIP result is generated.  */
+
+static bool
+skip_test_for_current_func (annocheck_data * data, enum test_index check)
+{
+  /* BZ 1923439: IFuncs are compiled without some of the security
+     features because they execute in a special enviroment.  */
+  if (ELF64_ST_TYPE (per_file.component_type) == STT_GNU_IFUNC)
+    {
+      switch (check)
+	{
+	case TEST_FORTIFY:
+	case TEST_STACK_CLASH:
+	case TEST_STACK_PROT:
+	  sprintf (reason, "code at %#lx is a part of an ifunc", per_file.note_data.start);
+	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
+	  return true;
+	default:
+	  break;
+	}
+    }
+
+  if (is_special_glibc_binary (data->full_filename))
+    {
+      sprintf (reason, "the %s binary is a special case, hand-crafted by the glibc build system", data->filename);
+      skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  const char * component_name = per_file.component_name;
+
+  if (component_name == NULL)
+    return false;
+
+  if (startswith (component_name, "component: "))
+    component_name += strlen ("component: ");
+
+  // FIXME: Is this check still needed ?
+  if (streq (component_name, "elf_init.c")
+      || streq (component_name, "init.c"))
+    {
+      sprintf (reason, "\
+function %s is part of the C library's startup code, which executes before a security framework is established",
+	       component_name);
+      skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
+      return true;
+    }
+
+  if (skip_test_for_func (check, component_name))
+    return true;
+
+  switch (check)
+    {
+    case TEST_STACK_PROT:
+    case TEST_STACK_CLASH:
+    case TEST_STACK_REALIGN:
+      return skip_stack_checks_for_function (data, check, component_name);
+
+    case TEST_PIC:
+    case TEST_PIE:
+      return skip_pic_checks_for_function (data, check, component_name);
+
+    case TEST_FORTIFY:
+      return skip_fortify_checks_for_function (data, check, component_name);
+
+    default:
+      return false;
+    }
+}
+
 static void
 fail (annocheck_data * data,
       uint             testnum,
@@ -544,6 +1259,9 @@ fail (annocheck_data * data,
   if (! tests[testnum].enabled)
     return;
 
+  if (skip_test_for_current_func (data, testnum))
+    return;
+  
   per_file.num_fails ++;
 
   const char * filename = get_filename (data);
@@ -596,6 +1314,9 @@ maybe (annocheck_data * data,
   if (! tests[testnum].enabled)
     return;
 
+  if (skip_test_for_current_func (data, testnum))
+    return;
+  
   per_file.num_maybes ++;
 
   const char * filename = get_filename (data);
@@ -1168,414 +1889,6 @@ dwarf_attribute_checker (annocheck_data *  data,
   return true;
 }
 
-/* Many glibc binaries are hand built without many of the normal security features.
-   This is known and expected however, so detect them here.  */
-
-static bool
-is_special_glibc_binary (const char * path)
-{
-  int i;
-
-  /* The contents of static glibc libraries should be ignored.  */
-  if (strchr (path, ':'))
-    {
-      static const char * known_glibc_libraries [] =
-	{
-	  "libnldbl_nonshared.a",
-	  "libBrokenLocale.a",
-	  "libc.a:",
-	  "libc_nonshared.a:",
-	  "libm-2.34.a:",
-	  "libmvec.a:",
-	  "libresolv.a:"
-	};
-
-      for (i = ARRAY_SIZE (known_glibc_libraries); i--;)
-	if (strstr (path, known_glibc_libraries[i]) != NULL)
-	  return true;
-    }
-  
-  /* If we are testing an uninstalled rpm then the paths will start with "."
-     so skip this.  */
-  if (path[0] == '.')
-    ++path;
-
-  if (path[0] == '/')
-    {
-      /* If the path is absolute, then strip the prefix.
-	 This allows us to cope with symbolic links and 32-bit/64-bit multilibs.  */
-      static const char * known_prefixes [] =
-	{
-	  /* NB/ Keep this array alpha-sorted.  */
-	  /* NB/ The terminating forward slash is important.  */
-	  "/lib/",
-	  "/lib64/",
-	  "/sbin/",
-	  "/usr/bin/",
-	  "/usr/lib/",
-	  "/usr/lib/gconv/",
-	  "/usr/lib64/",
-	  "/usr/lib64/gconv/",
-	  "/usr/libexec/",
-	  "/usr/libexec/getconf/",
-	  "/usr/sbin/"
-	};
-
-      for (i = ARRAY_SIZE (known_prefixes); i--;)
-	{
-	  /* FIXME: To save time we could store the string lengths in the known_prefixes array.  */
-	  size_t len = strlen (known_prefixes[i]);
-	  int res = strncmp (path, known_prefixes[i], len);
-
-	  if (res == 0)
-	    {
-	      path += len;
-	      break;
-	    }
-	  /* Do not abort this loop if res > 0
-	     We can have a file like /usr/lib64/libmcheck.a which will
-	     not match /usr/lib64/gconv but which should match /usr/lib64.  */
-	}
-
-      if (i < 0)
-	/* All (absolute) glibc binaries should have a known prefix.  */
-	return false;
-    }
-
-  const char * known_glibc_specials[] =
-    {
-      /* NB/ Keep this array alpha sorted.  */
-      "ANSI_X3.110.so",
-      "ARMSCII-8.so",
-      "ASMO_449.so",
-      "BIG5.so",
-      "BIG5HKSCS.so",
-      "BRF.so",
-      "CP10007.so",
-      "CP1125.so",
-      "CP1250.so",
-      "CP1251.so",
-      "CP1252.so",
-      "CP1253.so",
-      "CP1254.so",
-      "CP1255.so",
-      "CP1256.so",
-      "CP1257.so",
-      "CP1258.so",
-      "CP737.so",
-      "CP770.so",
-      "CP771.so",
-      "CP772.so",
-      "CP773.so",
-      "CP774.so",
-      "CP775.so",
-      "CP932.so",
-      "CSN_369103.so",
-      "CWI.so",
-      "DEC-MCS.so",
-      "EBCDIC-AT-DE-A.so",
-      "EBCDIC-AT-DE.so",
-      "EBCDIC-CA-FR.so",
-      "EBCDIC-DK-NO-A.so",
-      "EBCDIC-DK-NO.so",
-      "EBCDIC-ES-A.so",
-      "EBCDIC-ES-S.so",
-      "EBCDIC-ES.so",
-      "EBCDIC-FI-SE-A.so",
-      "EBCDIC-FI-SE.so",
-      "EBCDIC-FR.so",
-      "EBCDIC-IS-FRISS.so",
-      "EBCDIC-IT.so",
-      "EBCDIC-PT.so",
-      "EBCDIC-UK.so",
-      "EBCDIC-US.so",
-      "ECMA-CYRILLIC.so",
-      "EUC-CN.so",
-      "EUC-JISX0213.so",
-      "EUC-JP-MS.so",
-      "EUC-JP.so",
-      "EUC-KR.so",
-      "EUC-TW.so",
-      "GB18030.so",
-      "GBBIG5.so",
-      "GBGBK.so",
-      "GBK.so",
-      "GEORGIAN-ACADEMY.so",
-      "GEORGIAN-PS.so",
-      "GOST_19768-74.so",
-      "GREEK-CCITT.so",
-      "GREEK7-OLD.so",
-      "GREEK7.so",
-      "HP-GREEK8.so",
-      "HP-ROMAN8.so",
-      "HP-ROMAN9.so",
-      "HP-THAI8.so",
-      "HP-TURKISH8.so",
-      "IBM037.so",
-      "IBM038.so",
-      "IBM1004.so",
-      "IBM1008.so",
-      "IBM1008_420.so",
-      "IBM1025.so",
-      "IBM1026.so",
-      "IBM1046.so",
-      "IBM1047.so",
-      "IBM1097.so",
-      "IBM1112.so",
-      "IBM1122.so",
-      "IBM1123.so",
-      "IBM1124.so",
-      "IBM1129.so",
-      "IBM1130.so",
-      "IBM1132.so",
-      "IBM1133.so",
-      "IBM1137.so",
-      "IBM1140.so",
-      "IBM1141.so",
-      "IBM1142.so",
-      "IBM1143.so",
-      "IBM1144.so",
-      "IBM1145.so",
-      "IBM1146.so",
-      "IBM1147.so",
-      "IBM1148.so",
-      "IBM1149.so",
-      "IBM1153.so",
-      "IBM1154.so",
-      "IBM1155.so",
-      "IBM1156.so",
-      "IBM1157.so",
-      "IBM1158.so",
-      "IBM1160.so",
-      "IBM1161.so",
-      "IBM1162.so",
-      "IBM1163.so",
-      "IBM1164.so",
-      "IBM1166.so",
-      "IBM1167.so",
-      "IBM12712.so",
-      "IBM1364.so",
-      "IBM1371.so",
-      "IBM1388.so",
-      "IBM1390.so",
-      "IBM1399.so",
-      "IBM16804.so",
-      "IBM256.so",
-      "IBM273.so",
-      "IBM274.so",
-      "IBM275.so",
-      "IBM277.so",
-      "IBM278.so",
-      "IBM280.so",
-      "IBM281.so",
-      "IBM284.so",
-      "IBM285.so",
-      "IBM290.so",
-      "IBM297.so",
-      "IBM420.so",
-      "IBM423.so",
-      "IBM424.so",
-      "IBM437.so",
-      "IBM4517.so",
-      "IBM4899.so",
-      "IBM4909.so",
-      "IBM4971.so",
-      "IBM500.so",
-      "IBM5347.so",
-      "IBM803.so",
-      "IBM850.so",
-      "IBM851.so",
-      "IBM852.so",
-      "IBM855.so",
-      "IBM856.so",
-      "IBM857.so",
-      "IBM858.so",
-      "IBM860.so",
-      "IBM861.so",
-      "IBM862.so",
-      "IBM863.so",
-      "IBM864.so",
-      "IBM865.so",
-      "IBM866.so",
-      "IBM866NAV.so",
-      "IBM868.so",
-      "IBM869.so",
-      "IBM870.so",
-      "IBM871.so",
-      "IBM874.so",
-      "IBM875.so",
-      "IBM880.so",
-      "IBM891.so",
-      "IBM901.so",
-      "IBM902.so",
-      "IBM903.so",
-      "IBM9030.so",
-      "IBM904.so",
-      "IBM905.so",
-      "IBM9066.so",
-      "IBM918.so",
-      "IBM921.so",
-      "IBM922.so",
-      "IBM930.so",
-      "IBM932.so",
-      "IBM933.so",
-      "IBM935.so",
-      "IBM937.so",
-      "IBM939.so",
-      "IBM943.so",
-      "IBM9448.so",
-      "IEC_P27-1.so",
-      "INIS-8.so",
-      "INIS-CYRILLIC.so",
-      "INIS.so",
-      "ISIRI-3342.so",
-      "ISO-2022-CN-EXT.so",
-      "ISO-2022-CN.so",
-      "ISO-2022-JP-3.so",
-      "ISO-2022-JP.so",
-      "ISO-2022-KR.so",
-      "ISO-8859-1_CP037_Z900.so",
-      "ISO-IR-197.so",
-      "ISO-IR-209.so",
-      "ISO646.so",
-      "ISO8859-1.so",
-      "ISO8859-10.so",
-      "ISO8859-11.so",
-      "ISO8859-13.so",
-      "ISO8859-14.so",
-      "ISO8859-15.so",
-      "ISO8859-16.so",
-      "ISO8859-2.so",
-      "ISO8859-3.so",
-      "ISO8859-4.so",
-      "ISO8859-5.so",
-      "ISO8859-6.so",
-      "ISO8859-7.so",
-      "ISO8859-8.so",
-      "ISO8859-9.so",
-      "ISO8859-9E.so",
-      "ISO_10367-BOX.so",
-      "ISO_11548-1.so",
-      "ISO_2033.so",
-      "ISO_5427-EXT.so",
-      "ISO_5427.so",
-      "ISO_5428.so",
-      "ISO_6937-2.so",
-      "ISO_6937.so",
-      "JOHAB.so",
-      "KOI-8.so",
-      "KOI8-R.so",
-      "KOI8-RU.so",
-      "KOI8-T.so",
-      "KOI8-U.so",
-      "LATIN-GREEK-1.so",
-      "LATIN-GREEK.so",
-      "MAC-CENTRALEUROPE.so",
-      "MAC-IS.so",
-      "MAC-SAMI.so",
-      "MAC-UK.so",
-      "MACINTOSH.so",
-      "MIK.so",
-      "Mcrt1.o",
-      "NATS-DANO.so",
-      "NATS-SEFI.so",
-      "POSIX_V6_ILP32_OFF32",
-      "POSIX_V6_ILP32_OFFBIG",
-      "POSIX_V6_LP64_OFF64",
-      "POSIX_V7_ILP32_OFF32",
-      "POSIX_V7_ILP32_OFFBIG",
-      "POSIX_V7_LP64_OFF64",
-      "PT154.so",
-      "RK1048.so",
-      "SAMI-WS2.so",
-      "SHIFT_JISX0213.so",
-      "SJIS.so",
-      "Scrt1.o",
-      "T.61.so",
-      "TCVN5712-1.so",
-      "TIS-620.so",
-      "TSCII.so",
-      "UHC.so",
-      "UNICODE.so",
-      "UTF-16.so",
-      "UTF-32.so",
-      "UTF-7.so",
-      "UTF16_UTF32_Z9.so",
-      "UTF8_UTF16_Z9.so",
-      "UTF8_UTF32_Z9.so",
-      "VISCII.so",    
-      "XBS5_ILP32_OFF32",
-      "XBS5_ILP32_OFFBIG",
-      "XBS5_LP64_OFF64",
-      "audit/sotruss-lib.so",
-      "build-locale-archive",
-      "crt1.o",
-      "gcrt1.o",
-      "gencat",
-      "getconf",
-      "getent",
-      "grcrt1.o",
-      "iconv",
-      "iconvconfig",
-      "ld-2.28.so",
-      "ld-2.33.so",
-      "ld-linux-aarch64.so.1",
-      "ld-linux-x86-64.so.1",
-      "ld-linux-x86-64.so.2",
-      "ld-linux.so.2",
-      "ld64.so.1",
-      "ld64.so.2",
-      "ldconfig",
-      "libBrokenLocale-2.28.so",
-      "libBrokenLocale.so.1",
-      "libSegFault.so",
-      "libanl.so.1",
-      "libc.so.6",
-      "libc_malloc_debug.so.0",
-      "libdl.so.2",
-      "libg.a:dummy.o",
-      "libm.so.6",
-      "libmcheck.a",      
-      "libmemusage.so",
-      "libmvec.so.1",
-      "libnsl-2.28.so",
-      "libnsl-2.33.so",
-      "libnsl.so.1",
-      "libnss_compat.so.2",
-      "libpcprofile.so",
-      "libpthread-2.28.so",
-      "libpthread.so.0",
-      "libresolv-2.28.so",
-      "libresolv.so.2",
-      "librt.so.1",
-      "libthread_db.so.1",
-      "libutil.so.1",
-      "locale",
-      "localedef",
-      "makedb",
-      "memusagestat",
-      "pcprofiledump",
-      "pldd",
-      "rcrt1.o",
-      "sprof",
-      "zdump",
-      "zic"
-    };
-
-  for (i = ARRAY_SIZE (known_glibc_specials); i--;)
-    {
-      int res = strcmp (path, known_glibc_specials[i]);
-
-      if (res == 0)
-	return true;
-      /* Since the array is alpha-sorted and we are searching in reverse order,
-	 a positive result means that path > special and hence we can stop the search.  */
-      if (res > 0)
-	return false;
-    }
-  return false;
-}
-
 static bool
 start (annocheck_data * data)
 {
@@ -1800,6 +2113,9 @@ interesting_sec (annocheck_data *     data,
   if (streq (sec->secname, ".gnu.attributes"))
     return true;
 
+  if (streq (sec->secname, ".gnu.build.attributes"))
+    return true;
+
   if (streq (sec->secname, ".rodata"))
     /* We might want to scan this section for a GO version string.  */
     return true;
@@ -1950,278 +2266,6 @@ note_name (const char * attr)
     default:                             return "<UNKNOWN>";
     }
 
-}
-
-/* Returns true iff COMPONENT_NAME is in FUNC_NAMES[NUM_NAMES].  */
-
-static bool
-skip_this_func (const char ** func_names, unsigned int num_names, const char * component_name)
-{
-  unsigned int i;
-
-  for (i = num_names; i--;)
-    {
-      int res = strcmp (component_name, func_names[i]);
-
-      if (res == 0)
-	return true;
-
-      if (res > 0)
-	/* The array is alpha-sorted, and we are scanning in reverse... */
-	break;
-    }
-
-  return false;
-}
-
-static char reason[1280]; /* FIXME: Use a dynamic buffer ? */
-
-static bool
-skip_fortify_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
-{
-  /* Save time by checking for any function that starts with __.  */
-  if (component_name[0] == '_' && component_name[1] == '_')
-    return true;
-
-  const static char * non_fortify_funcs[] =
-    {
-      /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-      "_GLOBAL__sub_I_main",
-      "_Unwind_Resume",
-      "_dl_relocate_static_pie",     /* Found in x86_64, RHEL-9, podman-catonit.  */
-      "_dl_start",
-      "_dl_start_user", 	     /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
-      "_dl_tunable_set_arena_max",   /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
-      "_nl_finddomain_subfreeres",
-      "_nl_unload_domain",
-      "_nss_compat_initgroups_dyn",
-      "_nss_compat_setgrent",
-      "_nss_dns_getcanonname_r",
-      "_nss_dns_gethostbyname3_r",
-      "_nss_files_parse_protoent",
-      "_nss_files_sethostent",
-      "_start",
-      "abort",
-      "atexit",
-      "blacklist_store_name",
-      "buffer_free",
-      "cabsf128",
-      "call_fini",
-      "check_match",		     /* Found in aarch64, RHEL-8, ld-2.28.so.  */
-      "check_one_fd",		     /* Found in libc.a(check_fds.o).  */
-      "dlmopen_doit",                /* Found in ppc64le, RHEL-9, /lib64/ld64.so.2.  */
-      "feraiseexcept",
-      "fini",
-      "free_derivation",
-      "free_mem",
-      "free_res",
-      "gai_cancel",
-      "gai_suspend",
-      "getaddrinfo_a",
-      "handle_zhaoxin",		     /* Found in libc.a(libc-start.o).  */
-      "install_handler",
-      "internal_setgrent",
-      "j0l",
-      "j1f64",
-      "login",
-      "logwtmp",
-      "matherr",
-      "rtld_lock_default_lock_recursive",  /* Found in aarch64, RHEL-8, ld-2.28.so.  */
-      "td_init",	             /* Found in ppc64le, RHEL-9, /lib64/libthread_db.so.1.  */
-      "td_log",
-      "td_ta_map_lwp2thr",
-      "td_thr_validate",
-      "unlink_blk" 	             /* Found in ppc64le, RHEL-9, /lib64/libc_malloc_debug.so.0.  */
-    };
-
-  if (skip_this_func (non_fortify_funcs, ARRAY_SIZE (non_fortify_funcs), component_name))
-    {
-      sprintf (reason, "\
-function %s is part of the C library, and as such it does not need fortification",
-	       component_name);
-      skip (data, check, SOURCE_SKIP_CHECKS, reason);
-      return true;
-    }
-
-  return false;
-}
-
-static bool
-skip_pic_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
-{
-  const static char * non_pie_funcs[] =
-    {
-      /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-      "_GLOBAL__sub_I_main",
-      "_Unwind_Resume",
-      "__errno_location",
-      "__libc_start_call_main",
-      "__tls_get_offset",
-      "_nl_finddomain_subfreeres",
-      "_start",
-      "abort",
-      "atexit",                  /* The atexit function in libiberty is only compiled with -fPIC not -fPIE.  */
-      "check_one_fd",
-      "free_mem"
-    };
-
-  if (skip_this_func (non_pie_funcs, ARRAY_SIZE (non_pie_funcs), component_name))
-    {
-      sprintf (reason, "\
-function %s is used to start/end program execution and as such does not need to compiled with PIE support",
-	       component_name);
-      skip (data, check, SOURCE_SKIP_CHECKS, reason);
-      return true;
-    }
-
-  return false;
-}
-
-static bool
-skip_stack_checks_for_function (annocheck_data * data, enum test_index check, const char * component_name)
-{
-  /* Note - this list has been developed over time in response to bug reports.
-     It does not have a well defined set of criteria for name inclusion.  */
-  const static char * startup_funcs[] =
-    { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-      "../sysdeps/x86_64/crti.S",
-      "../sysdeps/x86_64/start.S",
-      "_GLOBAL__sub_I_main",
-      "_ZN12_GLOBAL__N_122thread_cleanup_handlerEPv", /* Found in Clang's compile-rt library.  */
-      "__libc_csu_fini",
-      "__libc_csu_init",
-      "__libc_init_first",
-      "__libc_setup_tls",
-      "__libc_start_call_main",    /* Found in ppc64le, RHEL-9, /lib64/libc.so.6.  */
-      "__libc_start_main",
-      "__libgcc_s_init",   /* Found in i686 RHEL-8 /lib/libc-2.28.so.  */
-      "__syscall_error",  /* Found in i686 RHEL-8 /lib/libc-2.28.so.  */
-      "_dl_cache_libcmp", /* Found in s390x, RHEL-8, /lib64/ld-2.28.so.  */
-      "_dl_relocate_static_pie",
-      "_dl_start",
-      "_dl_start_user", /* Found in ppc64le, RHEL-9 /lib64/ld64.so.2.  */
-      "_dl_sysinfo_int80", /* In /lib/ld-linux.so.2.  */
-      "_dl_tls_static_surplus_init",
-      "_fini",
-      "_init",
-      "_start",
-      "check_match", 	/* Found in AArch64, RHEL-8, /lib64/ld-2.28.so.  */
-      "check_one_fd",
-      "dlmopen_doit",
-      "get_common_indices.constprop.0",
-      "is_dst",
-      "notify_audit_modules_of_loaded_object",
-      "static_reloc.c"
-    };
-
-  if (skip_this_func (startup_funcs, ARRAY_SIZE (startup_funcs), component_name))
-    {
-      sprintf (reason, "\
-function %s is part of the C library's startup code, which executes before stack protection is established",
-	       component_name);
-      skip (data, check, SOURCE_SKIP_CHECKS, reason);
-      return true;
-    }
-
-  /* The function used to check for stack checking do not pass these tests either.  */
-  const static char * stack_check_funcs[] =
-    { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-      "__stack_chk_fail_local",
-      "stack_chk_fail_local.c"
-    };
-
-  if (skip_this_func (stack_check_funcs, ARRAY_SIZE (stack_check_funcs), component_name))
-    {
-      sprintf (reason, "\
-function %s is part of the stack checking code and as such does not need stack protection itself",
-	       component_name);
-      skip (data, check, SOURCE_SKIP_CHECKS, reason);
-      return true;
-    }
-
-  /* Functions generated by the linker do not use stack protection.  */
-  const static char * linker_funcs[] =
-    { /* NB. KEEP THIS ARRAY ALPHA-SORTED  */
-      "__tls_get_offset"
-    };
-
-  if (skip_this_func (linker_funcs, ARRAY_SIZE (linker_funcs), component_name))
-    {
-      sprintf (reason, "\
-function %s is generated by the linker and as such does not use stack protection",
-	       component_name);
-      skip (data, check, SOURCE_SKIP_CHECKS, reason);
-      return true;
-    }
-
-  return false;
-}
-
-/* Decides if a given test should be skipped for a the current component.
-   If it should be skipped then a SKIP result is generated.  */
-
-static bool
-skip_test_for_current_func (annocheck_data * data, enum test_index check)
-{
-  /* BZ 1923439: IFuncs are compiled without some of the security
-     features because they execute in a special enviroment.  */
-  if (ELF64_ST_TYPE (per_file.component_type) == STT_GNU_IFUNC)
-    {
-      switch (check)
-	{
-	case TEST_FORTIFY:
-	case TEST_STACK_CLASH:
-	case TEST_STACK_PROT:
-	  sprintf (reason, "code at %#lx is a part of an ifunc", per_file.note_data.start);
-	  skip (data, check, SOURCE_SKIP_CHECKS, reason);
-	  return true;
-	default:
-	  break;
-	}
-    }
-
-  if (is_special_glibc_binary (data->full_filename))
-    {
-      sprintf (reason, "the %s binary is a special case, hand-crafted by the glibc build system", data->filename);
-      skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
-      return true;
-    }
-
-  const char * component_name = per_file.component_name;
-
-  if (component_name == NULL)
-    return false;
-
-  if (startswith (component_name, "component: "))
-    component_name += strlen ("component: ");
-
-  if (streq (component_name, "elf_init.c")
-      || streq (component_name, "init.c"))
-    {
-      sprintf (reason, "\
-function %s is part of the C library's startup code, which executes before a security framework is established",
-	       component_name);
-      skip (data, check < TEST_MAX ? check : TEST_NOTES, SOURCE_SKIP_CHECKS, reason);
-      return true;
-    }
-
-  switch (check)
-    {
-    case TEST_STACK_PROT:
-    case TEST_STACK_CLASH:
-    case TEST_STACK_REALIGN:
-      return skip_stack_checks_for_function (data, check, component_name);
-
-    case TEST_PIC:
-    case TEST_PIE:
-      return skip_pic_checks_for_function (data, check, component_name);
-
-    case TEST_FORTIFY:
-      return skip_fortify_checks_for_function (data, check, component_name);
-
-    default:
-      return false;
-    }
 }
 
 static bool
@@ -2757,16 +2801,12 @@ build_note_checker (annocheck_data *     data,
 	{
 	case -1:
 	default:
-	  if (! skip_test_for_current_func (data, TEST_PIC))
-	    {
-	      maybe (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "unexpected value");
-	      einfo (VERBOSE2, "debug: PIC note value: %x", value);
-	    }
+	  maybe (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "unexpected value");
+	  einfo (VERBOSE2, "debug: PIC note value: %x", value);
 	  break;
 
 	case 0:
-	  if (! skip_test_for_current_func (data, TEST_PIC))
-	    fail (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "-fpic/-fpie not enabled");
+	  fail (data, TEST_PIC, SOURCE_ANNOBIN_NOTES, "-fpic/-fpie not enabled");
 	  break;
 
 	case 1:
@@ -2797,22 +2837,19 @@ build_note_checker (annocheck_data *     data,
 	{
 	case -1:
 	default:
-	  if (! skip_test_for_current_func (data, TEST_STACK_PROT))
-	    maybe (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	  maybe (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "unexpected note value");
 	  break;
 
 	case 0: /* NONE */
 	  /* See BZ 1923439: Parts of glibc are deliberately compiled without stack protection,
 	     because they execute before the framework is established.  This is currently handled
 	     by tests in skip_check ().  */
-	  if (! skip_test_for_current_func (data, TEST_STACK_PROT))
-	    fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "stack protection deliberately disabled");
+	  fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "stack protection deliberately disabled");
 	  break;
 
 	case 1: /* BASIC (funcs using alloca or with local buffers > 8 bytes) */
 	case 4: /* EXPLICIT */
-	  if (! skip_test_for_current_func (data, TEST_STACK_PROT))
-	    fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "only some functions protected");
+	  fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "only some functions protected");
 	  break;
 
 	case 2: /* ALL */
@@ -2948,11 +2985,8 @@ build_note_checker (annocheck_data *     data,
 	    {
 	    case -1:
 	    default:
-	      if (! skip_test_for_current_func (data, TEST_FORTIFY))
-		{
-		  maybe (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "unexpected note value");
-		  einfo (VERBOSE2, "debug: fortify note value: %x", value);
-		}
+	      maybe (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: fortify note value: %x", value);
 	      break;
 
 	    case 0xfe:
@@ -2986,7 +3020,7 @@ build_note_checker (annocheck_data *     data,
 		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "LTO compilation discards preprocessor options");
 	      else if (is_special_glibc_binary (data->full_filename))
 		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "glibc binaries are built without fortification");
-	      else if (! skip_test_for_current_func (data, TEST_FORTIFY))
+	      else
 		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-D_FORTIFY_SOURCE=2 was not present on the command line");
 	      break;
 
@@ -2994,7 +3028,7 @@ build_note_checker (annocheck_data *     data,
 	    case 1:
 	      if (is_special_glibc_binary (data->full_filename))
 		skip (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "glibc binaries are built without fortification");		
-	      else if (! skip_test_for_current_func (data, TEST_FORTIFY))
+	      else
 		fail (data, TEST_FORTIFY, SOURCE_ANNOBIN_NOTES, "-O level is too low");
 	      break;
 
@@ -3135,11 +3169,12 @@ build_note_checker (annocheck_data *     data,
 	  if (skip_test (TEST_INSTRUMENTATION))
 	    break;
 
-	  if (! per_file.warned_about_instrumentation)
+	  if (! per_file.warned_about_instrumentation
+	      && ! skip_test_for_current_func (data, TEST_INSTRUMENTATION))
 	    {
 	      einfo (INFO, "%s: WARN: %sInstrumentation enabled - this is probably a mistake for production binaries",
-		     get_filename (data),
-		     get_formatted_component_name ("(%s): "));
+		       get_filename (data),
+		       get_formatted_component_name ("(%s): "));
 
 	      per_file.warned_about_instrumentation = true;
 
@@ -3195,16 +3230,13 @@ build_note_checker (annocheck_data *     data,
 	  switch (value)
 	    {
 	    case 0:
-	      if (! skip_test_for_current_func (data, TEST_STACK_CLASH))
-		{
-		  /* Sadly there was an annobin/gcc sync issue with the 20211019 gcc, which lead to
-		     corrupt data being recorded by the annobin plugin.  */
-		  if (per_file.annobin_gcc_date == per_file.gcc_date
-		      && per_file.gcc_date == 20211019)
-		    skip (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "bad data recorded by annobin plugin");
-		  else
-		    fail (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "-fstack-clash-protection not enabled");
-		}
+	      /* Sadly there was an annobin/gcc sync issue with the 20211019 gcc, which lead to
+		 corrupt data being recorded by the annobin plugin.  */
+	      if (per_file.annobin_gcc_date == per_file.gcc_date
+		  && per_file.gcc_date == 20211019)
+		skip (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "bad data recorded by annobin plugin");
+	      else
+		fail (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "-fstack-clash-protection not enabled");
 	      break;
 
 	    case 1:
@@ -3212,11 +3244,8 @@ build_note_checker (annocheck_data *     data,
 	      break;
 
 	    default:
-	      if (! skip_test_for_current_func (data, TEST_STACK_CLASH))
-		{
-		  maybe (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "unexpected note value");
-		  einfo (VERBOSE2, "debug: stack clash note vbalue: %x", value);
-		}
+	      maybe (data, TEST_STACK_CLASH, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: stack clash note vbalue: %x", value);
 	      break;
 	    }
 	}
@@ -3231,16 +3260,12 @@ build_note_checker (annocheck_data *     data,
 	  switch (value)
 	    {
 	    default:
-	      if (! skip_test_for_current_func (data, TEST_STACK_REALIGN))
-		{
-		  maybe (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "unexpected note value");
-		  einfo (VERBOSE2, "debug: stack realign note vbalue: %x", value);
-		}
+	      maybe (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "unexpected note value");
+	      einfo (VERBOSE2, "debug: stack realign note vbalue: %x", value);
 	      break;
 
 	    case 0:
-	      if (! skip_test_for_current_func (data, TEST_STACK_REALIGN))
-		fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-mstackrealign not enabled");
+	      fail (data, TEST_STACK_REALIGN, SOURCE_ANNOBIN_NOTES, "-mstackrealign not enabled");
 	      break;
 
 	    case 1:
@@ -3264,8 +3289,7 @@ build_note_checker (annocheck_data *     data,
 	    ;
 	  else if (value < 1)
 	    {
-	      if (! skip_test_for_current_func (data, TEST_STACK_PROT))
-		fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "insufficient Stack Safe sanitization");
+	      fail (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, "insufficient Stack Safe sanitization");
 	    }
 	  else
 	    pass (data, TEST_STACK_PROT, SOURCE_ANNOBIN_NOTES, NULL);
@@ -3867,30 +3891,41 @@ check_code_section (annocheck_data *     data,
   if (per_file.current_tool == TOOL_GO && streq (sec->secname, ".rodata"))
     {
       /* Look for a GO compiler build version.  See check_note_section()
-	 for why we cannot use the .note.go.buildid section.  */
-      const char * go_version = memmem (sec->data->d_buf, sec->data->d_size, "go1.", 4);
+	 for why we cannot use the .note.go.buildid section.
+	 Look for a string in the format: "go<N>.<V>.<R>"
+
+	 BZ: 2094420: With the 1.18 release of GO it appears that the
+	 <R> field has been dropped from this string, so also support
+	 "go<N>.<V>".
+
+	 FIXME: For now we expect the <N> field to be 1.  This helps
+	 to make the scan a little bit faster. */
+      static const char * go_lead_in = "go1.";
+      const char * go_version = memmem (sec->data->d_buf, sec->data->d_size, go_lead_in, strlen (go_lead_in));
 
       if (go_version != NULL)
 	{
-	  uint version, revision;
+	  uint version = -1, revision = -1;
 
-	  go_version += 4;
+	  go_version += strlen (go_lead_in);
 
-	  if (sscanf (go_version, "%u.%u", & version, & revision) == 2)
+	  if (sscanf (go_version, "%u.%u", & version, & revision) > 0
+	      && version != -1)
 	    {
 	      add_producer (data, TOOL_GO, version, SOURCE_RODATA_SECTION, false);
 
 	      /* Paranoia - check to see if there is a second, similar string.  */
 	      go_version = memmem (go_version, sec->data->d_size - (go_version - (const char *) sec->data->d_buf),
-				   "go1.", 4);
-	      uint other_version;
+				   go_lead_in, strlen (go_lead_in));
+	      uint other_version = -1;
 	      if (go_version != NULL
-		  && sscanf (go_version, "%u.%u", & other_version, & revision) == 2
+		  && sscanf (go_version, "%u.%u", & other_version, & revision) > 0
+		  && other_version != -1
 		  && other_version != version)
 		maybe (data, TEST_GO_REVISION, SOURCE_RODATA_SECTION, "multiple, different GO version strings found");
 	    }
 	  else
-	    einfo (VERBOSE2, ".go1 string found in .rodata, but could not parse version info");
+	    einfo (VERBOSE2, "%s string found in .rodata, but could not parse version info", go_lead_in);
 	}
       return true;
     }
@@ -5503,13 +5538,17 @@ usage (void)
   for (i = 0; i < TEST_MAX; i++)
     einfo (INFO, "    --skip-%-19sDisables: %s", tests[i].name, tests[i].description);
 
-  einfo (INFO, "    --skip-%-19sDisables all tests", "all");
+  einfo (INFO, "    --skip-all                Disables all tests");
+  einfo (INFO, "    --skip-<test>=<funcname>  Skips FAIL/WARN results for <test> for component <funcname>");
+  einfo (INFO, "                              Can be specified multiple times");
+  
   einfo (INFO, "  To enable a disabled test use:");
   einfo (INFO, "    --test-<name>             Enables the named test");
 
   einfo (INFO, "  The unicode test by default only checks for suspicious multibyte characters");
-  einfo (INFO, "  but this can be extended to trigger for any multibyte character with:");
+  einfo (INFO, "  But this can be extended to trigger for any multibyte character with:");
   einfo (INFO, "    --test-unicode-all        Fail if any multibyte character is detected");
+  einfo (INFO, "  The default behaviour can be restored with:\n");
   einfo (INFO, "    --test-unicode-suspicious Fail if a suspicious multibyte character is detected");
 
   einfo (INFO, "  Some tests report potential future problems that are not enforced at the moment");
@@ -5545,9 +5584,9 @@ usage (void)
   einfo (INFO, "    --enable-color            Enables colored messages");
 
   einfo (INFO, "  Annobin's online documentation includes an extended description of the tests");
-  einfo (INFO, "  run here.  By default when a FAIL or MAYB result is displayed a URL to the");
-  einfo (INFO, "  relevant online description is also included (unless fixed-format mode is enabled)");
-  einfo (INFO, "  This behaiour can be disabled by:");
+  einfo (INFO, "  When a FAIL or MAYB result is displayed a URL to online description is also provided");
+  einfo (INFO, "  (In fixed-format mode this does not happen)");
+  einfo (INFO, "  This feature can be disabled by:");
   einfo (INFO, "    --no-urls                 Do not include URLs in error messages");
   einfo (INFO, "  And re-enabled with:");
   einfo (INFO, "    --provide-urls            Include URLs in error messages");
@@ -5563,6 +5602,8 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 
   if (startswith (arg, "skip-"))
     {
+      const char * funcname;
+
       arg += strlen ("skip-");
 
       int i;
@@ -5580,12 +5621,34 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 	  return true;
 	}
 
-      for (i = 0; i < TEST_MAX; i++)
+      if ((funcname = strchr (arg, '=')) != NULL)
 	{
-	  if (streq (arg, tests[i].name))
+	  ++ funcname;
+	  if (* funcname == 0)
 	    {
-	      tests[i].enabled = false;
-	      return true;
+	      einfo (ERROR, "function name missing from %s", arg);
+	      return false;
+	    }
+	  
+	  for (i = 0; i < TEST_MAX; i++)
+	    {
+	      if (strncmp (arg, tests[i].name, (funcname - arg) - 1) == 0)
+		{
+		  add_skip_for_func (i, funcname);
+		  tests[i].enabled = true;
+		  return true;
+		}
+	    }
+	}
+      else
+	{
+	  for (i = 0; i < TEST_MAX; i++)
+	    {
+	      if (streq (arg, tests[i].name))
+		{
+		  tests[i].enabled = false;
+		  return true;
+		}
 	    }
 	}
 
