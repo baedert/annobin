@@ -1888,8 +1888,8 @@ annobin_emit_start_sym_and_version_note (const char * suffix,
     default:
     case none:
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME, 
-					      ", \"\", "
-					      annnobin_section_type,
+					      ", \"\", ",
+					      annobin_section_type,
 					      NULL);
       break;
     case group:
@@ -1946,7 +1946,7 @@ emit_global_notes (const char * suffix)
       info.note_section_declaration = concat (GNU_BUILD_ATTRS_SECTION_NAME,
 					      * suffix ? suffix : "",
 					      ", \"G\", ",
-					      annobin_section_name, ", ",
+					      annobin_section_type, ", ",
 					      info.group_name,
 					      NULL);
       break;
@@ -1955,7 +1955,7 @@ emit_global_notes (const char * suffix)
 					      LINK_ORDER_EXTENSION,
 					      * suffix ? suffix : "",
 					      ", \"o\", ",
-					      annobin_section_name, ", ",
+					      annobin_section_type, ", ",
 					      CODE_SECTION,	
 					      suffix,
 					      NULL);
