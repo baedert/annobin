@@ -117,6 +117,15 @@ pop_component (void)
     einfo (WARN, "Empty component name stack");
 }
 
+#ifndef LIBANNOCHECK
+static void
+fatal (const char * message)
+{
+  fprintf (stderr, "Internal Error: %s\n", message);
+  exit (EXIT_FAILURE);
+}
+#endif
+
 /* -------------------------------------------------------------------- */
 /* Print a message on stdout or stderr.  Returns FALSE (for error
    messages) so that it can be used as a terminator in boolean functions.  */
@@ -163,8 +172,7 @@ einfo (einfo_type type, const char * format, ...)
       res  = true;
       break;
     default:
-      fprintf (stderr, "ICE: Unknown einfo type %x\n", type);
-      exit (-1);
+      fatal ("Unknown einfo type");
     }
 
   if (verbosity == -1UL
@@ -182,10 +190,7 @@ einfo (einfo_type type, const char * format, ...)
   char          c;
   size_t        len = strlen (format);
   if (len < 1)
-    {
-      fprintf (stderr, "ICE: einfo called without a valid format string\n");
-      exit (-1);
-    }
+    fatal ("einfo called without a valid format string");
   c = format[len - 1];
   if (c == '\n' || c == ' ')
     do_newline = "";
@@ -374,7 +379,7 @@ run_checkers (const char * filename, int fd, Elf * elf)
 
 		  if (sec.data != NULL)
 		    {
-		      einfo (VERBOSE2, "is interested in section %s", sec.secname);
+		      einfo (VERBOSE2, "is interested in section %s:%s", filename, sec.secname);
 
 		      assert (tool->check_sec != NULL);
 		      ret &= tool->check_sec (& data, & sec);
@@ -531,6 +536,7 @@ extract_rpm_file (const char * filename)
 static bool
 follow_debuglink (annocheck_data * data)
 {
+  char *  build_id_name = NULL;
   char *  canon_dir = NULL;
   char *  debugfile = NULL;
   int     fd;
@@ -575,7 +581,6 @@ follow_debuglink (annocheck_data * data)
       unsigned char *  d = (unsigned char *) build_id_ptr;
       ssize_t          len = build_id_len;
       char             build_id_dir[3];
-      char *           build_id_name;
       char *           n;
 
       einfo (VERBOSE2, "%s: Testing possibilities based upon the build-id", data->filename);
@@ -630,6 +635,8 @@ follow_debuglink (annocheck_data * data)
       TRY_DEBUG ("%s/%s/%s.debug", leadin, build_id_dir, build_id_name);
 
       free (debugfile);
+      free (build_id_name);
+      build_id_name = NULL;
       einfo (VERBOSE2, "%s: Could not find separate debuginfo file based on build-id", data->filename);
     }
 
@@ -782,7 +789,8 @@ follow_debuglink (annocheck_data * data)
 
   /* Failed to find the file.  */
   einfo (VERBOSE2, "%s: warn: Could not find separate debug file: %s", data->filename, link);
-  
+
+  free (build_id_name);
   free (canon_dir);
   free (debugfile);
   return false;
@@ -790,6 +798,7 @@ follow_debuglink (annocheck_data * data)
  found:
   /* FIXME: We should verify the CRC value.  */
 
+  free (build_id_name);
   free (canon_dir);
 
   /* Now open the file...  */
@@ -1444,6 +1453,7 @@ process_file (const char * filename)
 #endif
   struct stat  statbuf;
   int          res;
+  int          fd;
 
   /* Fast track ignoring of debuginfo files.
      FIXME: Maybe add other file extensions ?
@@ -1451,29 +1461,50 @@ process_file (const char * filename)
   if (ignore_unknown != do_not_ignore && ends_with (filename, ".debug", 6))
     return true;
 
-  res = lstat (filename, & statbuf);
+  /* In order to avoid potential race conditions we open the file first
+     and then run fstat() on it.  */
+  if (ignore_links != do_not_ignore)
+    fd = open (filename, O_RDONLY | O_NOFOLLOW);
+  else
+    fd = open (filename, O_RDONLY);
 
-  if (res == 0 && S_ISLNK (statbuf.st_mode))
+  if (fd == -1)
     {
-      switch (ignore_links)
+      int saved_errno = errno;
+
+      close (fd);
+      errno = saved_errno;
+
+      if (errno == ELOOP)
 	{
-	case ignore_not_set:
-	  if (progname != NULL)
-	    return einfo (WARN, "'%s' is a symbolic link.  Run %s with -f to follow or -I to ignore", filename, progname);
-	  return einfo (WARN, "'%s' is a symbolic link", filename);
+	  switch (ignore_links)
+	    {
+	    case ignore_not_set:
+	      if (progname != NULL)
+		return einfo (WARN, "'%s' is a symbolic link.  Run %s with -f to follow or -I to ignore", filename, progname);
+	      return einfo (WARN, "'%s' is a symbolic link", filename);
 
-	case do_ignore:
-	  return true;
+	    case do_ignore:
+	      return true;
 
-	case do_not_ignore:
-	  /* Default behaviour is to follow the link.  */
-	  res = stat (filename, & statbuf);
-	  break;
+	    case do_not_ignore:
+	      return einfo (SYS_WARN, "'%s' is a broken symbolic link", filename);
+	    }
 	}
+
+      /* Do not complain about access permissions unless expressly asked to report unknown files.  */
+      if (ignore_unknown != do_not_ignore && errno == EACCES)
+	return false;
+
+      return einfo (SYS_WARN, "Could not open %s", filename);
     }
-  
+     
+  res = fstat (fd, & statbuf);
+
   if (res < 0)
     {
+      close (fd);
+
       if (errno == ENOENT)
 	{
 	  if (lstat (filename, & statbuf) == 0
@@ -1488,7 +1519,7 @@ process_file (const char * filename)
 
   if (S_ISDIR (statbuf.st_mode))
     {
-      DIR * dir = opendir (filename);
+      DIR * dir = fdopendir (fd);
 
       if (dir == NULL)
 	return einfo (SYS_WARN, "unable to read directory: %s", filename);
@@ -1507,12 +1538,14 @@ process_file (const char * filename)
 	  free ((char *) file);
 	}
 
-      closedir (dir);
+      closedir (dir);  // This closes fd as well.
       return result;
     }
 
   if (! S_ISREG (statbuf.st_mode))
     {
+      close (fd);
+
       if (ignore_unknown == do_ignore)
 	return true;
 
@@ -1520,7 +1553,11 @@ process_file (const char * filename)
     }
 
   if (statbuf.st_size < 0)
-    return einfo (WARN, "'%s' has negative size, probably it is too large", filename);
+    {
+      close (fd);
+
+      return einfo (WARN, "'%s' has negative size, probably it is too large", filename);
+    }
 
 #ifndef LIBANNOCHECK
   /* If the file is an RPM hand it off for separate processing.  */
@@ -1530,8 +1567,14 @@ process_file (const char * filename)
      so just check for a .rpm suffix first.  */
   if ((len = strlen (filename)) > 4 && streq (filename + len - 4, ".rpm"))
     return process_rpm_file (filename);
-    
+
   FD_t rpm_fd;
+  /* Note: the rpmio library does not have an equivalent to the fdopen() system
+     call.  There is a Fdopen() function, but this takes a FD_t pointer as its
+     stream argument, not an integer file descriptor.  This does mean that there
+     is a potential race condition here, since the file named by 'filename' could
+     have been changed/replaced/deleted between the call to open() above and the
+     call to Fopen() here.  */
   if ((rpm_fd = Fopen (filename, "r")) != NULL)
     {
       rpmts  ts = 0;
@@ -1543,19 +1586,13 @@ process_file (const char * filename)
 
       Fclose (rpm_fd);
       if (res)
-	return true;
+	{
+	  close (fd);
+	  return true;
+	}
+      /* If we could not process this as an RPM file, try treating it as an ELF file.  */
     }
 #endif /* not LIBANNOCHECK */
-
-  /* Otherwise open it and try to process it as an ELF file.  */
-  int fd = open (filename, O_RDONLY);
-  if (fd == -1)
-    {
-      /* DO not complain about access permissions unless expressly asked to report unknown files.  */
-      if (ignore_unknown != do_not_ignore && errno == EACCES)
-	return false;
-      return einfo (SYS_WARN, "Could not open %s", filename);
-    }
 
   Elf * elf = elf_begin (fd, ELF_C_READ, NULL);
   if (elf == NULL)
