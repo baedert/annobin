@@ -552,8 +552,8 @@ follow_debuglink (annocheck_data * data)
   data->dwarf_filename = NULL;
   
   /* First try the build-id method.  */
-  ssize_t       build_id_len;
-  const void *  build_id_ptr;
+  ssize_t       build_id_len = 0;
+  const void *  build_id_ptr = NULL;
 
   einfo (VERBOSE2, "%s: Attempting to locate separate debuginfo file", data->filename);
 
@@ -797,7 +797,6 @@ follow_debuglink (annocheck_data * data)
 
  found:
   /* FIXME: We should verify the CRC value.  */
-
   free (build_id_name);
   free (canon_dir);
 
@@ -819,6 +818,55 @@ follow_debuglink (annocheck_data * data)
     }
 
   einfo (VERBOSE2, "%s: Opened separate debug file: %s", data->filename, debugfile);
+
+  if (build_id_len > 0)
+    {
+      ssize_t       separate_build_id_len;
+      ssize_t       i;
+      const void *  separate_build_id;
+      bool          ok = true;
+
+      separate_build_id_len = dwelf_elf_gnu_build_id (dwarf_getelf (separate_debug_file),
+						      & separate_build_id);
+      if (separate_build_id_len == build_id_len)
+	{
+	  if (memcmp (build_id_ptr, separate_build_id, build_id_len))
+	    {
+	      einfo (VERBOSE, "%s: warn: separate debug info file '%s' has a different build-id",
+		     data->filename, debugfile);
+	      ok = false;
+	    }
+	  else
+	    einfo (VERBOSE2, "%s: build-ids match", data->filename);
+	}
+      else if (separate_build_id_len > 0)
+	{
+	  einfo (VERBOSE, "%s: warn: separate debug info file '%s' has a different length build-id",
+		 data->filename, debugfile);
+	  ok = false;
+	}
+      else
+	einfo (VERBOSE2, "%s: could not check build-ids as separate debug info file does not contain one",
+	       data->filename);
+
+      if (BE_VERY_VERBOSE)
+	{
+	  einfo (PARTIAL, "debug:  main build id: "); 
+	  for (i = 0; i < build_id_len; i++)
+	    einfo (PARTIAL, "%02x ", ((unsigned char *) build_id_ptr)[i]);
+	  einfo (PARTIAL, "\ndebug: other build id: ");
+	  for (i = 0; i < separate_build_id_len; i++)
+	    einfo (PARTIAL, "%02x ", ((unsigned char *) separate_build_id)[i]);
+	  einfo (PARTIAL, "\n");
+	}
+
+      if (! ok)
+	{
+	  free (debugfile);
+	  return false;
+	}
+    }
+  
   data->dwarf_fd = fd;
   data->dwarf_filename = debugfile;
   data->dwarf_searched = false;

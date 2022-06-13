@@ -70,7 +70,7 @@ $GCC -nostartfiles -e 0 hello.o hello2.o gap2.o hello3.o -o assembler-gap-test2.
      -Wl,--defsym,extern_func3=0 \
      -Wl,-z,now -pie -Wl,-Map,assembler-gap-test2.map
 
-$ANNOCHECK -v assembler-gap-test2.exe --skip-all --test-notes > assembler-gap-test2.out
+$ANNOCHECK -v assembler-gap-test2.exe --skip-all --test-notes --test-gaps > assembler-gap-test2.out
 
 # FAIL if a gap is NOT reported
 grep --silent -e "no gaps found" -e "Not checking for gaps" assembler-gap-test2.out
