@@ -943,6 +943,7 @@ produced by annocheck when the test goes wrong.
 * Test dynamic tags::             The dynamic-tags test
 * Test entry::                    The entry test
 * Test fortify::                  The fortify test
+* Test gaps::                     The gaps test
 * Test glibcxx assertions::       The glibcxx-assertions test
 * Test gnu relro::                The gnu relro test
 * Test gnu stack::                The gnu-stack test
@@ -1297,6 +1298,27 @@ If necessary the test can be disabled via the @option{--skip-fortify}
 option and re-enabled via the @option{--test-fortify} option.
 
 @c -----------------------------------------------------------------
+@node Test gaps
+@subsection The gaps test
+
+@smallexample
+  Problem:  Without complete coverage of the compiled code, other tests can miss problems
+  Fix By:   Compile with -fplugin=annobin
+  Waive If: Not compiling C or C++ code
+
+  Example:  FAIL: gaps were detected in the annobin coverage
+@end smallexample
+
+This test checks to make sure that there are no gaps in the annobin
+data for the binary being checked.  If gaps are present then this
+means that some parts of the program might have problems which cannot
+be detected by annocheck.
+
+If necessary the test can be disabled via the
+@option{--skip-gaps} option and re-enabled via the
+@option{--test-gaps} option.
+
+@c -----------------------------------------------------------------
 @node Test glibcxx assertions
 @subsection The glibcxx-assertions test
 
@@ -1595,8 +1617,8 @@ Annobin notes can be generated for assembler sources by using the
 @option{-Wa,--generate-missing-build-notes=yes} option.
 
 If necessary the test can be disabled via the @option{--skip-notes}
-and @option{--ignore-gaps} options and re-enabled via the
-@option{--test-notes} and @option{--report-gaps} options.
+and @option{--skip-gaps} options and re-enabled via the
+@option{--test-notes} and @option{--test-gaps} options.
 
 @c -----------------------------------------------------------------
 @node Test only go

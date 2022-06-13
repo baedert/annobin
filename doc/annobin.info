@@ -837,6 +837,7 @@ by annocheck when the test goes wrong.
 * Test dynamic tags::             The dynamic-tags test
 * Test entry::                    The entry test
 * Test fortify::                  The fortify test
+* Test gaps::                     The gaps test
 * Test glibcxx assertions::       The glibcxx-assertions test
 * Test gnu relro::                The gnu relro test
 * Test gnu stack::                The gnu-stack test
@@ -1148,7 +1149,7 @@ details on CET).
 and re-enabled via the '--test-entry' option.
 
 
-File: annobin.info,  Node: Test fortify,  Next: Test glibcxx assertions,  Prev: Test entry,  Up: Hardened
+File: annobin.info,  Node: Test fortify,  Next: Test gaps,  Prev: Test entry,  Up: Hardened
 
 4.2.7 The fortify test
 ----------------------
@@ -1182,9 +1183,29 @@ option is used.
 and re-enabled via the '--test-fortify' option.
 
 
-File: annobin.info,  Node: Test glibcxx assertions,  Next: Test gnu relro,  Prev: Test fortify,  Up: Hardened
+File: annobin.info,  Node: Test gaps,  Next: Test glibcxx assertions,  Prev: Test fortify,  Up: Hardened
 
-4.2.8 The glibcxx-assertions test
+4.2.8 The gaps test
+-------------------
+
+       Problem:  Without complete coverage of the compiled code, other tests can miss problems
+       Fix By:   Compile with -fplugin=annobin
+       Waive If: Not compiling C or C++ code
+
+       Example:  FAIL: gaps were detected in the annobin coverage
+
+   This test checks to make sure that there are no gaps in the annobin
+data for the binary being checked.  If gaps are present then this means
+that some parts of the program might have problems which cannot be
+detected by annocheck.
+
+   If necessary the test can be disabled via the '--skip-gaps' option
+and re-enabled via the '--test-gaps' option.
+
+
+File: annobin.info,  Node: Test glibcxx assertions,  Next: Test gnu relro,  Prev: Test gaps,  Up: Hardened
+
+4.2.9 The glibcxx-assertions test
 ---------------------------------
 
        Problem:  Compiled C++ code might contain bugs that could have been detected and fixed
@@ -1209,8 +1230,8 @@ features.  For more information see:
 
 File: annobin.info,  Node: Test gnu relro,  Next: Test gnu stack,  Prev: Test glibcxx assertions,  Up: Hardened
 
-4.2.9 The gnu-relro test
-------------------------
+4.2.10 The gnu-relro test
+-------------------------
 
        Problem:  An attacker could alter how an applications interacts with shared libraries
        Fix By:   Link with -Wl,-z,relro,-z,now
@@ -1246,7 +1267,7 @@ option and re-enabled via the '--test-gnu-relro' option.
 
 File: annobin.info,  Node: Test gnu stack,  Next: Test go revision,  Prev: Test gnu relro,  Up: Hardened
 
-4.2.10 The gnu-stack test
+4.2.11 The gnu-stack test
 -------------------------
 
        Problem:  An attacker could place code on the stack and then run it
@@ -1292,7 +1313,7 @@ option and re-enabled via the '--test-gnu-stack' option.
 
 File: annobin.info,  Node: Test go revision,  Next: Test instrumentation,  Prev: Test gnu stack,  Up: Hardened
 
-4.2.11 The go-revision test
+4.2.12 The go-revision test
 ---------------------------
 
        Problem:  Using old versions of the GO compiler looses out on security enhacements
@@ -1316,7 +1337,7 @@ option and re-enabled via the '--test-go-revision' option.
 
 File: annobin.info,  Node: Test instrumentation,  Next: Test lto,  Prev: Test go revision,  Up: Hardened
 
-4.2.12 The instrumentation test
+4.2.13 The instrumentation test
 -------------------------------
 
        Problem:  Instrumented binaries are bigger and slower than regular binaries
@@ -1337,7 +1358,7 @@ options have been used when the binary built.  These options are:
 
 File: annobin.info,  Node: Test lto,  Next: Test not branch protection,  Prev: Test instrumentation,  Up: Hardened
 
-4.2.13 The lto test
+4.2.14 The lto test
 -------------------
 
        Problem:  Mixed use of LTO and non-LTO binaries indicates a problem with the build system
@@ -1360,7 +1381,7 @@ re-enabled via the '--test-lto' option.
 
 File: annobin.info,  Node: Test not branch protection,  Next: Test not dynamic tags,  Prev: Test lto,  Up: Hardened
 
-4.2.14 The not-branch-protection test
+4.2.15 The not-branch-protection test
 -------------------------------------
 
        Problem:  Protecting AArch64 binaries needs newer versions of AArch64 cores
@@ -1395,7 +1416,7 @@ option is used and enabled if '--profile=el7', '--profile=el8' or
 
 File: annobin.info,  Node: Test not dynamic tags,  Next: Test notes,  Prev: Test not branch protection,  Up: Hardened
 
-4.2.15 The not-dynamic-tags test
+4.2.16 The not-dynamic-tags test
 --------------------------------
 
        Problem:  Protecting AArch64 binaries needs newer versions of AArch64 cores
@@ -1431,7 +1452,7 @@ option is used and enabled if '--profile=el7', '--profile=el8' or
 
 File: annobin.info,  Node: Test notes,  Next: Test only go,  Prev: Test not dynamic tags,  Up: Hardened
 
-4.2.16 The notes test
+4.2.17 The notes test
 ---------------------
 
        Problem:  Lack of annobin notes in a binary means that other tests will not work properly
@@ -1469,13 +1490,13 @@ LLVM the '-Xclang -load -Xclang annobin' option should be used instead).
 '-Wa,--generate-missing-build-notes=yes' option.
 
    If necessary the test can be disabled via the '--skip-notes' and
-'--ignore-gaps' options and re-enabled via the '--test-notes' and
-'--report-gaps' options.
+'--skip-gaps' options and re-enabled via the '--test-notes' and
+'--test-gaps' options.
 
 
 File: annobin.info,  Node: Test only go,  Next: Test optimization,  Prev: Test notes,  Up: Hardened
 
-4.2.17 The only-go test
+4.2.18 The only-go test
 -----------------------
 
        Problem:  Mixing GO and C is unsafe on x86 platforms
@@ -1501,7 +1522,7 @@ and re-enabled via the '--test-only-go' option.
 
 File: annobin.info,  Node: Test optimization,  Next: Test pic,  Prev: Test only go,  Up: Hardened
 
-4.2.18 The optimization test
+4.2.19 The optimization test
 ----------------------------
 
        Problem:  Insufficient optimization prevents security features from working
@@ -1532,7 +1553,7 @@ option and re-enabled via the '--test-optimization' option.
 
 File: annobin.info,  Node: Test pic,  Next: Test pie,  Prev: Test optimization,  Up: Hardened
 
-4.2.19 The pic test
+4.2.20 The pic test
 -------------------
 
        Problem:  Static binaries are more vulnerable to attacks
@@ -1567,7 +1588,7 @@ re-enabled via the '--test-pic' option.
 
 File: annobin.info,  Node: Test pie,  Next: Test production,  Prev: Test pic,  Up: Hardened
 
-4.2.20 The pie test
+4.2.21 The pie test
 -------------------
 
        Problem:  Static binaries are more vulnerable to attacks
@@ -1599,7 +1620,7 @@ re-enabled via the '--test-pie' option.
 
 File: annobin.info,  Node: Test production,  Next: Test property note,  Prev: Test pie,  Up: Hardened
 
-4.2.21 The production test
+4.2.22 The production test
 --------------------------
 
        Problem:  Shipping code generated by an experimental compiler is bad
@@ -1619,7 +1640,7 @@ option and re-enabled via the '--test-production' option.
 
 File: annobin.info,  Node: Test property note,  Next: Test run path,  Prev: Test production,  Up: Hardened
 
-4.2.22 The property-note test
+4.2.23 The property-note test
 -----------------------------
 
        Problem:  Badly formed or missing GNU property notes can compromise an application at runtime
@@ -1659,7 +1680,7 @@ option and re-enabled via the '--test-property-note' option.
 
 File: annobin.info,  Node: Test run path,  Next: Test rwx seg,  Prev: Test property note,  Up: Hardened
 
-4.2.23 The run-path test
+4.2.24 The run-path test
 ------------------------
 
        Problem:  An attacker could cause an application to use a corrupted shared library
@@ -1699,7 +1720,7 @@ option and re-enabled via the '--test-run-path' option.
 
 File: annobin.info,  Node: Test rwx seg,  Next: Test short enums,  Prev: Test run path,  Up: Hardened
 
-4.2.24 The rwx-seg test
+4.2.25 The rwx-seg test
 -----------------------
 
        Problem:  An attacker could add their own code to an executable
@@ -1731,7 +1752,7 @@ and re-enabled via the '--test-rwx-seg' option.
 
 File: annobin.info,  Node: Test short enums,  Next: Test stack clash,  Prev: Test rwx seg,  Up: Hardened
 
-4.2.25 The short-enums test
+4.2.26 The short-enums test
 ---------------------------
 
        Problem:  Compiler options can change the size of enums
@@ -1756,7 +1777,7 @@ option and re-enabled via the '--test-short-enums' option.
 
 File: annobin.info,  Node: Test stack clash,  Next: Test stack prot,  Prev: Test short enums,  Up: Hardened
 
-4.2.26 The stack-clash test
+4.2.27 The stack-clash test
 ---------------------------
 
        Problem:  Attackers exploiting stack overrun bugs can gain control of an application
@@ -1792,7 +1813,7 @@ option and re-enabled via the '--test-stack-clash' option.
 
 File: annobin.info,  Node: Test stack prot,  Next: Test stack realign,  Prev: Test stack clash,  Up: Hardened
 
-4.2.27 The stack-prot test
+4.2.28 The stack-prot test
 --------------------------
 
        Problem:  Attackers exploiting stack overrun bugs can gain control of an application
@@ -1821,7 +1842,7 @@ option and re-enabled via the '--test-stack-prot' option.
 
 File: annobin.info,  Node: Test stack realign,  Next: Test textrel,  Prev: Test stack prot,  Up: Hardened
 
-4.2.28 The stack-realign test
+4.2.29 The stack-realign test
 -----------------------------
 
        Problem:  Legacy x86 code is incompatible with SSE instructions
@@ -1849,7 +1870,7 @@ option and re-enabled via the '--test-stack-realign' option.
 
 File: annobin.info,  Node: Test textrel,  Next: Test threads,  Prev: Test stack realign,  Up: Hardened
 
-4.2.29 The textrel test
+4.2.30 The textrel test
 -----------------------
 
        Problem:  An attacker could change the code in an executable
@@ -1878,7 +1899,7 @@ and re-enabled via the '--test-textrel' option.
 
 File: annobin.info,  Node: Test threads,  Next: Test unicode,  Prev: Test textrel,  Up: Hardened
 
-4.2.30 The threads test
+4.2.31 The threads test
 -----------------------
 
        Problem:  Programs that do not support exceptions are more vulnerable to attacks
@@ -1899,7 +1920,7 @@ and re-enabled via the '--test-threads' option.
 
 File: annobin.info,  Node: Test unicode,  Next: Test warnings,  Prev: Test threads,  Up: Hardened
 
-4.2.31 The unicode test
+4.2.32 The unicode test
 -----------------------
 
        Problem:  Symbols containing certain unicode characters can conceal their real name
@@ -1938,7 +1959,7 @@ and re-enabled via the '--test-unicode' option.
 
 File: annobin.info,  Node: Test warnings,  Next: Test writable got,  Prev: Test unicode,  Up: Hardened
 
-4.2.32 The warnings test
+4.2.33 The warnings test
 ------------------------
 
        Problem:  Compiling without warnings enabled can result in poor code
@@ -1958,7 +1979,7 @@ option and re-enabled via the '--test-warnings' option.
 
 File: annobin.info,  Node: Test writable got,  Next: Hardened Command Line Options,  Prev: Test warnings,  Up: Hardened
 
-4.2.33 The writable-got test
+4.2.34 The writable-got test
 ----------------------------
 
        Problem:  An attacker could intercept and redirect shared library function calls
@@ -1987,7 +2008,7 @@ option and re-enabled via the '--test-writable-got' option.
 
 File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardened Results,  Prev: Test writable got,  Up: Hardened
 
-4.2.34 Command line options specific to the hardened tool
+4.2.35 Command line options specific to the hardened tool
 ---------------------------------------------------------
 
 '--skip-TEST[=FUNCNAME]'
@@ -2139,7 +2160,7 @@ File: annobin.info,  Node: Hardened Command Line Options,  Next: Waiving Hardene
 
 File: annobin.info,  Node: Waiving Hardened Results,  Prev: Hardened Command Line Options,  Up: Hardened
 
-4.2.35 How to waive the results of the hardening tests
+4.2.36 How to waive the results of the hardening tests
 ------------------------------------------------------
 
 [This section is Red Hat specific.]
@@ -3560,64 +3581,65 @@ Node: The INSTRUMENT Encoding20942
 Node: Annocheck22316
 Node: Built By26807
 Node: Hardened28310
-Node: Test bind now32156
-Node: Test branch protection33796
-Node: Test cf protection36050
-Node: Test dynamic segment40159
-Node: Test dynamic tags41290
-Node: Test entry43639
-Node: Test fortify44534
-Node: Test glibcxx assertions46047
-Node: Test gnu relro47085
-Node: Test gnu stack48819
-Node: Test go revision51216
-Node: Test instrumentation52264
-Node: Test lto53095
-Node: Test not branch protection54001
-Node: Test not dynamic tags55583
-Node: Test notes57271
-Node: Test only go59554
-Node: Test optimization60705
-Node: Test pic62080
-Node: Test pie63625
-Node: Test production64913
-Node: Test property note65726
-Node: Test run path68203
-Node: Test rwx seg70424
-Node: Test short enums71833
-Node: Test stack clash72850
-Node: Test stack prot74311
-Node: Test stack realign75643
-Node: Test textrel76913
-Node: Test threads78170
-Node: Test unicode78985
-Node: Test warnings80476
-Node: Test writable got81311
-Node: Hardened Command Line Options82597
-Node: Waiving Hardened Results88411
-Node: Notes90357
-Node: Size90993
-Node: Timing93362
-Node: Libannocheck94001
-Node: libannocheck_init95940
-Node: libannocheck_finish96862
-Node: libannocheck_get_version97410
-Node: libannocheck_get_error_message97819
-Node: libannocheck_get_known_tests98459
-Node: libannocheck_enable_all_tests99625
-Node: libannocheck_disable_all_tests100104
-Node: libannocheck_enable_test100660
-Node: libannocheck_disable_test101328
-Node: libannocheck_enable_profile101997
-Node: libannocheck_get_known_profiles102519
-Node: libannocheck_run_tests103222
-Node: Configure Options104067
-Node: Legacy Scripts106409
-Node: Who Built Me107184
-Node: ABI Checking109944
-Node: Hardening Checks112060
-Node: Checking Archives116146
-Node: GNU FDL118567
+Node: Test bind now32204
+Node: Test branch protection33844
+Node: Test cf protection36098
+Node: Test dynamic segment40207
+Node: Test dynamic tags41338
+Node: Test entry43687
+Node: Test fortify44582
+Node: Test gaps46081
+Node: Test glibcxx assertions46835
+Node: Test gnu relro47870
+Node: Test gnu stack49606
+Node: Test go revision52003
+Node: Test instrumentation53051
+Node: Test lto53882
+Node: Test not branch protection54788
+Node: Test not dynamic tags56370
+Node: Test notes58058
+Node: Test only go60337
+Node: Test optimization61488
+Node: Test pic62863
+Node: Test pie64408
+Node: Test production65696
+Node: Test property note66509
+Node: Test run path68986
+Node: Test rwx seg71207
+Node: Test short enums72616
+Node: Test stack clash73633
+Node: Test stack prot75094
+Node: Test stack realign76426
+Node: Test textrel77696
+Node: Test threads78953
+Node: Test unicode79768
+Node: Test warnings81259
+Node: Test writable got82094
+Node: Hardened Command Line Options83380
+Node: Waiving Hardened Results89194
+Node: Notes91140
+Node: Size91776
+Node: Timing94145
+Node: Libannocheck94784
+Node: libannocheck_init96723
+Node: libannocheck_finish97645
+Node: libannocheck_get_version98193
+Node: libannocheck_get_error_message98602
+Node: libannocheck_get_known_tests99242
+Node: libannocheck_enable_all_tests100408
+Node: libannocheck_disable_all_tests100887
+Node: libannocheck_enable_test101443
+Node: libannocheck_disable_test102111
+Node: libannocheck_enable_profile102780
+Node: libannocheck_get_known_profiles103302
+Node: libannocheck_run_tests104005
+Node: Configure Options104850
+Node: Legacy Scripts107192
+Node: Who Built Me107967
+Node: ABI Checking110727
+Node: Hardening Checks112843
+Node: Checking Archives116929
+Node: GNU FDL119350
 
 End Tag Table
 

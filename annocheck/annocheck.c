@@ -875,7 +875,10 @@ annocheck_walk_dwarf (annocheck_data * data, dwarf_walker func, void * ptr)
 	  data->dwarf_searched = true;
 	}
       else if (! follow_debuglink (data))
-	return einfo (VERBOSE2, "%s: Does not contain or link to any DWARF information", data->filename);
+	{
+	  einfo (VERBOSE2, "%s: Does not contain or link to any DWARF information", data->filename);
+	  return false;
+	}
     }
 
   if ((dwarf = data->dwarf) == NULL)

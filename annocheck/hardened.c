@@ -56,7 +56,6 @@ typedef struct note_range
 static bool disabled = false;
 
 /* Can be changed by command line options.  */
-static bool ignore_gaps = false;
 static bool fixed_format_messages = false;
 static bool enable_colour = true;
 
@@ -168,6 +167,7 @@ static struct per_file
   bool        has_module_license;
   bool        has_modname;
   bool        lto_used;
+  bool        has_dwarf;
 } per_file;
 
 /* Extensible array of note ranges  */
@@ -218,6 +218,7 @@ enum test_index
   TEST_NOT_DYNAMIC_TAGS,
   TEST_ENTRY,
   TEST_FORTIFY,
+  TEST_GAPS,
   TEST_GLIBCXX_ASSERTIONS,
   TEST_GNU_RELRO,
   TEST_GNU_STACK,
@@ -280,6 +281,7 @@ static test tests [TEST_MAX] =
   TEST (not-dynamic-tags,   NOT_DYNAMIC_TAGS,   "Dynamic tags for PAC & BTI *not* present (AArch64 only, RHEL-9)"),
   TEST (entry,              ENTRY,              "The first instruction is ENDBR (x86 executables only)"),
   TEST (fortify,            FORTIFY,            "Compiled with -D_FORTIFY_SOURCE=2"),
+  TEST (gaps,               GAPS,               "Complete coverage of annobin notes"),
   TEST (glibcxx-assertions, GLIBCXX_ASSERTIONS, "Compiled with -D_GLIBCXX_ASSERTIONS"),
   TEST (gnu-relro,          GNU_RELRO,          "The relocations for the GOT are not writable"),
   TEST (gnu-stack,          GNU_STACK,          "The stack is not executable"),
@@ -2005,7 +2007,7 @@ start (annocheck_data * data)
     pass (data, TEST_PIE, SOURCE_ELF_HEADER, NULL);
 
   /* Check to see which tool(s) produced this binary.  */
-  (void) annocheck_walk_dwarf (data, dwarf_attribute_checker, NULL);
+  per_file.has_dwarf = annocheck_walk_dwarf (data, dwarf_attribute_checker, NULL);
 
   return true;
 }
@@ -2372,7 +2374,7 @@ build_note_checker (annocheck_data *     data,
 	  start = end;
 	}
 
-      if (! is_object_file () && ! ignore_gaps)
+      if (! is_object_file () && tests[TEST_GAPS].enabled)
 	{
 	  /* Notes can occur in any order and may be spread across multiple note
 	     sections.  So we record the range covered here and then check for
@@ -4417,7 +4419,7 @@ ignore_gap (annocheck_data * data, note_range * gap)
   ulong     addr1_bias = 0;
 
   /* These tests should be redundant, but just in case...  */
-  if (ignore_gaps)
+  if (! tests[TEST_GAPS].enabled)
     return true;
   if (gap->start == gap->end)
     return true;
@@ -4801,7 +4803,7 @@ skip_gap_sym (annocheck_data * data, const char * sym)
 static void
 check_for_gaps (annocheck_data * data)
 {
-  assert (! ignore_gaps);
+  assert (tests[TEST_GAPS].enabled);
 
   if (next_free_range < 2)
     return;
@@ -4948,7 +4950,7 @@ check_for_gaps (annocheck_data * data)
 
   if (gap_found)
     {
-      fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "gaps were detected in the annobin coverage");
+      fail (data, TEST_GAPS, SOURCE_ANNOBIN_NOTES, "gaps were detected in the annobin coverage");
       return;
     }
 
@@ -4959,7 +4961,7 @@ check_for_gaps (annocheck_data * data)
      linker generated code, such as detecting known stub function names...  */
   if (per_file.e_machine == EM_PPC64 || per_file.e_machine == EM_S390)
     {
-      pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
+      pass (data, TEST_GAPS, SOURCE_ANNOBIN_NOTES, "no gaps found");
       return;
     }
 
@@ -5019,7 +5021,7 @@ check_for_gaps (annocheck_data * data)
 	     cf BZ 1995224.  */
 	  if (gap > 0x3c || per_file.e_machine != EM_AARCH64)
 	    {
-	      maybe (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "not all of the .text section is covered by notes");
+	      maybe (data, TEST_GAPS, SOURCE_ANNOBIN_NOTES, "not all of the .text section is covered by notes");
 	      if (sym != NULL)
 		einfo (VERBOSE, "%s: info: address range not covered: %lx..%lx (probable component: %s)",
 		       get_filename (data), per_file.text_section_range.start, per_file.text_section_range.end, sym);
@@ -5033,7 +5035,7 @@ check_for_gaps (annocheck_data * data)
 	}
     }
 
-  pass (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "no gaps found");
+  pass (data, TEST_GAPS, SOURCE_ANNOBIN_NOTES, "no gaps found");
 }
 
 static bool
@@ -5079,32 +5081,40 @@ finish (annocheck_data * data)
       annocheck_process_extra_file (& hardened_notechecker, data->dwarf_filename, get_filename (data), data->dwarf_fd);
     }
 
-  if (! per_file.build_notes_seen
-      && per_file.e_machine != EM_ARM
-      && is_C_compiler (per_file.seen_tools))
-    fail (data, TEST_NOTES, SOURCE_ANNOBIN_NOTES, "annobin notes were not found");
+  if (per_file.seen_tools == TOOL_UNKNOWN)
+    per_file.seen_tools = per_file.current_tool;
 
-  if (! ignore_gaps)
+  if (! per_file.build_notes_seen)
     {
-      if (is_object_file ())
-	einfo (VERBOSE, "%s: skip: Not checking for gaps (object file)", get_filename (data));
-      else if (! is_C_compiler (per_file.seen_tools) && ! includes_assembler (per_file.seen_tools))
-	einfo (VERBOSE, "%s: skip: Not checking for gaps (binary created by a tool without an annobin plugin)",
-	       get_filename (data));
-      else if (per_file.seen_tools & TOOL_GO)
-	einfo (VERBOSE, "%s: skip: Not checking for gaps (binary at least created by GO)",
-	       get_filename (data));
-      else if (per_file.e_machine == EM_ARM)
+      if (per_file.e_machine == EM_ARM)
 	/* The annobin plugin for gcc is not used when building ARM binaries
 	   because there is an outstanding BZ agains annobin and glibc:
 	   https://bugzilla.redhat.com/show_bug.cgi?id=1951492  */
-	einfo (VERBOSE, "%s: skip: Not checking for gaps (ARM binary)", get_filename (data));
+	skip (data, TEST_NOTES, SOURCE_FINAL_SCAN, "ARM binary");
+      else if (per_file.seen_tools & TOOL_GO)
+	skip (data, TEST_NOTES, SOURCE_FINAL_SCAN, "binary at created by GO compiler");
+      else if (! per_file.has_dwarf)
+	{
+	  /* We need the DWARF info in order to determinte the compiler type.  */
+	  maybe (data, TEST_NOTES, SOURCE_FINAL_SCAN, "no DWARF info found (could it be in a separate debuginfo file ?)");
+	  maybe (data, TEST_GAPS, SOURCE_FINAL_SCAN, "no notes found");
+	}
+      else if (! is_C_compiler (per_file.seen_tools)
+	       && ! includes_assembler (per_file.seen_tools))
+	skip (data, TEST_NOTES, SOURCE_FINAL_SCAN, "binary created by a tool without an annobin plugin");
+      else
+	{
+	  fail (data, TEST_NOTES, SOURCE_FINAL_SCAN, "annobin notes were not found");
+	  maybe (data, TEST_GAPS, SOURCE_FINAL_SCAN, "no notes found");
+	}
+    }
+  else if (tests[TEST_GAPS].enabled)
+    {
+      if (is_object_file ())
+	skip (data, TEST_GAPS, SOURCE_FINAL_SCAN, "gaps are expected in object files");
       else
 	check_for_gaps (data);
     }
-
-  if (per_file.seen_tools == TOOL_UNKNOWN)
-    per_file.seen_tools = per_file.current_tool;
 
   int i;
   for (i = 0; i < TEST_MAX; i++)
@@ -5560,8 +5570,8 @@ usage (void)
   einfo (INFO, "                              Ensure that only tests suitable for a specific OS are run");
 
   einfo (INFO, "  The tool will also report missing annobin data unless:");
-  einfo (INFO, "    --ignore-gaps             Ignore missing annobin data");
-  einfo (INFO, "    --report-gaps             Report missing annobin data (default)");
+  einfo (INFO, "    --ignore-gaps             Alias for --skip-gaps");
+  einfo (INFO, "    --report-gaps             Alias for --test-gaps (enabled by default)");
 
   einfo (INFO, "  The tool is enabled by default.  This can be changed by:");
   einfo (INFO, "    --disable-hardened        Disables the hardening checker");
@@ -5720,13 +5730,13 @@ process_arg (const char * arg, const char ** argv, const uint argc, uint * next)
 
   if (streq (arg, "ignore-gaps"))
     {
-      ignore_gaps = true;
+      tests[TEST_GAPS].enabled  = false;
       return true;
     }
 
   if (streq (arg, "report-gaps"))
     {
-      ignore_gaps = false;
+      tests[TEST_GAPS].enabled  = true;
       return true;
     }
 
