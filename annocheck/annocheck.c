@@ -1521,11 +1521,6 @@ process_file (const char * filename)
 
   if (fd == -1)
     {
-      int saved_errno = errno;
-
-      close (fd);
-      errno = saved_errno;
-
       if (errno == ELOOP)
 	{
 	  switch (ignore_links)
@@ -1606,7 +1601,6 @@ process_file (const char * filename)
   if (statbuf.st_size < 0)
     {
       close (fd);
-
       return einfo (WARN, "'%s' has negative size, probably it is too large", filename);
     }
 
@@ -1617,7 +1611,10 @@ process_file (const char * filename)
      when processing some rpms (eg: wireshark-cli-2.6.0-3.fc27.aarch64.rpm)
      so just check for a .rpm suffix first.  */
   if ((len = strlen (filename)) > 4 && streq (filename + len - 4, ".rpm"))
-    return process_rpm_file (filename);
+    {
+      close (fd);
+      return process_rpm_file (filename);
+    }
 
   FD_t rpm_fd;
   /* Note: the rpmio library does not have an equivalent to the fdopen() system
