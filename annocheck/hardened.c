@@ -5096,7 +5096,7 @@ finish (annocheck_data * data)
       else if (! per_file.has_dwarf)
 	{
 	  /* We need the DWARF info in order to determinte the compiler type.  */
-	  maybe (data, TEST_NOTES, SOURCE_FINAL_SCAN, "no DWARF info found (could it be in a separate debuginfo file ?)");
+	  maybe (data, TEST_NOTES, SOURCE_FINAL_SCAN, "not found and no DWARF info found (could they be in a separate debuginfo file ?)");
 	  maybe (data, TEST_GAPS, SOURCE_FINAL_SCAN, "no notes found");
 	}
       else if (! is_C_compiler (per_file.seen_tools)
