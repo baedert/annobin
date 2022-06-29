@@ -84,7 +84,7 @@ namespace
     const unsigned int  version = ANNOBIN_VERSION;
     char const *        fileStart = nullptr;
     char const *        fileEnd = nullptr;
-    unsigned int        optLevel;
+    unsigned int        optLevel = 0;
     bool		is_32bit = false;
 
     void

@@ -4829,7 +4829,7 @@ check_for_gaps (annocheck_data * data)
 	    /* ranges[i] overlaps current.  */
 	    current.end = ranges[i].end;
 	}
-      else if (ranges[i].start <= align (current.end, 16))
+      else if (ranges[i].start <= align (current.end, per_file.text_section_alignment))
 	{
 	  /* Append ranges[i].  */
 	  assert (ranges[i].end >= current.end);
@@ -4865,11 +4865,12 @@ check_for_gaps (annocheck_data * data)
 	  /* If the start of the range was not aligned to a function boundary
 	     then try again, this time with an aligned start symbol.
 	     FIXME: 16 is suitable for x86_64, but not necessarily other architectures.  */
-	  if (gap.start != align (gap.start, 16))
+	  if (gap.start != align (gap.start, per_file.text_section_alignment))
 	    {
 	      const char * sym2;
 
-	      sym2 = annocheck_find_symbol_for_address_range (data, NULL, align (gap.start, 16), gap.end, false);
+	      sym2 = annocheck_find_symbol_for_address_range
+		(data, NULL, align (gap.start, per_file.text_section_alignment), gap.end, false);
 	      if (sym2 != NULL
 		  && strstr (sym2, ".end") == NULL
 		  && (first_sym == NULL || strcmp (sym2, first_sym) != 0))
@@ -4885,7 +4886,7 @@ check_for_gaps (annocheck_data * data)
 
 		  if (first_sym == NULL)
 		    {
-		      gap.start = align (gap.start, 16);
+		      gap.start = align (gap.start, per_file.text_section_alignment);
 		      first_sym = strdup (sym2);
 		    }
 		}
@@ -4975,7 +4976,7 @@ check_for_gaps (annocheck_data * data)
 	    /* We have found a note range that occludes the start of the text section.
 	       Move the start up to the end of this note, aligned to 16 bytes.  */
 	    {
-	      per_file.text_section_range.start = align (ranges[i].end, 16);
+	      per_file.text_section_range.start = align (ranges[i].end, per_file.text_section_alignment);
 	      if (per_file.text_section_range.start >= per_file.text_section_range.end)
 		{
 		  per_file.text_section_range.start = per_file.text_section_range.end = 0;
@@ -4991,11 +4992,12 @@ check_for_gaps (annocheck_data * data)
       for (i = next_free_range; i--;)
 	{
 	  if (ranges[i].start < per_file.text_section_range.end
-	      && align (ranges [i].end, 16) >= per_file.text_section_range.end)
+	      && align (ranges [i].end, per_file.text_section_alignment) >= per_file.text_section_range.end)
 	    /* We have found a note range the occludes the end of the text section.
 	       Move the end up to the start of this note, aligned to 16 bytes.  */
 	    {
-	      per_file.text_section_range.end = align (ranges[i].start - 15, 16);
+	      per_file.text_section_range.end = align (ranges[i].start - (per_file.text_section_alignment - 1),
+						       per_file.text_section_alignment);
 	      if (per_file.text_section_range.start >= per_file.text_section_range.end)
 		{
 		  per_file.text_section_range.start = per_file.text_section_range.end = 0;
